@@ -74,7 +74,7 @@ class Probe
   void kill_shm(); /* tries to detach shm if attached */
   bool allowBusyDevices;
 
-  SharedMemStruct *shm;
+  const SharedMemStruct *shm;
   int misc; /* really private data that has to do with some internals */
 };
 
