@@ -1,10 +1,15 @@
-This rt_process.cc uses the COMEDI data acquisition package, RT Linux
+This rt_process.c uses the COMEDI data acquisition package, RT Linux
 for A/D input. I use a National Instruments MIO16E board (works for AT
 or PCI), but you should be able to use any board supported by COMEDI.
 (See README_daq_system for other info)
 
 daq_system.cpp is a Qt graphical user interface program. You'll need
 Qt2.0x. You can download and install this free software from www.troll.no.
+
+You also need to get tmake, also from www.troll.no.
+
+You need to set your QTDIR environment variable in order to use the make
+system that comes with this package.  
 
 This software runs on RT-Linux2.2 (download from www.rtlinux.com),
 linux 2.2.14, comedi-0.7.40, and comedilib-0.7.9 (download from
@@ -41,6 +46,11 @@ RT-Linux and COMEDI on your system and that they work):
      Makefile.tmake and Makefile.rt_process). Note that if you don't have
      tmake on your system, download it from www.troll.no ... needed for Qt
 
+   Make sure to set the RTL_MK project define in Makefile.tmake to point
+   to the location of your 'rtl.mk' file.  This file should be somewhere
+   in your rt-linux source directory (/usr/src/rtlinux by default) and was
+   automatically created by rt-linux when you built it.
+
 3. Edit the header file hardware_specific.h so that it is appropriate
    for your computer and data acquisition device.
 
@@ -49,9 +59,12 @@ RT-Linux and COMEDI on your system and that they work):
    created as described by the RT Linux documentation
 
 5. make	
-   **note: there will be a few warnings ... you can ignore warnings)
+   **note: there may be a few warnings ... you can ignore warnings)
    **the main Makefile uses Qt's tmake to automatically generate the
    ** Makefile for the non-rt-process based on your system configuration
+
+   If you get errors regarding what looks like Qt Widget functions, please
+   make sure you have the environment variable QTDIR set correctly.
 
 6. edit ./rt_init script for your system
 
@@ -59,12 +72,25 @@ RT-Linux and COMEDI on your system and that they work):
 
 8. ./rt_init (this configures comedi, and inserts RT-linux modules)
 
-9. ./daq_system <num_channels>
+9. ./daq_system
 
 10. when done, you can ./kill_rt to remove modules from kernel
 
 If you have problems, comments, or suggestions, please email me.
 
+Coming soon:  A MUCH easier, more robust and easier-to-use install process.  We
+              hope to change the code around so you don't have to do any hand
+              editing of any .h files, but rather the software auto-detects
+              the capabilities of your DAQ board.
+
+              We plan to upgrade this software to work with later versions
+              of comedi and rt-linux.
+
+              We also hope to get this software to work on non-rt-linux kernels.
+              
+
 David Christini
 dchristi@med.cornell.edu
-3/14/00
+
+Calin Culianu
+calin@rtlab.org
