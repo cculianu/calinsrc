@@ -226,16 +226,29 @@ void
 Probe::attach_to_shm_and_stuff()
 {
   // temporary hack -- UGLY!
+  struct stat statbuf;
+
+  have_rt_process = !stat("/proc/rtlab", &statbuf);
+
   try {
-    have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
+    shm = ShmController::attach(ShmController::MBuff);
     misc = static_cast<int>(ShmController::MBuff);
 
   } catch (ShmException & e) {
     try { 
-      have_rt_process = 
-        ((shm = ShmController::attach(ShmController::RTAI_Shm)) != 0);
+      shm = ShmController::attach(ShmController::RTAI_Shm);
       misc = static_cast<int>(ShmController::RTAI_Shm);
     } catch (ShmException & e) {
+      if (have_rt_process) 
+	throw ShmException("Error accessing shared memory device.", 
+			   "Even though the RTLab kernel module is running, "
+			   "the shared memory segment could not be attached.\n\n"
+			   "This could be because the device node is somehow "
+			   "inaccessible.\n\nMake sure that (if you are running "
+			   "RTLinux) /dev/mbuff or (if you are running "
+			   "RTAI) /dev/rtai_shm, exists and that this "
+			   "device file is readable and writable by you.");
+      
       have_rt_process = false;
       shm = 0;
     }
