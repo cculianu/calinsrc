@@ -157,9 +157,11 @@ ComediCoprocess::threadLoop()
   struct timeval loop_begin, loop_end;
   long looptime_us = 0, period_us = 0;
   uint chan;
-  comedi_insn insn[n_ai_chans];
+  static const uint max_insns = 9; /* for some reason, comedi barfs if doing
+                                      more than 9 insns at a time */
+  comedi_insn insn[max_insns];
   comedi_insnlist insn_list;
-  lsampl_t databuf[n_ai_chans];
+  lsampl_t databuf[max_insns];
   vector<comedi_range> ranges = device.find(ComediSubDevice::AnalogInput).ranges();
   lsampl_t maxdata = device.find(ComediSubDevice::AnalogInput).maxData();
 
@@ -169,39 +171,42 @@ ComediCoprocess::threadLoop()
     gettimeofday(&loop_begin, 0);
 
     pthread_testcancel();        
-
-    scan_index++;
    
-    for (insn_list.n_insns = 0, chan = 0; chan < n_ai_chans; chan++) {
-      if (is_chan_on(chan, ai_chans_in_use)) {
-        insn[insn_list.n_insns].insn = INSN_READ;
-        insn[insn_list.n_insns].n = 1;
-        insn[insn_list.n_insns].data = databuf + chan;
-        insn[insn_list.n_insns].subdev = ai_subdev;
-        insn[insn_list.n_insns].chanspec = ai_chan[chan]; 
-        insn_list.n_insns++;
-      }      
-    }
+    for (chan = 0; chan < n_ai_chans; ) {
 
-    if (!insn_list.n_insns) goto calc_per;
+      for (insn_list.n_insns = 0; chan < n_ai_chans 
+                                  && insn_list.n_insns < max_insns; chan++) {
+        if (is_chan_on(chan, ai_chans_in_use)) {
+          insn[insn_list.n_insns].insn = INSN_READ;
+          insn[insn_list.n_insns].n = 1;
+          insn[insn_list.n_insns].data = databuf + insn_list.n_insns;
+          insn[insn_list.n_insns].subdev = ai_subdev;
+          insn[insn_list.n_insns].chanspec = ai_chan[chan]; 
+          insn_list.n_insns++;
+        }      
+      }
+      
+      if (insn_list.n_insns) 
+        comedi_do_insnlist(ai_dev, &insn_list);
 
-    comedi_do_insnlist(ai_dev, &insn_list);
+      for (uint i = 0; sbuf_i < sample_buffer_size && i < insn_list.n_insns;  
+           i++, sbuf_i++) {
+        SampleStruct & sample = sample_buffer[sbuf_i];
+        
+        sample.scan_index = scan_index;
+        sample.channel_id = CR_CHAN(insn[i].chanspec);
+        comedi_range r = ranges[CR_RANGE(insn[i].chanspec)];
+        sample.data = comedi_to_phys(databuf[i], &r, maxdata);
+        sample.spike = 0; // hack for now
+        sample.spike_period = 0;
+      }
 
-    for (uint i = 0; sbuf_i < sample_buffer_size && i < insn_list.n_insns;  
-         i++, sbuf_i++) {
-      SampleStruct & sample = sample_buffer[sbuf_i];
-
-      sample.scan_index = scan_index;
-      sample.channel_id = CR_CHAN(insn[i].chanspec);
-      comedi_range r = ranges[CR_RANGE(insn[i].chanspec)];
-      sample.data = comedi_to_phys(databuf[sample.channel_id], &r, maxdata);
-      sample.spike = 0; // hack for now
-      sample.spike_period = 0;
     }
 
     flushBuffer();
 
-  calc_per:
+    scan_index++;
+
     period_us = 1000000 / sampling_rate_hz;
 
     gettimeofday(&loop_end, 0);
@@ -233,8 +238,9 @@ inline void microsleep(long time_us)
 
 void ComediCoprocess::flushBuffer()
 {
-  if (sbuf_i && sampling_rate_hz >= 10 
-      && ! (scan_index % (sampling_rate_hz / 10)) ) { 
+  if (sbuf_i && scan_index && ((sampling_rate_hz >= 10 
+                                && ! ((scan_index+1) % (sampling_rate_hz / 10)))
+                               || sampling_rate_hz < 10)) { 
     /* do a blocking  write every 100ms iff we have any samples ready */
 
     /* assumption is a blocking write */
@@ -254,12 +260,11 @@ void ComediCoprocess::flushBuffer()
 #include "probe.h"
 #include "shm.h"
 
-int n_skipped = 0;
+bool stop = false;
 
 void sig(int)
 {
-  cerr << "Skipped " << n_skipped << " samples." << endl;
-  exit(0);
+  stop = true;
 }
 
 int main(int argc, char *argv[])
@@ -268,7 +273,7 @@ int main(int argc, char *argv[])
 
   signal(SIGINT, sig);
 
-  ComediCoprocess cc(Probe::probeDevices()[0]);
+  ComediCoprocess cc;
   ShmController sc(&cc);
 
   if (argc > 1) n_chans = QString(argv[1]).toInt();
@@ -279,22 +284,37 @@ int main(int argc, char *argv[])
   for (uint i = 0; i < n_chans; i++)
     sc.setChannel(ComediSubDevice::AnalogInput, i, true);
 
+
+  cerr << "Reading " << n_chans << " channels at " << sc.samplingRateHz()
+       << "Hz... (press ctrl-c to end)" << endl;
   cc.start();
 
-  int n_read;
-  scan_index_t currentIndex = 0;
-  SampleStruct ss[1000];
+  int n_read, ss_size = sc.samplingRateHz();
+  scan_index_t sample_ct = 0, startIndex = 0, endIndex = 0;
+  bool gotStartIndex = false;
+  
+  SampleStruct ss[ss_size];
 
-  while ( (n_read = read(cc.fifoFd(), ss, sizeof(SampleStruct) * 1000)) > -1 ) {
+  while ( (n_read = read(cc.fifoFd(), ss, sizeof(SampleStruct) * ss_size)) > -1 
+          && !stop) {
     int n_samps = n_read / sizeof(SampleStruct);
-      
-    for (int i = 0; i < n_samps; i++) {
-      if (currentIndex != 0 && ss[i].scan_index > currentIndex + 1 ) {
-        n_skipped++;
-      } 
-      currentIndex = ss[i].scan_index;
-      cout << ss[i].data << endl;
+
+    //cout << "---------------" << endl;
+    for (int i = 0; i < n_samps; i++, sample_ct++) {
+      if (!gotStartIndex && (gotStartIndex = true)) 
+        startIndex = ss[i].scan_index;      
+      //cout << ss[i].data << " ";
+      endIndex = ss[i].scan_index;
     }
+    //cout << endl;
   }
+
+  scan_index_t n_skipped = (endIndex - startIndex + 1ULL) 
+                            * ((scan_index_t)n_chans) - sample_ct;
+  //* ((scan_index_t)n_chans) - sample_ct;
+
+  cerr << "Read: " << sample_ct << " samples, " 
+       << uint64_to_cstr(endIndex - startIndex + 1ULL) << " scans." << endl;
+  cerr << "Skipped: " << uint64_to_cstr(n_skipped) << " samples." << endl;
 }
 #endif
