@@ -236,17 +236,23 @@ SplitOp::SplitOp()
    appropriately. */
 class TxtOrBinOrNDSWriter : protected TempSpoolerGZ<SampleStruct> {
 public:
-  TxtOrBinOrNDSWriter(const QString & file, uint rate, DSDStream::FileDataType t);
+  TxtOrBinOrNDSWriter(const QString & file, uint rate, 
+                      DSDStream::FileDataType t,
+                      const vector<uint> & chans = vector<uint>());
   ~TxtOrBinOrNDSWriter();
+
+  enum Mode { NDS, BIN = 1, ASCII = 2  };
   
-  const char *mode() const; 
+  const char *modeStr() const; 
+  Mode mode() const { return m; }
+  bool spooledMode() const { return spooled_mode; }
   
   void writeSample(const SampleStruct *);
   void writeSample(const SampleStruct &s) { writeSample(&s); };
   void finish();
+
+
 private:
-  friend struct TMP;
-  enum Mode { NDS, BIN = 1, ASCII = 2  };
   Mode m;
   uint rate;
   DSDOStream *dout;
@@ -255,31 +261,71 @@ private:
 
   map<uint,float> chans;
 
-  bool done;
+  bool done, spooled_mode;
+  scan_index_t last_index, sample_ct;
 
-  void writeScan(scan_index_t index);
-  void writeScanText(scan_index_t index);
+  void writeScan(const SampleStruct &); // BIN/ASCII file
+  void flushScan(); // BIN/ASCII file
+  void unspool(); // generic unspooler for spooled mode ONLY
+  void putBINHeader(int num_channels); // writes header byte for .bin file
+
+
+
+  // Both of the below are for use with forEach() in parent class...
+
+  // grr damned C++ :).. forEach() couldn't see operator() so we need this..
+  friend class TempSpoolerGZ<SampleStruct>; 
+  void operator()(const SampleStruct & s) { writeScan(s); }
 };
 
 TxtOrBinOrNDSWriter::TxtOrBinOrNDSWriter(const QString & file, 
                                          uint rate, 
-                                         DSDStream::FileDataType t)
-  : rate(rate), dout(0), fout(0), /*tmp(0),*/ t(0), done(false)
+                                         DSDStream::FileDataType type,
+                                         const vector<uint> &cvec)
+  : rate(rate), dout(0), fout(0), t(0), done(false), 
+    spooled_mode(false), last_index(0), sample_ct(0)
 {
   if (((m = BIN) && file.endsWith(".bin")) 
       || ((m = ASCII) && (file.endsWith(".txt") || file.endsWith(".dat")))) {
+
+    // BIN/ASCII
+
     fout = fopen(file.latin1(), "w");
     if (!fout) {
       throw FileException(QString("Could not open output file %1.").arg(file), 
                           QString("Error is: %1").arg(strerror(errno)));
     }
+
+
+    if (!cvec.size()) { // spooled mode
+      spooled_mode = true; // we need to spool because we don't know chansize
+    } else { // non-spooled (immediate) mode
+
+      // UNSPOOLED MODE (immediate) 
+
+      for (uint i = 0; i < cvec.size(); i++) 
+        chans[cvec[i]] = 0.0;
+      if (m == BIN)  putBINHeader(cvec.size());
+    }
+    
+
+    // Only create QTextStream if needed...
+    if (m == ASCII) {
+      t = new QTextStream(fout, IO_WriteOnly | IO_Truncate);
+    }
+
+
   } else {
-    dout = new DSDOStream(file, rate, t);
+
+    // DSD/NDS output mode (absolutely trivial!) 
+
+    dout = new DSDOStream(file, rate, type);
     m = NDS;
   }
+
 }
 
-const char * TxtOrBinOrNDSWriter::mode() const
+const char * TxtOrBinOrNDSWriter::modeStr() const
 {
   switch(m) {
   case BIN:
@@ -293,99 +339,95 @@ const char * TxtOrBinOrNDSWriter::mode() const
   }
 }
 
-
-  struct TMP 
-  {
-    typedef void (TxtOrBinOrNDSWriter::*FN)(scan_index_t);
-
-        TMP(TxtOrBinOrNDSWriter *w,FN f) 
-          : instance(w), index(0), i(0), chans(w->chans), fn(f)
-        {}
-        ~TMP() { done(); }
-        void operator()(const SampleStruct & s) 
-        {
-          if (s.scan_index > index) { // new scan        
-            index = s.scan_index;
-            if (i) (instance->*fn)(s.scan_index);
-          }
-          chans[s.channel_id] = s.data;
-          i++;
-        }
-        void done() { if (i) {(instance->*fn)(index); i = 0;} }
-        TxtOrBinOrNDSWriter *instance;
-        scan_index_t index, i;
-        map<uint, float> &chans;
-        FN fn;
-  };
-
 TxtOrBinOrNDSWriter::~TxtOrBinOrNDSWriter()
 {
   if (!done) finish();
+  if (fout) {
+    fclose(fout);
+    fout = 0;
+  }
+  if (t) {
+    delete t;
+    t = 0;
+  }
+  if (dout) {
+    delete dout; 
+    dout = 0; 
+  }
+}
+
+void TxtOrBinOrNDSWriter::unspool()
+{
+  switch(m) {
+  case BIN:
+    putBINHeader(chans.size());
+    // intentionally missing break;
+  case ASCII:
+    forEach(*this);
+  break;
+  default:
+    // nothing..
+  break;
+  }
 }
 
 void TxtOrBinOrNDSWriter::finish()
-{
-  switch(m) {
-  case NDS:
-    dout->end(); 
-    delete dout; 
-    dout = 0; 
-  break;
-  case BIN:
-    {
-      int num_channels = chans.size();
-      fwrite(&num_channels, sizeof(int), 1, fout);
-      TMP oper(this, &TxtOrBinOrNDSWriter::writeScan);
-      forEach(oper);
-      oper.done();
-      fclose(fout);
-      fout = 0;
-    }
-  break;
-  case ASCII:
-    {
-      t = new QTextStream(fout, IO_WriteOnly | IO_Truncate);
-      TMP oper(this, &TxtOrBinOrNDSWriter::writeScanText);
-      forEach(oper);
-      oper.done();
-      delete t;
-      t = 0;
-      fclose(fout);
-      fout = 0;
-    }
-  break;
-  }
+{  
+  if (spooled_mode) unspool();
+  if (sample_ct) flushScan();  
   done = true;
 }
 
-void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
+void TxtOrBinOrNDSWriter::writeScan(const SampleStruct & s)
 {
-  map<uint,float>::iterator it, end;
-  float data = index / static_cast<double>(rate);
-  fwrite(&data, sizeof(float), 1, fout); // time
-  for (it = chans.begin(), end = chans.end(); it != end; it++) {
-    data = it->second;
-    fwrite(&data, sizeof(float), 1, fout); // channel data
-  } 
+  if (s.scan_index > last_index) { // new scan        
+    last_index = s.scan_index;
+    if (sample_ct) flushScan(); // only actually happens if we have 1 sample
+  }
+  chans[s.channel_id] = s.data;
+  sample_ct++;  
 }
 
-void TxtOrBinOrNDSWriter::writeScanText(scan_index_t index)
+void TxtOrBinOrNDSWriter::putBINHeader(int num_channels) 
 {
-  double time = index / static_cast<double>(rate);
-  (*t) << time;
-  map<uint,float>::iterator it, end;
-  for (it = chans.begin(), end = chans.end(); it != end; it++) 
-    (*t) <<  " " << it->second;  
-  (*t) << "\n";    
+  fwrite(&num_channels, sizeof(int), 1, fout);
+}
+
+void TxtOrBinOrNDSWriter::flushScan()
+{
+    switch(m) {
+    case BIN: {
+        map<uint,float>::iterator it, end;
+        float data = last_index / static_cast<double>(rate);
+        fwrite(&data, sizeof(float), 1, fout); // time
+        for (it = chans.begin(), end = chans.end(); it != end; it++) {
+          data = it->second;
+          fwrite(&data, sizeof(float), 1, fout); // channel data
+        } 
+    } break;
+    case ASCII: {
+        double time = last_index / static_cast<double>(rate);
+        (*t) << time;
+        map<uint,float>::iterator it, end;
+        for (it = chans.begin(), end = chans.end(); it != end; it++) 
+          (*t) <<  " " << it->second;  
+        (*t) << "\n";          
+    } break;
+    default:
+      // nothing;      
+    break;
+    }
 }
 
 void TxtOrBinOrNDSWriter::writeSample(const SampleStruct *s)
 {  
   if (m == NDS) { 
     dout->writeSample(s); 
+  } else if (spooled_mode) {
+    spool(s, 1); // spool since we think num chans might change
+    chans[s->channel_id] = 0.0; // reserve a spot in our chans map..
   } else {
-    spool(s, 1);
-    chans[s->channel_id] = 0;
+    writeScan(*s); // done immediately since we are sure num chans won't change
   }
 }
 
@@ -405,7 +447,9 @@ int SplitOp::doIt()
       { cerr << "No scans in input file!" << endl;  return EINVAL; }
   
    
-    TxtOrBinOrNDSWriter out(state()->outfile, in.rateAt(state()->start), in.dataType());
+    TxtOrBinOrNDSWriter 
+      out(state()->outfile, in.rateAt(state()->start),in.dataType(), 
+          in.channelsOn(in.startIndex(), in.endIndex()));
 
     scan_index_t 
       i = 0, 
@@ -416,7 +460,17 @@ int SplitOp::doIt()
     cerr << "Splicing out "  << Convert(state()->count).sStr() << " scans" 
          << endl
          << "Starting at index " << Convert(real_start).sStr() << endl
-         << "Output file is " << state()->outfile.latin1() << endl;
+         << "Output file is " << state()->outfile.latin1();
+
+    if (out.mode() != TxtOrBinOrNDSWriter::NDS)
+      cerr << " (Repackaged as " << out.modeStr() << ")";
+
+    cerr << endl;
+
+    if (out.spooledMode())
+      cerr << "Spooling... ";
+    else
+      cerr << "Copying... ";
 
     while(state()->count && in.readNextScan(v)) {
       if (i++ >= state()->start) {
@@ -424,10 +478,12 @@ int SplitOp::doIt()
         for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
       }
     } 
+
+    if (out.spooledMode())
+      cerr << "Repackaging... ";
     
-    cerr << "Repackaging as " << out.mode() << ".." << endl;
-    
-    out.finish();
+    out.finish(); /* required to unspool properly in spooled mode 
+                     (which actually is no longer used! :)  ) */
 
     cerr << "Done!" << endl;
   } catch (Exception & e) {
