@@ -23,6 +23,28 @@
 #ifndef _RT_PROCESS_H 
 # define _RT_PROCESS_H
 
+#include <version.h> /* in comedi's include/ or include/modbuild directory */
+#if (! defined COMEDI_VERSION_CODE) 
+#  define COMEDI_VERSION_CODE 0
+#endif
+
+#undef  OLD_STYLE_KCOMEDILIB
+#undef  NEW_STYLE_KCOMEDILIB 
+
+#if COMEDI_VERSION_CODE < 1856
+#  define OLD_STYLE_KCOMEDILIB 1
+#warning Support for old-style kcomedilib is deprecated.  Please upgrade to the latest comedi you can get your hands on!
+#else
+#  define NEW_STYLE_KCOMEDILIB 1
+#endif 
+
+#ifdef OLD_STYLE_KCOMEDILIB
+typedef int COMEDI_T;
+#else
+typedef comedi_t* COMEDI_T;
+#endif
+
+
 # include <rtl_time.h>
 # include "shared_stuff.h" /* for SampleStruct type */
 
@@ -39,9 +61,7 @@
    v_spike detect ... i.e. 1/20 sec, 50ms */
 
 
-# define DEFAULT_COMEDI_MINOR   0    /* /dev/comediX device to use: this 
-                                        should some day come from a config 
-                                        script?                              */
+#define DEFAULT_COMEDI_DEVICE "/dev/comedi0"
 
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
@@ -103,6 +123,11 @@ extern int rtp_find_free_rtf(int *minor, int size);
 
 /* The shared memory struct is also exported */
 extern SharedMemStruct *rtp_shm;
+
+/* the handle one should use when calling comedi_open() and comedi_close()
+   the reason this handle is needed is because of the type/semantic
+   changes between comedi 0.7.64 and earlier versions */
+extern COMEDI_T rtp_comedi_ai_dev_handle, rtp_comedi_ao_dev_handle;
 
 /* Run-time spike information exported to the outside world. */
 extern struct spike_info spike_info;

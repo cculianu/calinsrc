@@ -234,7 +234,8 @@ static int init_shared_mem(void)
 static int init_ao_chan(void) 
 {
   int n_ranges 
-    = comedi_get_n_ranges(rtp_shm->ao_minor, rtp_shm->ao_subdev, shm->ao_chan);
+    = comedi_get_n_ranges(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, 
+                          shm->ao_chan);
   int max_v = 0, i;
   comedi_krange krange;
 
@@ -256,11 +257,11 @@ static int init_ao_chan(void)
   ao_range = 0;
 
   for (i = 0; i < n_ranges; i++) {
-    comedi_get_krange(rtp_shm->ao_minor, rtp_shm->ao_subdev, shm->ao_chan, 
-                      i, &krange);
+    comedi_get_krange(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, 
+                      shm->ao_chan, i, &krange);
     if (krange.max > max_v) {
       ao_range = i;
-      ao_stim_level = comedi_get_maxdata(rtp_shm->ao_minor, 
+      ao_stim_level = comedi_get_maxdata(rtp_comedi_ao_dev_handle, 
                                          rtp_shm->ao_subdev, 
                                          shm->ao_chan);
       max_v = krange.max;
@@ -324,7 +325,7 @@ static void stimulate(int new_spike)
   
   if ( state.stims && state.waiting == 0 ) {
     /* polarization (begin stimulation) */
-    comedi_data_write(rtp_shm->ao_minor, 
+    comedi_data_write(rtp_comedi_ao_dev_handle, 
                       rtp_shm->ao_subdev, 
                       shm->ao_chan, 
                       ao_range, 
@@ -337,7 +338,7 @@ static void stimulate(int new_spike)
 
   if ( state.sustain == 0 ) {
     /* decay and rest */
-    comedi_data_write(rtp_shm->ao_minor, // reset
+    comedi_data_write(rtp_comedi_ao_dev_handle, // reset
                       rtp_shm->ao_subdev, 
                       shm->ao_chan, 
                       ao_range, 

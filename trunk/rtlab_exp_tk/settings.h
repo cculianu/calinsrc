@@ -42,7 +42,8 @@ class Settings
 {
  public:
   typedef map<QString, QString> Section;
-  typedef map<QString, set<QString> > DirtyMap;
+  typedef set<QString> DirtyKeys;  
+  typedef map<QString, DirtyKeys > DirtyMap;
   typedef map<QString, Section> SettingsMap;
 
   Settings();
