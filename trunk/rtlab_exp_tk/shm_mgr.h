@@ -101,6 +101,7 @@ namespace ShmMgr
 
   /* other shared memory wrappers... */
   uint samplingRateHz();
+  scan_index_t scanIndex();
 };
 
 inline 
@@ -242,5 +243,12 @@ ShmMgr::samplingRateHz()
   return shm->sampling_rate_hz;
 }
 
+inline 
+scan_index_t
+ShmMgr::scanIndex()
+{
+  check();
+  return shm->scan_index;
+}
 
 #endif

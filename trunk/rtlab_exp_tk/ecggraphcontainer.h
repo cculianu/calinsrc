@@ -8,6 +8,7 @@
 #include <qlabel.h>
 #include <qevent.h>
 #include <qcombobox.h>
+#include <qspinbox.h>
 #include "ecggraph.h"
 
 
@@ -72,13 +73,14 @@ private:
  
   QGridLayout *layout;
 
-  QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel,
-         *rangeLabel;
+  QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel;
+
   QVBox *labelBox; // for the y axis labels
  
   QHBox *controlsBox; // for the controls above the graph
 
   QComboBox *rangeComboBox;  // holds range labels
+  QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
 
 };
 

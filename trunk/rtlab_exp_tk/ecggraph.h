@@ -23,8 +23,8 @@ class ECGGraph : public QWidget {
   
   ECGGraph (int sampleRateHz = 1000, /* the sample rate of the graoh */
 	    int secsVisible = 10,    /* number of seconds to fit on the graph 
-					before plotting wraps around to 
-					the beginning */
+					 before plotting wraps around to 
+					 the beginning */
 	    double rangeMin = -1.5,  /* the amplitude of the bottom of graph */
 	    double rangeMax = 1.5,   /* the amplitude of the topmost point */
 	    QWidget *parent = 0,     /* inherited constructor from QWidget */
@@ -57,6 +57,9 @@ class ECGGraph : public QWidget {
 
   /** Returns the minimum amplitude this graph can represent */
   virtual double rangeMin() const;
+
+  /** The x-axis property: namely number of seconds visible */
+  virtual int secondsVisible() const;
 
   /** True if we have spike detection turned on */
   virtual bool spikeMode() const;
@@ -108,6 +111,10 @@ public slots:
 
  virtual void setSpikeThreshHold (double amplitude);
  virtual void unsetSpikeThreshHold ();
+ /* redraws the graph and resizes its internal data structures to fit
+    a new number of seconds setting */
+ virtual void setSecondsVisible(int seconds);
+ 
 
  protected:
 
@@ -126,15 +133,15 @@ public slots:
   
   virtual void mousePressEvent (QMouseEvent *event);
     
-  int      numSamples,          // the number of samples this graph supports
-           currentSampleIndex,
-           sampleRateHz,
-           secsVisible;
+  int     numSamples,          // the number of samples this graph supports
+          currentSampleIndex,
+          sampleRateHz,
+          secsVisible;
 
 
 
   double   _rangeMin, _rangeMax,
-          *samples;             // array of size numSamples 
+           *samples;             // array of size numSamples 
 
   long long  _totalSampleCount; /* tells us how many samples 
 				   we have plotted in total */

@@ -48,11 +48,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   controlsBox->setSpacing(2);
 
   // the range settings control
-  rangeLabel = new QLabel ("Change Scale: ", controlsBox);  
+  QLabel *tmpLabel = new QLabel ("Change Scale: ", controlsBox);  
   rangeComboBox = new QComboBox(controlsBox, 
 				QString("%1 Scale Box").arg(graph->name()));
   QToolTip::add(rangeComboBox, "Use this to change graph scale (Y Axis Range).");
-  QToolTip::add(rangeLabel, "Use this to change graph scale (Y Axis Range).");
+  QToolTip::add(tmpLabel, "Use this to change graph scale (Y Axis Range).");
 
   controlsBox->setStretchFactor(rangeComboBox, 1);  
   layout->addWidget (controlsBox, 0, 1);
@@ -64,6 +64,19 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 
   // add the current range setting (from the graph) to the combo box
   addRangeSetting(graph->rangeMin(), graph->rangeMax(), Volts);
+
+  // the number of seconds visible spin box up top
+  tmpLabel = 
+    new QLabel("Secs. Visible", controlsBox); 
+  /* we can do the above because of qt's 'quasi-garbage collection'  */
+  secondsVisibleBox = new QSpinBox(0, 100000, 1, controlsBox);
+  secondsVisibleBox->setValue(graph->secondsVisible());
+  QToolTip::add(tmpLabel, "Use this to change the number of seconds visible "
+		          "in your graph (X Axis Scale).");
+  QToolTip::add(secondsVisibleBox, "Use this to change the number of seconds "
+		                   "visible in your graph (X Axis Scale).");
+  connect(secondsVisibleBox, SIGNAL(valueChanged ( int )),
+	  graph, SLOT(setSecondsVisible(int)));
   
 
   /* y axis labels -- these get auto-updated whenever the graph emits signal 

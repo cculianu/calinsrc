@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef DEBUG
 # include <iostream>
@@ -34,6 +35,7 @@ ECGGraph::ECGGraph (int sampleRateHz = 1000,
   secsVisible(secsVisible),
   _rangeMin(rangeMin),
   _rangeMax(rangeMax),
+  samples(0),
   _totalSampleCount(0),
   _gridColor(black),
   _backgroundColor ("#334535") 
@@ -88,6 +90,12 @@ double ECGGraph::rangeMax () const {
 /** Returns the minimum amplitude this graph can represent */
 double ECGGraph::rangeMin () const {
   return _rangeMin;
+}
+
+/** The x-axis property: namely number of seconds visible */
+int ECGGraph::secondsVisible() const 
+{
+  return secsVisible;
 }
 
 /** True if we have spike detection turned on */
@@ -363,3 +371,34 @@ void ECGGraph::unsetSpikeThreshHold() {
   spikeTHoldPoints[0] = spikeTHoldPoints[1] = QPoint (0,0);
 }
 
+void ECGGraph::setSecondsVisible(int seconds)
+{
+  if (seconds <= 0) return;
+
+  int oldNumSamples = numSamples;
+  secsVisible = seconds;
+  numSamples = secsVisible * sampleRateHz;
+
+  // resize the samples array
+  double *newSamples = new double[numSamples];
+  if (numSamples > oldNumSamples) {
+    memcpy(newSamples, samples, oldNumSamples * sizeof(double));
+    double filler = newSamples[oldNumSamples - 1];
+    for (int i = oldNumSamples; i < numSamples; i++) newSamples[i] = filler;
+  } else {
+    memcpy(newSamples, samples, numSamples * sizeof(double));
+  }
+  delete (samples);
+  samples = newSamples;
+
+  // resize the points array
+  points->resize(numSamples);
+
+  // do some extra sanity bookkeeping
+  if (currentSampleIndex >= numSamples)
+    currentSampleIndex = numSamples - 1;
+
+  // now redraw the graph with the new grid and x-axis scale
+  initBuffer();
+  remakeAllPoints();
+}

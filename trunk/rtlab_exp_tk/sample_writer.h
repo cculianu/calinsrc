@@ -41,6 +41,7 @@ class SampleGZWriter: public QObject, public SampleListener
   ~SampleGZWriter();
   void setFile(const char *filename);
   void newSample(const SampleStruct *s);
+  bool & periodicFlush() { return _periodicFlush; };
 
  public slots:
     
@@ -55,16 +56,18 @@ class SampleGZWriter: public QObject, public SampleListener
   set<int> channel_ids_that_have_a_committed_state;
   static const uint 
     BUFSIZE = 65536,  /* the number of bytes in our little buffer cache */
-    STATE_CH_STRING_SIZE = 21, /* the size of the format string, 
+    STATE_CH_STRING_SIZE = 46, /* the size of the format string, 
 				  sans null but with terminating newline */
     DATALINE_STRING_SIZE = 50; /* the size of each data line string, 
 				  sans null but with terminating newline */
   static const char 
-    * const stateChangeFormat = "State Changed: C[%03u] R[%010u]\n",
+    * const stateChangeFormat = "State Changed: C[%03u] R[%010u] SI[%020llu]\n",
     * const dataLineFormat = "C[%03u] SI[%020llu] D[%#.14g]\n";
   char buffer[BUFSIZE+1];
   uint bufEnd; /* index of the first free pos in buffer (always <= BUFSIZE) */
-  bool flushPending; /* if this is false, we need to schedule a flush */
+  bool flushPending, /* if this is false, we need to schedule a flush */
+       _periodicFlush; /* this needs to be true for the timed flushes to 
+			  be enabled -- default is false */
 };
 
 #endif
