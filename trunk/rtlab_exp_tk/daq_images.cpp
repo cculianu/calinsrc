@@ -20,38 +20,22 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
+#include "daq_images.h"
 
-#ifndef _DAQ_HELP_SOURCES_H
-#define _DAQ_HELP_SOURCES_H
-#include <qmime.h>
-
-#include "common.h"
-
-namespace DAQHelpSources {
-  extern QString configWindowHelpSource,
-    mainWindowHelpSource,
-    aboutHelpSource,
-    recordHelpSource,
-    addChannelHelpSource,
-    pauseHelpSource,
-    spikeHelpSource,
-    printHelpSource,
-    pluginHelpSource,
-    logHelpSource,
-
-    addChannelImage,
-    pauseImage,
-    playImage,
-    spikeMinusImage,
-    spikePlusImage,
-    synchImage,
-    timeStampImage;
-
-  extern QMimeSourceFactory * initFactory(); /* the function that registers all sources with QMimeSourceFactory */
-
-};
+/* Icons */
+#include "plus.xpm"
+#include "pause.xpm"
+#include "play.xpm"
+#include "spike_minus.xpm"
+#include "spike_plus.xpm"
+#include "synch.xpm"
+#include "timestamp.xpm"
 
 
-#endif
-
-
+const QImage  DAQImages::plus_img( plus_xpm ),
+               DAQImages::pause_img( pause_xpm ),
+               DAQImages::play_img( play_xpm ),
+               DAQImages::spike_minus_img( spike_minus_xpm ),
+               DAQImages::spike_plus_img( spike_plus_xpm ),
+               DAQImages::synch_img( synch_xpm ),
+               DAQImages::timestamp_img( timestamp_xpm );

@@ -72,12 +72,7 @@
 #include "simple_text_editor.h"
 #include "plugin.h"
 #include "comedi_coprocess.h"
-
-/* Icons */
-#include "timestamp.xpm"
-#include "plus.xpm"
-#include "synch.xpm"
-
+#include "daq_images.h"
 
 /* 
    An Opaque Class that handles the log window.. this allows us
@@ -208,15 +203,15 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
   { /* add toolbar */
 
-    addChannelB.setPixmap( plus_xpm );
+    addChannelB.setPixmap( DAQImages::plus_img );
     QToolTip::add( &addChannelB, "Add Channel..." );
     connect(&addChannelB, SIGNAL(clicked()), this, SLOT (addChannel()));
     
-    resynchB.setPixmap( synch_xpm );
+    resynchB.setPixmap( DAQImages::synch_img );
     QToolTip::add( &resynchB, "Synchronize Channels" );
     connect(&resynchB, SIGNAL(clicked()), this, SLOT (resynch()));
 
-    timeStampB.setPixmap( timestamp_xpm );
+    timeStampB.setPixmap( DAQImages::timestamp_img );
     QToolTip::add( &timeStampB, "Insert Timestamp into Log" );
     connect(&timeStampB, SIGNAL(clicked()), this, SLOT (logTimeStamp()));
 
