@@ -170,7 +170,8 @@ private:
   /* puts the axis labels for the above graphs in
      if rebuildOnlyNull is true, then check if the graph already has labels,
      before blindly re-creating new ones */
-  void addAxisLabels(int); 
+  void addAxisLabels(int,int,int); 
+  void DetermineGraphRowColumn(int, int *, int *);
   /* populates the QComboBoxes above with the stuff from the 
      static const GraphRangeSettings structs (see apd_control.cpp for actual
      min/max values for each range setting ) */
