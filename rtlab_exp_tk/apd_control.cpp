@@ -554,7 +554,7 @@ void APDcontrol::determineRTOS()
 {
   rtosUsed = Unknown;
   if (QFile::exists("/proc/rtai")) rtosUsed = RTAI;
-  else if (QFile::exists("/dev/rtl_shm")) rtosUsed = RTLinux;// temp hack
+  else if (QFile::exists("/proc/rtlab")) rtosUsed = RTLinux;// temp hack
 
   Assert<PluginException>(rtosUsed != Unknown,
                           "APD Control Plugin Attach Error",
