@@ -69,7 +69,6 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     
 {  
 
-  hungry = true; /* default to consuming samples */
 
   if (seconds_visible_step == 0) seconds_visible_step = 1;
 
@@ -615,7 +614,7 @@ void ECGGraphContainer::pause(bool pause_on)
 {
   if (pause_on) currentIndex->setText("Graph Display PAUSED");
   if (pause_on != pauseBox->isChecked()) pauseBox->setChecked(pause_on);
-  hungry = !pause_on;
+  nothungry = pause_on;
 }
 
 /* returns the xAxis strings as they appeaer in the graph container's
