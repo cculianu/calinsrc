@@ -75,7 +75,7 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
     = QString::number((sampling_rate_t)INITIAL_SAMPLING_RATE_HZ);
 }
 
-DAQSettings::DAQSettings(const char *filename = 0)
+DAQSettings::DAQSettings(const char *filename)
 {
   masterSettings = &daqMasterSettings;
 
