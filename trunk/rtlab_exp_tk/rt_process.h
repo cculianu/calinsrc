@@ -91,8 +91,8 @@ struct spike_info {
                                           we are in the middle of a spike */
   char saved_polarity[CHAN_MASK_SIZE]; /* if we are in_spike, this is relevant
                                           (and true means positive polarity) */
-  double saved_thold[CHAN_MASK_SIZE];  /* if we are in_spike, this is relevant
-                                          to detect state change! */
+  double saved_thold[SHD_MAX_CHANNELS];  /* if we are in_spike, 
+                                            this is relevant */
 };
 
 /* 
