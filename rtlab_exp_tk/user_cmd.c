@@ -186,7 +186,7 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
     break;
   }
   /* synchronous reply is always 1 for now... */
-  rtf_put(rtp_shm->reply_fifo, &reply, sizeof(reply));
+  rtf_put(rtp_shm->reply_fifo, (void *)&reply, sizeof(reply));
 #undef CHKCHAN
 }
 
