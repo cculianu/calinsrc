@@ -37,6 +37,7 @@
 #include "configuration.xpm"
 #include "quit.xpm"
 #include "channel.xpm"
+#include "wintemplates.xpm"
 
 const QImage   DAQImages::add_channel_img( add_channel_xpm ),
                DAQImages::pause_img( pause_xpm ),
@@ -51,4 +52,5 @@ const QImage   DAQImages::add_channel_img( add_channel_xpm ),
                DAQImages::daq_system_img( daq_system_xpm ),
                DAQImages::configuration_img( configuration_xpm ),
                DAQImages::quit_img( quit_xpm ),
-               DAQImages::channel_img( channel_xpm);
+               DAQImages::channel_img( channel_xpm),
+               DAQImages::wintemplates_img( wintemplates_xpm );

@@ -55,7 +55,9 @@ const QString
     DAQMimeSources::Images::daqSystem         = "daq_system.img",
     DAQMimeSources::Images::configuration     = "config.img",
     DAQMimeSources::Images::quit              = "quit.img",
-    DAQMimeSources::Images::channel           = "channel.img";
+    DAQMimeSources::Images::channel           = "channel.img",
+    DAQMimeSources::Images::winTemplates      = "winTemplates.img";
+
 
 /*--------------------------------------------------------------------------
    Actual html for help
@@ -227,6 +229,7 @@ static QMimeSourceFactory * initFactory()
       mimeFactory->setImage( DAQMimeSources::Images::configuration, configuration_img );
       mimeFactory->setImage( DAQMimeSources::Images::quit, quit_img );
       mimeFactory->setImage( DAQMimeSources::Images::channel, channel_img );
+      mimeFactory->setImage( DAQMimeSources::Images::winTemplates, wintemplates_img );
 
   }
 
