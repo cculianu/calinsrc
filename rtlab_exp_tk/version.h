@@ -22,8 +22,8 @@
 #ifndef _VERSION_H
 #define _VERSION_H
 
-#define VERSION_NUM_STR "0.63.3"
-#define VERSION_NUM 0x00006303
+#define VERSION_NUM_STR "0.64.0"
+#define VERSION_NUM 0x00006400
 /*                    |  | |  \--- sub-minor :)
                  major---- | 
                            -minor 
