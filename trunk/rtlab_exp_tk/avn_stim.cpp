@@ -37,6 +37,7 @@
 #include <qvbox.h>
 #include <qlineedit.h>
 #include <qvalidator.h>
+#include <qscrollbar.h>
 #include <qmenubar.h>
 #include <qpopupmenu.h>
 #include <qmessagebox.h>
@@ -63,9 +64,10 @@
 
 #include "avn_stim_private.h"
 
-static const int MAX_DATA_VECTOR_SIZE = 1000000;
+/* the AVNLiebnitz's get stored in a vector that maxes out at this size */
+static const int MAX_DATA_VECTOR_SIZE = 10000000;
 
-static const char *RCS_VERSION_STRING = "$Id$";
+#define RCS_VERSION_STRING  "$Id$"
 
 class SearchableComboBox : public QComboBox
 {
@@ -142,11 +144,11 @@ static const double rr_min   = 0.0,
 
 AVNStim::AVNStim(DAQSystem *daqSystem_parent) 
   : QObject(daqSystem_parent, ::name), need_to_save(false), __data(NULL), 
-    shm(NULL), in_fifo(-1), out_fifo(-1)
+    shm(NULL), fifo(-1)
 {
   data = new vector<AVNLiebnitz>;
 
-  moduleAttachDetach(); /* can throw exception here */
+  moduleAttach(); /* can throw exception here */
 
   /* stub.. */
   window = new QWidget (0, name(), Qt::WStyle_Tool);
@@ -209,19 +211,29 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
     QWidget *tmpw = new QWidget(stats);
 
-    QGridLayout *tmplo = new QGridLayout(tmpw, 5, 2);
+    QGridLayout *tmplo = new QGridLayout(tmpw, 10, 2);
 
-    tmplo->addWidget(new QLabel("RR Interval (ms): ", tmpw), 0, 0);
-    tmplo->addWidget(new QLabel("RR Target (ms): ", tmpw), 1, 0);
-    tmplo->addWidget(new QLabel("Number of Stims: ", tmpw), 2, 0);
-    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 3, 0);
-    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 4, 0);
+    tmplo->addWidget(new QLabel("Number of Stims: ", tmpw), 0, 0);
+    tmplo->addWidget(new QLabel("RR Interval (ms): ", tmpw), 1, 0);
+    tmplo->addWidget(new QLabel("RR Target (ms): ", tmpw), 2, 0);
+    tmplo->addWidget(new QLabel("RR Average (ms): ", tmpw), 3, 0);
+    tmplo->addWidget(new QLabel("No. of beats in RR Avg.: ", tmpw), 4, 0);
+    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 5, 0);
+    tmplo->addWidget(new QLabel("g-Too-Small-Count: ", tmpw), 6, 0);
+    tmplo->addWidget(new QLabel("g-Too-Big-Count: ", tmpw), 7, 0);
+    tmplo->addWidget(new QLabel("Delta g: ", tmpw), 8, 0);
+    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 9, 0);
     
-    tmplo->addWidget(current_rri = new QLabel(tmpw), 0, 1); 
-    tmplo->addWidget(current_rrt = new QLabel(tmpw), 1, 1); 
-    tmplo->addWidget(current_stim = new QLabel(tmpw), 2, 1);
-    tmplo->addWidget(current_g   = new QLabel(tmpw), 3, 1);
-    tmplo->addWidget(last_beat_index = new QLabel(tmpw), 4, 1);
+    tmplo->addWidget(current_stim = new QLabel(tmpw), 0, 1);
+    tmplo->addWidget(current_rri = new QLabel(tmpw), 1, 1); 
+    tmplo->addWidget(current_rrt = new QLabel(tmpw), 2, 1); 
+    tmplo->addWidget(current_rr_avg = new QLabel(tmpw), 3, 1);
+    tmplo->addWidget(current_num_rr_avg = new QLabel(tmpw), 4, 1);    
+    tmplo->addWidget(current_g   = new QLabel(tmpw), 5, 1);
+    tmplo->addWidget(current_g2small = new QLabel(tmpw), 6, 1);
+    tmplo->addWidget(current_g2big = new QLabel(tmpw), 7, 1);
+    tmplo->addWidget(current_delta_g = new QLabel(tmpw), 8, 1);
+    tmplo->addWidget(last_beat_index = new QLabel(tmpw), 9, 1);
 
   }
   
@@ -261,23 +273,62 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
     connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
        
 
-    QCheckBox *stim_on_chk = new QCheckBox("Suppress Actual Stim", tmphb);
-    stim_on_chk->setChecked(!shm->stim_on);
-    connect(stim_on_chk, SIGNAL(stateChanged(int)), 
-            this, SLOT(setFakeStim(int)));
-        
-
     tmphb = new QHBox(tmpvb);
+    tmphb->setSpacing(6);
 
     (void) new QLabel("Value of g:", tmphb);
     gval = new QLineEdit(tmphb);
     gval->setValidator(new QDoubleValidator(gval));
-    gval->setText(QString("%1").arg(shm->latest_snapshot.g_val));
+    gval->setText(QString("%1").arg(shm->g_val));
     connect(gval, SIGNAL(textChanged(const QString &)), this, SLOT(changeG(const QString &)));
     (void) new QLabel("    ", tmphb); // po' man's spacing
-    QCheckBox *g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
+
+    g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
+
     g_adj_manual_only->setChecked(shm->g_adjustment_mode == AVN_G_ADJ_MANUAL);
+    g_adj_manual_only->setDisabled(!shm->stim_on);
+    gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->stim_on);
     connect(g_adj_manual_only, SIGNAL(stateChanged(int)), this, SLOT(gAdjManualOnly(int)));
+
+    control_toggle = new QCheckBox("Control On", tmphb);
+
+    control_toggle->setChecked(shm->stim_on);    
+
+    connect(control_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleControl(bool)));
+   
+
+
+  
+    /* delta-g controls */
+    tmphb = new QHBox(tmpvb);
+
+    tmphb->setSpacing(5);
+    
+    (void) new QLabel("Delta-g:", tmphb);
+
+   
+    delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
+    delta_g_bar = new QScrollBar
+      ( avn_delta_g_toint(AVN_DELTA_G_MIN), avn_delta_g_toint(AVN_DELTA_G_MAX),
+        1, avn_delta_g_toint((AVN_DELTA_G_MAX - AVN_DELTA_G_MIN) / 5.0), 
+        avn_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
+    
+    tmphb->setStretchFactor(delta_g_bar, 1);
+    
+    /* num_rr_avg controls */
+    (void) new QLabel("  No. RR Avg:", tmphb);
+
+    num_rr_avg_bar_value = new QLabel(QString::number(shm->num_rr_avg), tmphb);
+    num_rr_avg_bar = new QScrollBar 
+      ( AVN_NUM_RR_AVG_MIN, AVN_NUM_RR_AVG_MAX, 1, 
+        (AVN_NUM_RR_AVG_MAX - AVN_NUM_RR_AVG_MIN) / 10, shm->num_rr_avg,
+        Qt::Horizontal, tmphb );  
+
+    tmphb->setStretchFactor(num_rr_avg_bar, 1);
+
+    connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
+    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));
+    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), num_rr_avg_bar_value, SLOT(setNum(int)));
     
   }
   
@@ -306,7 +357,7 @@ AVNStim::~AVNStim()
                    put this in a destructor.. but 'oh well' */
   daqSystem()->windowMenuRemoveWindow(window_id);
   if (shm)  shm->spike_channel = -1; // to 'turn off' avn stim...
-  if (!needFifo()) moduleAttachDetach();  
+  moduleDetach();  
   delete window;
   delete data;
 }
@@ -324,30 +375,23 @@ AVNStim::description() const
 }
 
 
-void AVNStim::moduleAttachDetach()
+void AVNStim::moduleAttach()
 {
-  if (shm == NULL) {
-    shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
-    if (!shm || shm->magic != AVN_SHM_MAGIC) 
-      throw PluginException ("AVN Stim Plugin Attach Error", 
-                             "The AVN Stim Plugin can not find the shared "
-                             "memory buffer named \"" AVN_SHM_NAME "\".  "
-                             "(Or it is of the wrong version)\n\n"
-                             "Are you sure that module avn_stim.o is loaded?");
-  } else {
-    mbuff_detach(AVN_SHM_NAME, shm);
-    shm = NULL;
-  }
+  shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+  if (!shm || shm->magic != AVN_SHM_MAGIC) 
+    throw PluginException ("AVN Stim Plugin Attach Error", 
+                           "The AVN Stim Plugin can not find the shared "
+                           "memory buffer named \"" AVN_SHM_NAME "\".  "
+                           "(Or it is of the wrong version)\n\n"
+                           "Are you sure that module avn_stim.o is loaded?");
+  
 
-  if (needFifo() && shm) {
-    QString fname;
+  QString fname;
 
-    fname.sprintf("%s%d","/dev/rtf",shm->in_fifo_minor);
-    in_fifo = open(fname, O_RDONLY | O_NDELAY);
-    fname.sprintf("%s%d","/dev/rtf",shm->out_fifo_minor);
-    out_fifo = open(fname, O_WRONLY);
+  fname.sprintf("%s%d","/dev/rtf",shm->fifo_minor);
+  fifo = open(fname, O_RDONLY | O_NDELAY);
 
-    if (needFifo())
+  if (needFifo()) 
       throw PluginException ("AVN Stim Plugin Attach Error",
                              QString (
                              "Even though the AVN Stim Kernel Module is "
@@ -356,15 +400,17 @@ void AVNStim::moduleAttachDetach()
                              "this file exists and is read/write for the \n"
                              "current user."
                              ).arg(fname));
-
-    /* empty the fifo to make sure we start with a clean slate */
-    char buf[AVN_KERNEL_USER_FIFO_SZ];
-    ::read(in_fifo, &buf, AVN_KERNEL_USER_FIFO_SZ);
+  
+  /* empty the fifo to make sure we start with a clean slate */
+  char buf[AVN_FIFO_SZ];
+  ::read(fifo, &buf, AVN_FIFO_SZ);
     
-  } else if (!needFifo()) {
-    close(in_fifo); in_fifo = -1;
-    close(out_fifo); out_fifo = -1;
-  }
+}
+
+void AVNStim::moduleDetach()
+{
+  if (!needFifo()) close(fifo); fifo = -1;
+  if (shm) mbuff_detach(AVN_SHM_NAME, shm); shm = 0;
 }
 
 /* returns parent() dynamic_cast to DAQSystem* */
@@ -443,7 +489,7 @@ void AVNStim::readInFifo()
   AVNLiebnitz buf[n2rd];
   int n_read = 0, n_bufs = 0, i = 0;
 
-  n_read = ::read(in_fifo, buf, sizeof(buf));
+  n_read = ::read(fifo, buf, sizeof(buf));
 
   n_bufs = n_read / sizeof(AVNLiebnitz);
 
@@ -463,18 +509,43 @@ void AVNStim::readInFifo()
      last AVNLiebnitz we got */
   if (!n_bufs) return;
   
-  current_rri->setText(QString("%1").arg(buf[n_bufs-1].rr_interval));
-  current_rrt->setText(QString("%1").arg(shm->rr_target));
-  current_stim->setText(QString("%1").arg(buf[n_bufs-1].stimuli));
-  current_g->setText(QString("%1").arg(buf[n_bufs-1].g_val));
-  last_beat_index->setText(QString(uint64_to_cstr(buf[n_bufs-1].scan_index)));    
+  AVNLiebnitz & last = buf[n_bufs-1];
+
+  current_rri->setText(QString::number(last.rr_interval));
+  current_rrt->setText(QString::number(last.rr_target));
+  current_stim->setText(QString::number(last.stimuli));
+  current_g->setText(QString::number(last.g_val));
+  if (!g_adj_manual_only->isChecked()) 
+    gval->setText(QString::number(last.g_val));
+  last_beat_index->setText(QString(uint64_to_cstr(last.scan_index))); 
+  current_rr_avg->setText(QString::number(last.rr_avg));
+  current_num_rr_avg->setText(QString::number(last.num_rr_avg));
+  current_g2small->setText(QString::number(last.g_too_small_count));
+  current_g2big->setText(QString::number(last.g_too_big_count));
+  current_delta_g->setText(QString::number(last.delta_g));
+  /* update our slider value representation if actual last read delta_g
+     disagrees with the UI's notion of what it is... */
+  static const float smallf = 0.0001;
+#define f_equal(x, y) ( x > y ? x - y < smallf : y - x < smallf )
+  if (!f_equal(last.delta_g, delta_g_bar_value->text().toFloat())) {
+    disconnect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
+    delta_g_bar->setValue(avn_delta_g_toint(last.delta_g));
+    delta_g_bar_value->setText(QString::number(last.delta_g, 'g', 3));
+    connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
+  }
+
+  /* update our slider value representation if actual last read num_rr_avg
+     disagrees with the UI's notion of what it is... */
+  if (last.num_rr_avg != num_rr_avg_bar_value->text().toInt()) {
+    disconnect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));
+    num_rr_avg_bar->setValue(last.num_rr_avg);
+    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));          
+  }
+
+  
+
   /* incomplete... please finish! - Calin */
-
-}
-
-void AVNStim::setFakeStim(int state)
-{
-  shm->stim_on = !state;
+#undef f_equal
 }
 
 /* Possible race conditions here but it's too much trouble to implement
@@ -487,7 +558,7 @@ void AVNStim::populateAOComboBox()
 
   for (i = 0; i < ShmMgr::numChannels(ComediSubDevice::AnalogOutput); i++)
     if (!ShmMgr::isChanOn(ComediSubDevice::AnalogOutput, i) || i == shm->ao_chan)
-      ao_channels->insertItem(QString("%1").arg(i));
+      ao_channels->insertItem(QString::number(i));
   
 }
 
@@ -556,14 +627,41 @@ void AVNStim::synchAIChan()
 
 }
 
+void AVNStim::toggleControl(bool on)
+{
+  
+  if (!on) {
+    shm->stim_on = 0;
+    g_adj_manual_only->setDisabled(true);
+    gval->setDisabled(true);
+    shm->g_adjustment_mode = AVN_G_ADJ_MANUAL;
+  } else {
+    shm->stim_on = 1;
+    g_adj_manual_only->setDisabled(false);
+    gval->setDisabled(!g_adj_manual_only->isChecked());
+    shm->g_adjustment_mode = (g_adj_manual_only->isChecked() 
+                              ? AVN_G_ADJ_MANUAL 
+                              : AVN_G_ADJ_AUTOMATIC);
+  }
+    
+}
+
+
+
 void AVNStim::changeRRTarget(int rrt_in_ms)
 {
   shm->rr_target = rrt_in_ms;
 }
 
+void AVNStim::changeNumRRAvg(int rra)
+{
+  shm->num_rr_avg = rra;
+}
+
 void AVNStim::gAdjManualOnly(int yes)
 {
   shm->g_adjustment_mode = (yes ? AVN_G_ADJ_MANUAL : AVN_G_ADJ_AUTOMATIC);
+  gval->setDisabled(!yes);
 }
 
 void AVNStim::changeG(const QString &g)
@@ -573,7 +671,31 @@ void AVNStim::changeG(const QString &g)
 
   newG = g.toDouble(&ok);
   if (ok)
-    ::write(out_fifo, &newG, sizeof(newG));
+    shm->g_val = newG;
+}
+
+void AVNStim::changeDG(int new_dg_sliderval) 
+{
+  shm->delta_g = avn_delta_g_fromint(new_dg_sliderval);
+  delta_g_bar_value->setNum(avn_delta_g_fromint(new_dg_sliderval));
+}
+
+
+const char * AVNStim::fileheader = 
+"#File Format Version: " RCS_VERSION_STRING "\n"
+"#--\n#Columns: \n"
+"#Scan_Index RR_Interval Number_of_Stimuli G RR_Avg G_Too_Small_Count G_Too_Big_Count RR_Target Delta_G Num_RR_Avg Stim_On? G_Adj_Automatically?";
+
+
+static inline 
+QString & strinfigy_liebnitz(QString & line, const AVNLiebnitz & l) 
+{
+  line.sprintf
+    ("%s %d %d %g %d %d %d %d %g %d %d %d",     
+     uint64_to_cstr(l.scan_index), l.rr_interval, l.stimuli, l.g_val,
+     l.rr_avg, l.g_too_small_count, l.g_too_big_count, l.rr_target, 
+     (double)l.delta_g, l.num_rr_avg, (int)l.stim_on, (int)l.g_adjustment_mode);
+  return line;
 }
 
 void AVNStim::save()
@@ -593,12 +715,13 @@ void AVNStim::save()
   QTextStream out(&f);
   out.setEncoding(QTextStream::Latin1);
 
-  out << "#Scan Index\tRR Interval\tNumber of Stimuli\tG\n";
+  out << fileheader << "\n";
+  
+  QString linebuf;
 
-  for (vector<AVNLiebnitz>::iterator i=data->begin(); i != data->end(); i++) {
-    out << uint64_to_cstr(i->scan_index) << "\t" << i->rr_interval << "\t" 
-        << i->stimuli << "\t" << i->g_val << "\n";
-  }
+  for (vector<AVNLiebnitz>::iterator i=data->begin(); i != data->end(); i++) 
+    out << strinfigy_liebnitz(linebuf, *i) << "\n";
+  
   f.flush();
   if ( (f.status() & IO_Ok) != IO_Ok ) {
     Exception("Error writing to outfile", "There was an unspecified error "

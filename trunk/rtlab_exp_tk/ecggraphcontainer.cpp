@@ -95,6 +95,8 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
   pauseBox = new QCheckBox("Pause", controlsBox);
+  QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
+                             "actual data acquisition of data");
   pauseBox->setChecked(false);
   pauseBox->setMaximumSize(pauseBox->sizeHint());
   connect(pauseBox, SIGNAL(toggled(bool)), this, SLOT(pause(bool)));    
@@ -108,8 +110,9 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   QLabel *tmpLabel = new QLabel ("Change Scale: ", tmpBox);  
   rangeComboBox = new QComboBox(tmpBox, 
                                 QString("%1 Scale Box").arg(graph->name()));
-  QToolTip::add(rangeComboBox, "Use this to change graph scale (Y Axis Range).");
-  QToolTip::add(tmpLabel, "Use this to change graph scale (Y Axis Range).");
+  const char *rangeComboBoxTip = "Use this to change graph scale (Y Axis Range).";
+  QToolTip::add(rangeComboBox, rangeComboBoxTip);
+  QToolTip::add(tmpLabel, rangeComboBoxTip);
 
   controlsBox->setStretchFactor(rangeComboBox, 1);  
   layout->addMultiCellWidget (controlsBox, 0, 0, 0, 1);
@@ -130,10 +133,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   /* we can do the above because of qt's 'quasi-garbage collection'  */
   secondsVisibleBox = new QSpinBox(0, 100, seconds_visible_step, tmpBox);
   secondsVisibleBox->setValue(graph->secondsVisible());
-  QToolTip::add(tmpLabel, "Use this to change the number of seconds visible "
-		          "in your graph (X Axis Scale).");
-  QToolTip::add(secondsVisibleBox, "Use this to change the number of seconds "
-		                   "visible in your graph (X Axis Scale).");
+  const char * secondsVisibleBoxTip =  
+    "Use this to change the number of seconds visible in your graph "
+    "(X Axis Scale).";
+  QToolTip::add(tmpLabel, secondsVisibleBoxTip);
+  QToolTip::add(secondsVisibleBox, secondsVisibleBoxTip);
   connect(secondsVisibleBox, SIGNAL(valueChanged ( int )),
           this, SLOT(setSecondsVisible(int)));
   
@@ -156,11 +160,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   QToolTip::add(spikePolarityLabel, 
                 "Set the spike polarity by selecting either positive or "
                 "negative spike polarity.");
-  QToolTip::add(polarityPlusButton,
+  QToolTip::add(polarityPlusButton, 
                 "A positive spike polarity means that a spike is detected if "
                 "the amplitude is greater than or equal to the spike "
                 "threshold.");
-  QToolTip::add(polarityMinusButton,
+  QToolTip::add(polarityMinusButton, 
                 "A negative spike polarity means that a spike is detected if "
                 "the amplitude is less than or equal to the spike "
                 "threshold.");

@@ -40,40 +40,21 @@
 /*----------------------------------------------------------------------------
   Some Private Structures...
 -----------------------------------------------------------------------------*/
-#define AVN_N_SAVED_VALS 100
-#define AVN_STARTING_G_VAL 5.0
+#define AVN_N_SAVED_VALS AVN_NUM_RR_AVG_MAX
 
 struct RRIntervals {
-  int intervals[AVN_N_SAVED_VALS]; /* in milliseconds */
+  int intervals [AVN_N_SAVED_VALS]; /* in milliseconds */
   int index; /* index of last value in above array */
-  int wrapped; /* true iff index has wrappped past AVN_N_SAVED_VALS */ 
+  int n_intervals; /* the number of intervals we have saved */
   scan_index_t last_scan_index;
 };
 
 typedef struct RRIntervals RRIntervals;
 
-struct GVals {
-  double vals[AVN_N_SAVED_VALS];
-  int index; /* index of last value in above array */
-  int wrapped; /* true iff index has wrappped past AVN_N_SAVED_VALS */ 
-  scan_index_t last_scan_index;
-};
-
-typedef struct GVals GVals;
-
-struct Stimuli {
-  int stimuli[AVN_N_SAVED_VALS];
-  int index; /* index of last value in above array */
-  int wrapped; /* true iff index has wrappped past AVN_N_SAVED_VALS */ 
-  scan_index_t last_scan_index;
-};
-
-typedef struct Stimuli Stimuli;
-
-/*  Some inline 'macros' related to the above structs */
-inline int avn_next_index(int index, int *w_flg);
-inline int avn_prev_index(int index, const int *w_flg);
-inline int avn_rel_index(int index, int offset, const int *w_flg);
+/*  Some inline 'macros' related to the above struct */
+static inline int rri_next_index(void);
+static inline int rri_prev_index(void);
+static inline int rri_rel_index (int);
 /*---------------------------------------------------------------------------*/
 
 #define MODULE_NAME "AVN Stim"
@@ -85,7 +66,6 @@ int avn_stim_init(void);
 void avn_stim_cleanup(void);
 
 static int init_shared_mem(void);
-static int init_fifo(int *, int);
 static int init_ao_chan(void);
 
 static void do_avn_control_stuff(MultiSampleStruct *);
@@ -105,25 +85,41 @@ module_exit(avn_stim_cleanup);
 static AVNShared *shm = 0;
 
 static RRIntervals  rr_intervals;
-static Stimuli      stimuli;
-static GVals        gvals;
+static AVNLiebnitz  working_liebnitz; /* used for inter-function comm.      */
 static int          last_ao_chan_used = -1;
 static unsigned int ao_range = 0;
 static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
 
-inline int *      _RRI_CURR (void) 
-               { return &rr_intervals.intervals[rr_intervals.index];}
-inline double *    _GV_CURR  (void)         
-               { return &gvals.vals[gvals.index];                   }
-inline int *       _STIM_CURR(void)
-               { return &stimuli.stimuli[stimuli.index];            }
+#define NEXT_SAVED    do { rr_intervals.index = rri_next_index(); } while(0)
+#define PREV_SAVED    do { rr_intervals.index = rri_prev_index(); } while(0)
+#define MOV_SAVED(x)  do { rr_intervals.index = rri_rel_index(x); } while(0)
+#define RRI_SAVED     rr_intervals.intervals[rr_intervals.index]
+#define CURR          (&working_liebnitz)
+#define RRI_CURR      CURR->rr_interval
+#define STIM_CURR     CURR->stimuli
+#define G_VAL_CURR    CURR->g_val
+#define SI_CURR       CURR->scan_index
+#define RR_AVG_CURR   CURR->rr_avg
+#define G_2BIG_CURR   CURR->g_too_big_count
+#define G_2SMALL_CURR CURR->g_too_small_count
+#define RRT_CURR      CURR->rr_target
+#define DG_CURR       CURR->delta_g
+#define STIM_ON_CURR  CURR->stim_on
+#define N_AVG_CURR    CURR->num_rr_avg
+#define G_ADJ_CURR    CURR->g_adjustment_mode
 
-#define RRI_CURR  *_RRI_CURR()
-#define GV_CURR   *_GV_CURR()
-#define STIM_CURR *_STIM_CURR()
-static const int MAX_STIMS = 25; /* the maximum number of stims per spike */
-static const int STIM_PERIOD = 5; /* in milliseconds */
-static const int STIM_SUSTAIN = 1; /* in milliseconds */
+/*---------------------------------------------------------------------------- 
+  Some initial values or otherwise private constants...                 
+-----------------------------------------------------------------------------*/
+static const   int MAX_NUM_STIMS      = 30;  /* maximum number stims in AO   */
+static const   int STIM_PERIOD        = 5;   /* in milliseconds              */
+static const   int STIM_SUSTAIN       = 1;   /* in milliseconds              */
+static const float INITIAL_DELTA_G    = 0.1; /* for AVNShared init.          */
+static const   int INITIAL_NUM_RR_AVG = 10;  /* "   "         "              */
+static const float INITIAL_G_VAL      = 1.0; /* "   "         "              */
+static const   int G_MOD_THRESHOLD    = 2;   /* G_INC_CURR, C_DEC_CURR,      */
+                                             /* and DG_CURR related to this  */
+/*---------------------------------------------------------------------------*/
 
 /* NB: This module needs at least a 1000 hz sampling rate!
    It will fail if that is not the case at module initialization, 
@@ -156,8 +152,7 @@ int avn_stim_init (void)
 
   if ( (retval = rtp_register_function(do_avn_control_stuff))
        || (retval = init_shared_mem())
-       || (retval = init_fifo(&shm->in_fifo_minor, AVN_USER_KERNEL_FIFO_SZ))
-       || (retval = init_fifo(&shm->out_fifo_minor, AVN_KERNEL_USER_FIFO_SZ))
+       || (retval = rtp_find_free_rtf(&shm->fifo_minor, AVN_FIFO_SZ))
        || (retval = init_ao_chan()) 
        || (retval = rtp_activate_function(do_avn_control_stuff))
     ) 
@@ -170,8 +165,7 @@ void avn_stim_cleanup (void)
 {
   rtp_deactivate_function(do_avn_control_stuff);
   rtp_unregister_function(do_avn_control_stuff);
-  if (shm && shm->in_fifo_minor >= 0)  rtf_destroy(shm->in_fifo_minor);
-  if (shm && shm->out_fifo_minor >= 0) rtf_destroy(shm->out_fifo_minor);
+  if (shm && shm->fifo_minor >= 0)  rtf_destroy(shm->fifo_minor);
   if (shm && shm->ao_chan >= 0)
     /* indicate that now this channel is free */
     _set_bit(shm->ao_chan, rtp_shm->ao_chans_in_use, 0);
@@ -202,12 +196,15 @@ static void do_avn_control_stuff (MultiSampleStruct * m)
 
   /* Note that stimulate modulates the stimulation voltage
      the assumption is that rt_process.o is running at precisely 1000 hz! */
-  if (shm->stim_on) stimulate(have_spike);
+  stimulate(have_spike);
   m = 0; /* to avoid compiler errors... */
 }
 
 static int init_shared_mem(void)
 {
+
+  memset(&working_liebnitz, 0, sizeof(AVNLiebnitz));
+
   shm = 
     (AVNShared *) mbuff_alloc (AVN_SHM_NAME,
                                sizeof(AVNShared));
@@ -216,12 +213,13 @@ static int init_shared_mem(void)
   memset(shm, 0, sizeof(AVNShared));
 
   rr_intervals.index = -1; 
-  stimuli.index = -1;
-  gvals.index = 0; 
-  shm->latest_snapshot.g_val = gvals.vals[0] = AVN_STARTING_G_VAL;
-  shm->out_fifo_minor = shm->in_fifo_minor = -1;
+  rr_intervals.n_intervals = 0;
+  shm->g_val = G_VAL_CURR = INITIAL_G_VAL;
+  shm->fifo_minor = -1;
   shm->spike_channel = -1;
-
+  shm->delta_g = INITIAL_DELTA_G;
+  shm->num_rr_avg = INITIAL_NUM_RR_AVG;
+  
   if ( (shm->ao_chan = 
         find_free_chan(rtp_shm->ao_chans_in_use, rtp_shm->n_ao_chans)) < 0) 
      return -EBUSY; /* no ao chans found */
@@ -229,32 +227,6 @@ static int init_shared_mem(void)
   shm->magic = AVN_SHM_MAGIC;
 
   return 0;
-}
-
-
-static int init_fifo(int *fifo, int size)
-{
-  unsigned int i;
-
-  /* keep trying to create a fifo until we find a free one */
-  for (i = 0; i < RTF_NO; i++) {
-    int ret;
-
-    if (i == rtp_shm->ai_fifo_minor 
-        || i == rtp_shm->ao_fifo_minor) continue;
-
-    ret = rtf_create(i, size);
-
-    /* the rtf_create docs contradict the actual code for rtf_create... */
-    if (ret == size || ret == 0) {
-      /* got it! */      
-      *fifo = i;
-      printk(MODULE_NAME ": init_fifo(): fifo minor is %u\n", *fifo);
-      return 0;
-    } else if (ret != -EBUSY) return ret;          
-  }
-
-  return -EBUSY;
 }
 
 /* probes shm->ao_chan to find the maximal possible output voltage and
@@ -302,47 +274,41 @@ static int init_ao_chan(void)
 /* core helper functions... */
 static void calc_rr()
 {
-    /* calculate the rr interval for this spike */
-    rr_intervals.index = avn_next_index(rr_intervals.index, 
-                                        &rr_intervals.wrapped);
-
+    NEXT_SAVED;
+    
     /* save rr interval in milliseconds */
-    RRI_CURR = round(spike_info.period[shm->spike_channel]);
-   
-    rr_intervals.last_scan_index = rtp_shm->scan_index;
+    RRI_CURR = RRI_SAVED = round(spike_info.period[shm->spike_channel]);   
 }
 
 static void calc_stim(void)
 {
-    int rr_n = 0,
-        sum = 0,
-        num = (rr_intervals.wrapped 
-               ? AVN_N_SAVED_VALS 
-               : rr_intervals.index + 1),
+    int sum = 0,
         index = rr_intervals.index,
+        factor = 0,
         i;
-    double g = GV_CURR;
-    static const double very_small_g = 0.0000001;
+    double g = G_VAL_CURR;
 
-    stimuli.index = avn_next_index(stimuli.index, 
-                                   &stimuli.wrapped);
+    /* there's no point in computing these if we aren't 
+       doing any sort of control, so return early if
+       both stimulation is simulated AND g is being adjusted manually */
+    if (G_ADJ_CURR == AVN_G_ADJ_MANUAL && !STIM_ON_CURR) return;
 
-    for (i = 0; i < num; i++) {
-      sum += rr_intervals.intervals[index];
-      index = avn_prev_index(index, &rr_intervals.wrapped);
+    for (i = 0; i < N_AVG_CURR; i++) {
+      sum += rr_intervals.intervals[index] * (N_AVG_CURR - i);
+      factor += N_AVG_CURR - i;
+      index = rri_prev_index();
     }
-    
-    rr_n = ( num != 0 ? sum / num : shm->rr_target);   
-    
-    if (g == 0.0) g = very_small_g; /* prevent div by 0 */
 
-    STIM_CURR = (rr_n - shm->rr_target) / g;
+    /* factor should never be zero, but let's program defensively
+       in case they set shm->num_rr_avg to 0  */
+    RR_AVG_CURR = ( factor != 0 ? sum / factor : shm->rr_target);   
+    
+    STIM_CURR = (RR_AVG_CURR - shm->rr_target) * g;
 
     if (STIM_CURR < 0) STIM_CURR = -STIM_CURR;
 
-    if (STIM_CURR > MAX_STIMS) STIM_CURR = MAX_STIMS;
+    if (STIM_CURR > MAX_NUM_STIMS) STIM_CURR = MAX_NUM_STIMS;
 
-    stimuli.last_scan_index = rtp_shm->scan_index;
 }
 
 static void stimulate(int new_spike)
@@ -351,6 +317,10 @@ static void stimulate(int new_spike)
     state.stims = STIM_CURR;
     state.waiting = 0;    
   } 
+
+  /* if stimulation was shut off, reset our state to idle */
+  if (!STIM_ON_CURR)  {state.sustain = 0; state.stims = 0; state.waiting = 0;}
+  
   
   if ( state.stims && state.waiting == 0 ) {
     /* polarization (begin stimulation) */
@@ -381,35 +351,32 @@ static void stimulate(int new_spike)
 
 }
 
-static double get_g_from_user(int *ok) 
-{
-  double g = GV_CURR, last_g = g;
-  int n_read = 0;
-
-  if (ok) *ok = 0;
-
-  while ( (n_read = rtf_get(shm->in_fifo_minor, (char *)&g, sizeof(g))) > 0 ) {
-    if (n_read != sizeof(g)) g = last_g; else last_g = g;
-    if (ok) *ok = 1;
-  }
-
-  return g;
-}
-
 static void calc_g(void)
 {
-    if (shm->g_adjustment_mode == AVN_G_ADJ_AUTOMATIC) {
-      /* ask dave about this!! */
-      gvals.last_scan_index = rtp_shm->scan_index;
-    }
+  const int rr_diff = RRT_CURR - RR_AVG_CURR;
+
+  if (G_ADJ_CURR != AVN_G_ADJ_AUTOMATIC) return;
+
+  if ( rr_diff > 0 ) {
+    /* we need to decrease g */
+    G_2SMALL_CURR++;
+    G_2BIG_CURR = 0;
+  } else if ( rr_diff < 0 ) {
+    /* we need to increase g */
+    G_2SMALL_CURR = 0;
+    G_2BIG_CURR++;
+  }
+  /* is our threshold reached? 
+     if our G_DEC_COUNT threshold is reached, we decrease G by DG_CURR, 
+     if out G_INC_COUNT threshold is reached, we increase G by DG_CURR */
+  G_VAL_CURR -= DG_CURR * (G_2BIG_CURR   >= G_MOD_THRESHOLD);
+  G_VAL_CURR += DG_CURR * (G_2SMALL_CURR >= G_MOD_THRESHOLD);
+  shm->g_val = G_VAL_CURR;
 }
 
 static void out_to_fifo(void)
 {
-  AVNLiebnitz out = { RRI_CURR, STIM_CURR, GV_CURR, rtp_shm->scan_index };
-
-  rtf_put(shm->out_fifo_minor, &out, sizeof(out));
-  memcpy(&shm->latest_snapshot, &out, sizeof(out));
+  rtf_put(shm->fifo_minor, CURR, sizeof(*CURR));
 }
 
 static int find_free_chan(char *chans, unsigned int n_chans)
@@ -424,49 +391,69 @@ static int find_free_chan(char *chans, unsigned int n_chans)
 
 static void do_pre_control_stuff(void)
 {
-  int user_changed_g = 0;
-  double new_g;
-
   if (last_ao_chan_used != shm->ao_chan) 
     init_ao_chan();
  
-  new_g = get_g_from_user(&user_changed_g);
+  /* 
+     safety/constraint checks 
+  */
+  if (shm->delta_g < AVN_DELTA_G_MIN) shm->delta_g = AVN_DELTA_G_MIN;
+  else if (shm->delta_g > AVN_DELTA_G_MAX) shm->delta_g = AVN_DELTA_G_MAX;
 
-  if (user_changed_g) {
-    gvals.index = avn_next_index(gvals.index, &gvals.wrapped);
-    GV_CURR = new_g;
-  }
+  if (shm->num_rr_avg < AVN_NUM_RR_AVG_MIN) shm->num_rr_avg = AVN_NUM_RR_AVG_MIN;
+  else if (shm->num_rr_avg > AVN_NUM_RR_AVG_MAX) shm->num_rr_avg = AVN_NUM_RR_AVG_MAX;
     
+  G_VAL_CURR = shm->g_val;
+  SI_CURR = rtp_shm->scan_index;
+  RRT_CURR = shm->rr_target;
+  DG_CURR = shm->delta_g;
+  N_AVG_CURR = shm->num_rr_avg;
+  G_ADJ_CURR = shm->g_adjustment_mode;
+  STIM_ON_CURR = shm->stim_on;
+  /* will be set later...
+     RRI_CURR = 
+     STIM_CURR = 
+     GBIG_CURR = 
+     GSMALL_CURR =
+     RR_AVG_CURR = 
+  */
+  
+  
 }
 
 /*-----------------------------------------------------------------------------
    Inline function definitions related to our private structs declared
    at the top of this file 
 -----------------------------------------------------------------------------*/
-inline int avn_next_index(int index, int *w_flg) 
-{ 
-  int ret = (index < 0 ? 0 : (index + 1) % AVN_N_SAVED_VALS);
+static inline void rri_next(void) { rr_intervals.index = rri_next_index(); }
+static inline void rri_prev(void) { rr_intervals.index = rri_prev_index(); }
 
-  /* set the wrapped flag if we wrapped around in our saved values */
-  if (w_flg && index >= 0 && ret < index) *w_flg = 1;
-  return ret;
+static inline int rri_next_index(void) 
+{ 
+  return  (rr_intervals.index < 0 ? 0 : (rr_intervals.index + 1) % AVN_N_SAVED_VALS);
 }
 
-inline int avn_prev_index(int index, const int *w_flg)
+static inline int rri_prev_index(void)
 { 
-  if (w_flg && !*w_flg && index <= 0) return 0;
-  return ( index > 0 ? index - 1 : AVN_N_SAVED_VALS - 1 ); 
+  if (rr_intervals.index < 0) return 0;
+  return ( rr_intervals.index != 0 ? rr_intervals.index - 1 
+           : AVN_N_SAVED_VALS - 1 ); 
 }
 
-inline int avn_rel_index(int index, int offset, const int *w_flg)
+static inline int rri_rel_index(int offset)
 { 
-  int i = 0;
+  int saved_index = rr_intervals.index;
 
   if (offset < 0)
-    for (i = offset; i > 0; i--) index = avn_prev_index(index, w_flg);
+    while(offset++ < 0) rri_next();
   else
-    for (i = 0; i < offset && (!w_flg||(!*w_flg && index < AVN_N_SAVED_VALS));
-         i++) index = avn_next_index(index, 0);
+    while(offset-- > 0) rri_prev();
 
-  return index;
+  saved_index ^= rr_intervals.index; /* swap using XOR trick */
+  rr_intervals.index ^= saved_index;
+  saved_index ^= rr_intervals.index;
+  return saved_index;
 }
+
+
+ 

@@ -38,6 +38,7 @@ typedef unsigned char uint8;
 typedef unsigned long long uint64;
 typedef long long int64;
 
+#ifdef __cplusplus
 #include <string>
 #include <qstring.h>
 
@@ -56,6 +57,6 @@ string operator+(const string & s, uint64 in);
 
 /* this function is non-reentrant! */
 QString operator+(const QString & s, uint64 in);
-
+#endif
 
 #endif

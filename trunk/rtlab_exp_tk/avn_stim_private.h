@@ -21,6 +21,7 @@
  */
 
 #include <qobject.h>
+#include <qstring.h>
 #include "plugin.h"
 
 class DAQSystem;
@@ -33,6 +34,8 @@ class SearchableComboBox;
 class QTimer;
 class QSpinBox;
 class QLineEdit;
+class QScrollBar;
+class QCheckBox;
 
 class AVNStim: public QObject, public Plugin
 {
@@ -46,7 +49,6 @@ public:
 
 private slots:
   void periodic(); /* does stuff periodically.. called by the timer */
-  void setFakeStim(int state); 
   void changeAOChan(const QString &); /* reads the current state of 
                                          ao_channels and tells the realtime 
                                          process about our new desired ao chan
@@ -55,9 +57,16 @@ private slots:
                                          rt process avn_stim.o */
   void synchAIChan(); /* synchs combo box with list of open ai chans from
                          rt_process.o's shared memory struct SharedStuff */
+
+  void toggleControl(bool); /* disables control by making stim_on be false 
+                               and also setting g_adjustment_mode to 
+                               AVN_G_ADJ_MANUAL */
+
   void changeRRTarget(int);
+  void changeNumRRAvg(int);
   void gAdjManualOnly(int);
   void changeG(const QString &);
+  void changeDG(int);  
 
   void save();
   void saveAs();
@@ -85,20 +94,30 @@ private:
 
   ECGGraph *rr_graph, *stim_graph, *g_graph;
 
-  QLabel *current_rri, *current_rrt, *current_stim, *current_g, *last_beat_index;
+  QLabel *current_rri,     *current_rrt,    *current_stim,       *current_g, 
+         *last_beat_index, *current_rr_avg, *current_num_rr_avg, 
+         *current_g2small, *current_g2big,  *current_delta_g,
+         *delta_g_bar_value, *num_rr_avg_bar_value;
+
+  QScrollBar *delta_g_bar, *num_rr_avg_bar;
+
+  QCheckBox *g_adj_manual_only, *control_toggle; 
 
   void addAxisLabels(); /* puts the axis labels for the above graphs in */
   void populateAOComboBox();  
   void synchAOChan();  /* synch the ao_channels combobox with the kernel */
-  
 
   /* Module-related stuff */
   AVNShared *shm;
-  int in_fifo, out_fifo; /* fd's of each of the fifos */
+  int fifo; /* fd's of the input fifo */
   QTimer *timer;
 
-  void moduleAttachDetach(); /* attaches to avn_stim.o's fifo and shm */
-  bool needFifo() const { return (in_fifo < 0 || out_fifo < 0); }
+  void moduleAttach(); /* attaches to avn_stim.o's fifo and shm */
+  void moduleDetach(); /* closes the fifo fd and detached from shm */
+  bool needFifo() const { return (fifo < 0); }
   void readInFifo(); /* reads in data off the fifo from the avn_stim module */
   
+  /* static data that is generated at compile-time and goes into
+     the output textfile as a header */
+  static const char * fileheader;
 };
