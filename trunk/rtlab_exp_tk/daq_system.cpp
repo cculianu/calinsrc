@@ -948,7 +948,7 @@ void DAQSystem::printDialog()
   /* pause everything to be all dramatic... */
   for (uint i = 0; i < gcs.size(); i++) 
     if (!gcs[i]->isPaused()) {
-      const_cast<ECGGraphContainer *>(gcs[i])->pause();
+      const_cast<ECGGraphContainer *>(gcs[i])->pauseUnpause();
       paused.push_back(gcs[i]);
     }
 
@@ -965,7 +965,7 @@ void DAQSystem::printDialog()
 
   /* now unpause everything that was paused before */
   for (uint i = 0; i < paused.size(); i++) 
-    const_cast<ECGGraphContainer *>(paused[i])->pause();
+    const_cast<ECGGraphContainer *>(paused[i])->pauseUnpause();
 
 }
 

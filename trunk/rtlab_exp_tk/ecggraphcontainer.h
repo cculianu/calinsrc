@@ -161,8 +161,8 @@ public slots:
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
 
-  void pause(); /* pauses the graph 
-                                    -- 'disables' it as a consumer */
+  void pauseUnpause(); /* pauses the graph 
+                          -- 'disables' it as a consumer */
 
  protected:
 

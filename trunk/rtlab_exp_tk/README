@@ -11,15 +11,33 @@ this to compile properly you must do the following:
    needs to be installed.  Earlier versions should probably work too, 
    but your mileage may vary.
 
+   IMPROTANT!!
+   -----------
+   RTLinux Users --
+      You need to enable the following when configuring RTLinux:  
+        Shared Memory driver, POSIX standard IO, and Floating Point Support!
+
+   RTAI Users --
+      You need to enable the following when configuring RTAI:
+        Enable Floating Point Support, POSIX API, RT Memory Manager, FIFOS
+        
+
 2. Make sure Comedi 0.7.65 or later (earlier ones may work too) with comedilib
    and kcomedilib are installed (http://www.comedi.org/comedi).
+    
+   NOTE: Enable realtime support when configuring Comedi! (this is like
+   the second question it asks you).
+
+   NOTE #2: If using RTLinux, don't enable RT Timer Emulation in Comedi,
+   (this is like the last or penultimate question comedi asks you), because
+   this feature is broken for RTLinux.
 
 3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.
    Be sure you know WHERE Qt is installed as the configure script asks you for
    this information.
 
 
-Next, you must run the following command from WITHIN the source tree to
+Next, you must run the following command from WITHIN the RTLab source tree to
 configure the build system:
 
 	./configure
