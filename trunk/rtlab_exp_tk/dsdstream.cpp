@@ -34,7 +34,9 @@
 
 const uint DSDStream::MAGIC;
 
-DSDStream::DSDStream() : QDataStream(), data_buf(0), data_buf_sz(0)
+DSDStream::DSDStream() : QDataStream(), 
+                         user_data_callback(0), data_buf(0), data_buf_sz(0)
+                         
 {
   init(0);
 }
@@ -287,6 +289,8 @@ template<class T> void DSDStream::flushTempl() //throw (FileException)
     putRateChangedInsn();
   if (sampleSkippedThisScan)
     putIndexChangedInsn();
+  if (userDataThisScan)
+    putUserDataInsn();
 
 
   for (vector<double>::iterator it = sampleData.begin(); it < sampleData.end(); it++) {
@@ -323,6 +327,19 @@ void DSDStream::writeSample ( const SampleStruct * s ) //throw (IllegalStateExce
   flushPending = true;
 }
 
+void DSDStream::writeUserData( const char *data, uint num ) 
+{
+  QMemArray<char> d;
+  d.duplicate(data, num);
+  writeUserData(d);
+}
+
+void DSDStream::writeUserData( QMemArray<char> data ) 
+{
+  user_data = data;
+  userDataThisScan = true;
+}
+
 // this seems to be broken in that it always returns true!
 template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) //throw (FileException)
 {
@@ -337,7 +354,10 @@ template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) //thro
     s->spike = 0; /* spike information in datafiles not yet supported! */
     s->magic_number = SAMPLE_STRUCT_MAGIC;
     chans_this_scan--;
-    if (! chans_this_scan)  maskState.endIndex = rateState.endIndex = ++currentIndex;
+    if (! chans_this_scan)  {
+      maskState.endIndex = rateState.endIndex = ++currentIndex;
+      userDataThisScan = false;
+    }
     return true;
   }
 
@@ -413,7 +433,12 @@ bool DSDStream::readNextSample ( SampleStruct * s ) //throw (IllegalStateExcepti
   }
 }
 
-void DSDStream::resetScanFlags() { flushPending = sampleSkippedThisScan = rateChangedThisScan = chanMaskChangedThisScan = false; chans_this_scan = 0; }
+void DSDStream::resetScanFlags() 
+{ 
+  flushPending = sampleSkippedThisScan = rateChangedThisScan = 
+    chanMaskChangedThisScan = userDataThisScan = false; 
+  chans_this_scan = 0; 
+}
 
 void DSDStream::maskChanged()
 {
@@ -489,7 +514,9 @@ void DSDStream::setScanIndex(scan_index_t index)
 void DSDStream::doInsn()
 {
   uint64 tmpVal;
-  uint tmpInsn = UNKNOWN_INSN;
+  uint tmpInsn = UNKNOWN_INSN, dataSize = 0;
+  char *data;
+
   *this >> tmpInsn;
   switch ( uint2insn(tmpInsn) ) {
   case MASK_CHANGED_INSN:
@@ -514,6 +541,15 @@ void DSDStream::doInsn()
 #ifdef DEBUGGG
     cerr << ((string("Found index changed instruction in file. Changing index from ") + tmpVal) + (string(" to ") + currentIndex)) << endl;
 #endif
+    break;
+  case USER_DATA_INSN:
+    readBytes(data, dataSize);      // data is new'd by this method
+    user_data.assign(data, dataSize); // data now 'owned' by user_data
+    userDataThisScan = true;
+    if (user_data_callback)
+      user_data_callback(user_data);
+    /* char *data not deleted here because user_data now 'owns' it, and
+       will auto-handle the deletion of that memory */    
     break;
   default:
     throw FileFormatException("INTERNAL ERROR", "Unknown instruction encountered in data file!  Either the file is corrupt or you are using an old version of this software to read a newer file format.");
@@ -564,6 +600,13 @@ void DSDStream::putIndexChangedInsn()
   *this << scanIndex();
 }
 
+void DSDStream::putUserDataInsn()
+{
+  static const Instruction ins = USER_DATA_INSN;
+
+  putInsn(ins);
+  writeBytes(user_data.data(), user_data.size());
+}
 
 QDataStream & DSDStream::writeRawBytes (const char * s, uint len) //throw (FileException)
 {

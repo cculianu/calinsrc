@@ -24,6 +24,7 @@
 
 #include <qstring.h>
 #include <qdatastream.h>
+#include <qmemarray.h>
 #include <qbitarray.h>
 #include <qbuffer.h>
 
@@ -117,6 +118,18 @@ public:
   void writeSample ( const SampleStruct * s); //throw (IllegalStateException, FileException);
 
   /*
+    Writes user data to the device. User data is a block of user-defined 
+    bytes (useful if you want to write your own custom structs to the file)
+    It is physically written just before the current scan in the file,
+    and is internally 'escaped' using the Instruction mechanism
+  */
+  void writeUserData ( const char *data, uint num_bytes);
+  void writeUserData ( QMemArray<char> data );
+
+  /* the callback function to call whenever userdata is available */
+  typedef void (*userData_CB)(QMemArray<char> data);
+  
+  /*
      Reads a sample from the device
      Does nothing if d->mode() is not (IO_ReadOnly)
   */
@@ -140,6 +153,8 @@ public:
 
 
 protected:
+  /* these are here so we can implement our own exception throwing in case
+     of IO errors.. */
    QDataStream & writeRawBytes (const char * s, uint len); //throw (FileException);
 
    QDataStream & readRawBytes (char * s, uint len); //throw (FileException);
@@ -205,12 +220,14 @@ private:
     MASK_CHANGED_INSN = 0x01,
     RATE_CHANGED_INSN = 0x02,
     INDEX_CHANGED_INSN = 0x03,
+    USER_DATA_INSN = 0x04,
     UNKNOWN_INSN
   };
   void putInsn(Instruction ins);
   void putMaskChangedInsn();
   void putRateChangedInsn();
   void putIndexChangedInsn();
+  void putUserDataInsn();
   void doInsn();
 
   void serializeHistory();// throw (FileException);
@@ -225,6 +242,8 @@ private:
       return RATE_CHANGED_INSN; break;
     case INDEX_CHANGED_INSN:
       return INDEX_CHANGED_INSN; break;
+    case USER_DATA_INSN:
+      return USER_DATA_INSN; break;
     default:
       break;
     }
@@ -244,11 +263,18 @@ private:
     return UNKNOWN_DATA_TYPE;
   };
 
+  QMemArray<char> user_data; /* temporary storage of user data for this scan,
+                                until flush() flushes it to disk */
+
+  /* callback function whenever we receive user data in the read
+     stream */
+  userData_CB user_data_callback;
+
   StateHistory history;
   RateState rateState;
   MaskState maskState;
   FileDataType fileDataType;
-  bool alreadyBegan, chanMaskChangedThisScan, rateChangedThisScan, sampleSkippedThisScan, flushPending;
+  bool alreadyBegan, chanMaskChangedThisScan, rateChangedThisScan, sampleSkippedThisScan, userDataThisScan, flushPending;
   vector<double> sampleData;
   scan_index_t lastIndex, currentIndex; // the last index flushed to disk, and the current index being worked on
   static const uint MAGIC = 0xf117;
