@@ -24,7 +24,7 @@
 #define _RT_PROCESS_H
 
 #include "hardware_specific.h" //system specific info (e.g. DAQ board, RAM)
-#include <drivers/mbuff/mbuff.h> // make sure a directory like /usr/src/rtl is in your include path, and that you have the mbuff driver!
+#include <mbuff.h> // make sure a directory like /usr/src/rtl is in your include path, and that you have the mbuff driver!
 #include <comedi.h>            //comedi header file
 
 //#define NUM_AD_CHANNELS_TO_USE NUM_AD_CHANNELS    //# analog input channels 

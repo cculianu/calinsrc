@@ -1,6 +1,12 @@
-TEMPLATE    =	app
+#
+# edit the below line to specify the location of the rtl.mk files created
+# when you compiled the rt-linux kernel 
+#
+RTL_MK = /usr/src/rtlinux/rtl.mk
+
+TEMPLATE    =	daq_system.t
 CONFIG      =	qt warn_on debug #release
-INCLUDEPATH =   /usr/src/rtl/ # you need this for the mbuff.h file in drivers/mbuff!
+INCLUDEPATH =   
 HEADERS     =	daq_system.h hardware_specific.h configuration.h text_window.h help_text.h fifos.h
 SOURCES     =	main.cpp daq_system.cpp fifos.cpp configuration.cpp text_window.cpp
 TARGET      =	daq_system
