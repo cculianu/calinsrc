@@ -349,6 +349,21 @@ DAQSystem::isValidDAQSettings(const DAQSettings & s)
   return true;
 }
 
+set<uint> DAQSystem::channelsWithSpikeThresholds() const
+{
+  set<uint> ret;
+  vector<const ECGGraphContainer *> gcs = graphContainers();
+  vector<const ECGGraphContainer *>::iterator it, end;
+
+
+  for (it = gcs.begin(), end = gcs.end(); it != end; it++)
+    if ( shmCtl.spikeEnabled((*it)->channelId) )
+      ret.insert((*it)->channelId);
+  
+  return ret;
+}
+
+
 void
 DAQSystem::addChannel (void)
 {  
@@ -763,6 +778,8 @@ void DAQSystem::spikeThresholdSet(double value)
     shmCtl.setSpikeThreshold(gc->channelId, value);
     shmCtl.setSpikeEnabled(gc->channelId, true);
   }
+  
+  emit spikeThresholdSet(gc->channelId, value);  
 }
 
 void DAQSystem::spikeThresholdOff() 
@@ -775,6 +792,9 @@ void DAQSystem::spikeThresholdOff()
 
   if ( gc )
     shmCtl.setSpikeEnabled(gc->channelId, false);
+
+  emit spikeThresholdOff(gc->channelId);  
+
 }
 
 int /* returns the window id */

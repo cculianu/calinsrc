@@ -196,21 +196,23 @@ void ECGGraph::plot (double amplitude, uint64 sample_index) {
 
 void ECGGraph::plot (double amplitude) {
 
-  if (currentSampleIndex && currentSampleIndex != _totalSampleCount
-      && !(currentSampleIndex  % plotFactor())) {
-    deletePlotsBetween (currentSampleIndex - plotFactor(), currentSampleIndex);
+  if ((!plotFactor()) ||
+      (currentSampleIndex && currentSampleIndex != _totalSampleCount
+      && !(currentSampleIndex  % plotFactor()))) {
+    deletePlotsBetween (currentSampleIndex - (plotFactor() ? plotFactor() : 1),
+                        currentSampleIndex);
   }
 
   makePoint(amplitude, -1);
 
-  if (currentSampleIndex && !(currentSampleIndex % plotFactor()) ) {
+  if ((!plotFactor()) 
+      || currentSampleIndex && !(currentSampleIndex % plotFactor()) ) {
 
     /* plot the lines */
     plotPoints (currentSampleIndex - plotFactor(), currentSampleIndex);  
 
     /* now draw the little blip */
     drawLittleBlip();
-
   }
   
   _totalSampleCount++;  
@@ -254,8 +256,9 @@ void ECGGraph::makePoint (double amplitude, int sampleIndex = -1)
 {
   if (sampleIndex < 0) sampleIndex = currentSampleIndex;
 
-  points->setPoint(sampleIndex, sampleVectorToPoint(amplitude, sampleIndex));
-  samples[sampleIndex] = amplitude;
+  /* is it valid? */
+    points->setPoint(sampleIndex, sampleVectorToPoint(amplitude, sampleIndex));
+    samples[sampleIndex] = amplitude;
 }
 
 
@@ -409,7 +412,11 @@ void ECGGraph::remakeAllPoints () {
 
   for (i = 0; i < maxIndex ; i++) 
     makePoint(samples[i], i); /* re-calculate points */
-  
+
+  /* delete the remainder of the points, if any */
+  for (; i < numSamples; i++) 
+    makePoint(NOT_VALID_AMPL, i);
+
   if (i) plotPoints(0,i-1);
   
 }
@@ -421,6 +428,11 @@ QPoint ECGGraph::sampleVectorToPoint (double amplitude, int pos,
   if (n_indices < 0) n_indices = numSamples;
 
   if (w < 0) w = width(); if ( h < 0 ) h = height();
+
+  if ( fabs(amplitude - NOT_VALID_AMPL) < 1.0 )  {
+    // invalid point
+    return QPoint();
+  }
 
   x =  (int)rint(( (w+0.0) / n_indices ) * pos);
   y =  (int)rint(( h / (_rangeMax - _rangeMin) ) * (_rangeMax - amplitude));
@@ -536,6 +548,13 @@ ECGGraph::reset()
   computeCurrentSampleIndex(true);
   _totalSampleCount = 0;
   remakeAllPoints();
+}
+
+void 
+ECGGraph::ffwd(unsigned int amt)
+{
+  currentSampleIndex += amt;
+  computeCurrentSampleIndex();
 }
 
 void ECGGraph::drawLittleBlip (int index) {
