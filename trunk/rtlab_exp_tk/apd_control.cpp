@@ -228,6 +228,7 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
       // create the interleaver class that talks to this graph
       apd_interleaver = new APDInterleaver(this, apd_graph[which_apd_graph],
                                            apd_monitor);
+      apd_grapher = new APDGrapher(this, apd_graph, apd_monitor);
 
       apd_graph[which_apd_graph]->setPlotMode(ECGGraph::Circles);
       apd_graph[which_apd_graph]->plotPen().setWidth(apdGraphPointWidth);
@@ -737,18 +738,21 @@ void APDcontrol::readInFifo()
 
     spooler->spool(&snapShot, 1); // save
 
+    /* this is responsible for keeping track of all the beats
+       and broadcasting the arrival of a new beat on electrode 0..
+       interested parties to the fact that new beats occur are
+       the apd_interleaver which uses this fact to draw the perkinje fiber 
+       snapshot graph, as well as the apd_grapher which uses this fact
+       to commit all new beats to graphs on the screen */
     apd_monitor->gotAPD(snapShot); // monitor
-
-    const uint & chan = snapShot.electrode_id;
-
-    apd_graph[chan]->plotPen().setColor(apd_monitor->currentColor());
-    apd_graph[chan]->blipPen().setColor(apd_monitor->currentColor());
-
-    apd_graph[chan]->plot(static_cast<double>(snapShot.apd));
 
     // this is responsible for drawing apd's to the last graph in the 
     // perkinje-fiber-friendly layout
     apd_interleaver->gotAPD(snapShot);
+    
+    /* this is responsible for drawing to all the graphs and/or keeping
+       them color synched and vertically synched.. */
+    apd_grapher->gotAPD(snapShot);
 
     if (snapShot.ao_chan >= 0) ao_chan_buf[snapShot.ao_chan]=i; //for chans with associated ao_chan
 
@@ -1150,7 +1154,7 @@ void APDInterleaver::gotAPD(const MCSnapShot &m)
   APDPair & p = it->second;
   
   p.apd[p.ct % 2] = m.apd;
-  p.color[p.ct % 2] = monitor->currentColor();
+  p.color[p.ct % 2] = (p.ct % 2 ? monitor->oddColor() : monitor->evenColor());
   p.ct++;
 }
 
@@ -1288,11 +1292,10 @@ void APDMonitor::rebuildOrder()
 
 void APDMonitor::gotAPD(const MCSnapShot &m)
 {
-
   if(orderFirst() == m.apd_channel) {
     if (colorState == color1) colorState = color2;
     else colorState = color1;
-    emit beatNumberChanged(++beat_num);    
+    emit beatNumberChanged(++beat_num);
   }
 }
 
@@ -1368,4 +1371,49 @@ QString APDMonitor::masterOrder() const
   if (ret.length())
     ret.truncate(ret.length()-1);
   return ret;
+}
+
+APDGrapher::APDGrapher(QObject *parent,
+                       ECGGraph *g[NumAPDGraphs+1],
+                       const APDMonitor *monitor)
+  : QObject(parent, "APD Grapher"), graphs(g), monitor(monitor)
+{
+  resetAPDs();
+  connect(monitor, SIGNAL(beatNumberChanged(uint)),
+          this, SLOT(graphAll()));
+}
+
+void
+APDGrapher::gotAPD(const MCSnapShot &snapshot)
+{
+  uint electrode_id = monitor->orderOf(snapshot.apd_channel);
+  apds[electrode_id] = snapshot.apd;
+}
+
+void
+APDGrapher::graphAll()
+{
+  uint electrode;
+  bool had_at_least_one = false;
+
+  for (electrode = 0; electrode < NumAPDGraphs; electrode++) {
+    if (apds[electrode] >= 0) {
+      graphs[electrode]->plotPen().setColor(monitor->currentColor());
+      graphs[electrode]->blipPen().setColor(monitor->currentColor());
+      graphs[electrode]->plot(static_cast<double>(apds[electrode]));
+      had_at_least_one = true;
+    } else {
+      graphs[electrode]->ffwd(1); // no apd this beat, so fast forward graph
+    }
+  }
+  if (had_at_least_one) resetAPDs();    
+}
+
+void
+APDGrapher::resetAPDs()
+{
+  int i;
+
+  for(i = 0; i < NumAPDGraphs; i++)
+    apds[i] = -1; // no APD
 }

@@ -126,6 +126,7 @@ class APDMonitor : public QObject
  private slots: 
   void rebuildOrder();
  private:
+
   DAQSystem *ds;
  /* maps channel-id -> electrode number/order */
   typedef map<uint, uint> Order;
@@ -135,6 +136,30 @@ class APDMonitor : public QObject
   int first, last; // first and last chanids
   const QColor &color1, &color2;
   QColor colorState;
+};
+
+/* 
+   keeps track of all apd's.. intended to be called by APDcontrol
+   in the readInFifo() loop to keep track of all apd's for each
+   electrode for this beat, then gracefully graph them at the beginning
+   of a new beat 
+
+   note: gotAPD() should be called AFTER the APDMonitor!
+*/
+class APDGrapher: public QObject {
+   Q_OBJECT
+ public:
+   APDGrapher(QObject *parnt, ECGGraph *g[NumAPDGraphs+1], const APDMonitor *);
+   
+   void gotAPD(const MCSnapShot &);
+
+ private slots:
+   void graphAll();
+ private:
+   void resetAPDs();
+   ECGGraph **graphs; // from APDcontrol class
+   const APDMonitor *monitor;
+   int apds[NumAPDGraphs]; // negative means no APD
 };
 
 class APDcontrol: public QObject, public Plugin
@@ -162,6 +187,7 @@ public:
   QSignalMapper *target_shorter_toggle_mapper;
   QSignalMapper *g_adj_manual_only_mapper;
 
+  APDGrapher     *apd_grapher;
   APDInterleaver *apd_interleaver;
   APDMonitor     *apd_monitor;
 

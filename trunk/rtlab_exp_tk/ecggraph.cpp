@@ -568,7 +568,8 @@ ECGGraph::reset()
 void 
 ECGGraph::ffwd(unsigned int amt)
 {
-  currentSampleIndex += amt;
+  if (!amt) return;
+  currentSampleIndex += amt-1; // since computeCurrentSampleIndex() adds one..
   computeCurrentSampleIndex();
 }
 
