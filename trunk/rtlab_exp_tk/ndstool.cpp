@@ -382,7 +382,7 @@ void TxtOrBinOrNDSWriter::writeScan(const SampleStruct & s)
 {
   if (s.scan_index > last_index) { // new scan        
     last_index = s.scan_index;
-    if (sample_ct) flushScan(); // only actually happens if we have 1 sample
+    if (sample_ct) flushScan(); // need at least 1 sample
   }
   chans[s.channel_id] = s.data;
   sample_ct++;  
