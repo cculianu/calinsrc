@@ -23,29 +23,38 @@
 /*
   user_cmd.c -- implements rtlab.o's control fifo functionality 
 */
-#include "user_to_kernel.h"
-#include "rt_process.h"
-#include "rtos_middleman.h"
 #include "user_cmd.h"
+#include "user_to_kernel.h"
 #include <asm/bitops.h>
 
-static int check_basic_sanity(int count, const struct rtfifo_cmd *cmd);
-static void dispatch_command(const struct rtfifo_cmd *cmd);
+#ifdef __KERNEL__
+#  include <linux/comedilib.h>
+#  include "rtos_middleman.h"
+#  define ERROR(a...) rtos_printf(a)
+#else
+#  include <unistd.h>
+#  include <stdio.h>
+#  include <comedilib.h>
+#  define ERROR(a...) fprintf(stderr, a)
+#endif
 
-void do_user_commands(void)
+static int check_basic_sanity(int count, const struct rtfifo_cmd *cmd);
+static void dispatch_command(const struct rtfifo_cmd *cmd, SharedMemStruct *);
+static int read_fifo(int fifo, void *buf, unsigned int count);
+
+void do_user_commands(SharedMemStruct *rtp_shm)
 {
-  int count;
+  int count, fifo = rtp_shm->control_fifo;
   struct rtfifo_cmd cmd;
 
-  if (rtp_shm->control_fifo < 0) return; /* should never happen! */
+  if (fifo < 0) return; /* should never happen! */
   
-  while ( (count = rtos_fifo_get(rtp_shm->control_fifo, 
-				 &cmd, sizeof(struct rtfifo_cmd))) > 0) 
+  while ( (count = read_fifo(fifo, &cmd, sizeof(struct rtfifo_cmd))) > 0) 
     {
       if (!check_basic_sanity(count, &cmd)) continue;
       /* todo handle seeking forward to the beginning of a cmd if 
 	 we are stuck in the middle of one! */
-      dispatch_command(&cmd);
+      dispatch_command(&cmd, rtp_shm);
     }
 }
 
@@ -55,26 +64,27 @@ static int check_basic_sanity(int count, const struct rtfifo_cmd *cmd)
     int ret = 1;
 
     if (count != sizeof(struct rtfifo_cmd)) {
-      rtos_printf("user_cmd.c: Error! Count != sizeof(struct rtfifo_cmd)!\n");
+      ERROR("user_cmd.c: Error! Count != sizeof(struct rtfifo_cmd)!\n");
       ret = 0; 
     }
 
     if (cmd->cmd_begin != RTFIFO_BEGIN || cmd->cmd_end != RTFIFO_END) {
-      rtos_printf("user_cmd.c: Error! "
-		  "cmd doesn't have the correct required signature!\n");
+      ERROR("user_cmd.c: Error! "
+                  "cmd doesn't have the correct required signature!\n");
       ret = 0;       
     }
 
     if (cmd->struct_version != SHD_SHM_STRUCT_VERSION) {
-      rtos_printf("user_cmd.c: Error! "
-		  "cmd doesn't have the correct version!\n");
+      ERROR("user_cmd.c: Error! "
+                  "cmd doesn't have the correct version!\n");
       ret = 0;             
     }
     
     return ret;
 }
 
-static void dispatch_command(const struct rtfifo_cmd *cmd)
+static void dispatch_command(const struct rtfifo_cmd *cmd, 
+                             SharedMemStruct *rtp_shm)
 {
   unsigned int i;
 #define CHKCHAN if (cmd->chan >= rtp_shm->n_ai_chans) break
@@ -158,13 +168,25 @@ static void dispatch_command(const struct rtfifo_cmd *cmd)
        it's a multiple of 500Hz or so */
     break;
   case RTLAB_SET_SCAN_INDEX:
-    rtos_printf("user_cmd.c: Scan Index changs unimplemented!!");
+    ERROR("user_cmd.c: Scan Index changs unimplemented!!");
     /*rtp_shm->scan_index = cmd.u->scan_index;*/
     /* TODO: Handle scan index changes!! */
     break;
   default:
-    rtos_printf("user_cmd.c: Unknown user command encountered!\n");
+    ERROR("user_cmd.c: Unknown user command encountered!\n");
     break;
   }
 #undef CHKCHAN
 }
+
+#ifdef __KERNEL__
+static int read_fifo(int fifo, void *buf, unsigned int count)
+{
+  return rtos_fifo_get(fifo, buf, count);
+}
+#else
+static int read_fifo(int fifo, void *buf, unsigned int count)
+{
+  return read(fifo, buf, count);
+}
+#endif

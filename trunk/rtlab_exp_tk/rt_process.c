@@ -342,7 +342,7 @@ static void *daq_rt_task (void *arg)
     lastloopstart = loopstart;
 
     /* reads the control FIFO and possibly modifies rtp_shm */
-    do_user_commands(); 
+    do_user_commands(rtp_shm); 
 
     clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_task_period, 0);
   }
