@@ -1297,7 +1297,7 @@ int rtp_find_free_rtf(int *minor, int size)
   for (i = 0; i < RTF_NO; i++) {
     int ret;
 
-    ret = rtf_create(i, size);
+    ret = rtos_fifo_create(i, size);
 
     /* the rtf_create docs contradict the actual code for rtf_create... */
     if (ret == size || ret == 0) {
