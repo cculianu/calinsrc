@@ -323,9 +323,7 @@ struct rt_task_data {
 #define NON_RT_POLL_COND(x) \
     do { \
         int POLL_I = 0; \
-        printk("About to poll..\n"); \
         while (x) { \
-          if (!(POLL_I++ % 100))printk("Looped in poll %d times.\n",POLL_I-1);\
           current->state = TASK_INTERRUPTIBLE; \
           schedule_timeout(POLLING_SLEEPTIME); \
         } \
@@ -351,22 +349,18 @@ static void custom_rt_sh(void)
   int i;
 
   me = pthread_self();
-  rtos_printf("In signal handler for %ld...\n", me);
   rt_task_signal_handler(rt_whoami(), custom_rt_sh);
 
   rt_sem_wait(&threads_sem);
 
   for (i = 0; i < MAX_THREADS; i++) {
-    rtos_printf("Looping no luck for thread %ld...\n", me);
     if (threads[i].pthread_id == me && atomic_read(&threads[i].delete_me)
         && test_bit(i, &threads_mask) ) {      
-      rtos_printf("Luck! Reached in deletion code for thread %ld...\n", me);
       atomic_set(&threads[i].deleted, 1);
       rt_sem_signal(&threads_sem); /* need to clear the sem before 
                                       we can delete! Argh! Race condition? */
       pthread_exit(0);
       /* not reached */
-      rtos_printf("Reached not reachable area...\n");
       return;
     }
   }
@@ -506,7 +500,6 @@ int pthread_create_rtai(pthread_t *thread_out, pthread_attr_t *attr,
      right thread... */
   if (!ret) {
     NON_RT_POLL_COND(!atomic_read(&thread->pthread_id_is_set));
-    printk("Created thread %ld\n", thread->pthread_id);
   }
   
   return ret;
@@ -520,8 +513,6 @@ int pthread_join(pthread_t th, void **tr)
   int i;
   volatile int magic;
 
-
-  printk("Joining on thread %ld\n", th);
 
   NON_RT_SEM_ACQUIRE(&threads_sem);
 
@@ -542,9 +533,6 @@ int pthread_join(pthread_t th, void **tr)
   rt_sem_signal(&threads_sem);
 
   if (!task)  return ESRCH; 
-
-  printk("Polling task->magic...\n");
-  printk(".......................................\n");
 
   /* poll until the task is freed.. */
   NON_RT_POLL_COND((magic = task->magic) == RT_TASK_MAGIC); 

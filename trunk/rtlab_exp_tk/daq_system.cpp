@@ -24,6 +24,7 @@
 #include <qmainwindow.h>
 #include <qworkspace.h>
 #include <qbuttongroup.h>
+#include <qvbuttongroup.h>
 #include <qtoolbar.h>
 #include <qlistbox.h>
 #include <qpushbutton.h>
@@ -48,6 +49,7 @@
 #include <qfontmetrics.h>
 #include <qpixmap.h>
 #include <qtextbrowser.h>
+#include <qwhatsthis.h>
 
 #include <iostream>
 #include <map>
@@ -158,6 +160,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     logMenu.insertSeparator();
     logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
+    channelsMenu.insertItem("Set Analog Input &Reference Mode...", this, SLOT( changeAREFDialog() ), CTRL + Key_R );
     windowMenu.insertItem("&Cascade Channel Windows", &ws, SLOT( cascade() ) );
     windowMenu.insertItem("&Tile Channel Windows", &tyler, SLOT( tyle() ) );
     windowMenu.insertSeparator(); /* after this, all open windows will be
@@ -306,6 +309,100 @@ DAQSystem::addChannel (void)
   ok = queryOpen(chan, range, n_secs);
   if (ok)  openChannelWindow(chan, range, n_secs);
   
+}
+
+void DAQSystem::changeAREFDialog()
+{
+  /* slot here */
+  
+  /* assume first channel represents the AREF setting for all channels...
+     since DAQ System enforces 1 AREF for all the channels */
+  ComediChannel::AnalogRef current = 
+    ComediChannel::int2ar(shmCtl.channelAREF(ComediSubDevice::AnalogInput, 0));
+
+  
+  QDialog *d = new QDialog(this, "Change Analog Reference Dialog",
+                           TRUE, WDestructiveClose);
+  QGridLayout *l =  new QGridLayout(d, 1, 1);
+
+  QVBox *vbox = new QVBox(d);
+
+  l->addWidget(vbox, 0, 0);
+  
+  QVButtonGroup *button_g = 
+    new QVButtonGroup("Change the Analog Reference for all the channels to: ",
+                      vbox);
+
+  button_g->setRadioButtonExclusive(true);
+
+  button_g->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding, 
+                                      QSizePolicy::MinimumExpanding));
+
+  map<ComediChannel::AnalogRef, QRadioButton *> buttons;
+  map<ComediChannel::AnalogRef, QRadioButton *>::iterator it;
+
+  buttons[ComediChannel::Ground] = new QRadioButton("AREF Ground", button_g);
+  buttons[ComediChannel::Common] = new QRadioButton("AREF Common", button_g);
+  buttons[ComediChannel::Differential] = 
+    new QRadioButton("AREF Differential", button_g);
+  buttons[ComediChannel::Other] =  new QRadioButton("AREF Other", button_g);
+  
+  
+  QWhatsThis::add(buttons[ComediChannel::Ground],
+                  "AREF Ground is for non-referenced single-ended inputs.  "
+                  "This setting is most appropriate in systems where the "
+                  "signal source and the data acquisition board share a "
+                  "commmon ground.  The low and high inputs are always "
+                  "taken with respect to the DAQ board's ground.");
+  
+  QWhatsThis::add(buttons[ComediChannel::Common], 
+                  "AREF Common is for referenced single-ended inputs. "
+                  "This setting is most appropriate when all the low "
+                  "wires of all the channels are tied together but different "
+                  "from ground.");
+  
+  QWhatsThis::add(buttons[ComediChannel::Differential], 
+                  "AREF Differential is used when you want to take the "
+                  "difference of two channels. This setting is most "
+                  "appropriate in systems where the signal source and the "
+                  "data acquisition board have differences in their "
+                  "ground levels.");
+
+  QWhatsThis::add(buttons[ComediChannel::Other],
+                  "This is for any other Analog Reference mode which may "
+                  "be supported by your board.");
+  
+  if (buttons[current])
+    buttons[current]->setChecked(true);
+
+  QHBox *hbox = new QHBox(vbox);
+
+  QPushButton *ok = new QPushButton("Ok", hbox), 
+              *cancel = new QPushButton("Cancel", hbox);
+              
+  cancel->setAutoDefault(true);
+
+  connect(ok, SIGNAL(clicked()), d, SLOT(accept()));
+  connect(cancel, SIGNAL(clicked()), d, SLOT(reject()));
+
+  ok->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+  cancel->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
+
+  if (d->exec() == QDialog::Accepted) {
+    for (it = buttons.begin(); it != buttons.end(); it++) {
+      if (it->second->isChecked()) { changeAREF(it->first); break; }
+    }
+  }
+}
+
+void DAQSystem::changeAREF(ComediChannel::AnalogRef aref) 
+{
+  vector<uint> chanstate;
+  
+  /* make this semi-transactional */
+  allChannelsOffSaveState(chanstate);
+  shmCtl.setAREFAll(ComediSubDevice::AnalogInput, ComediChannel::ar2int(aref));
+  channelsOn(chanstate);
 }
 
 /* used solely for below method */
@@ -892,6 +989,27 @@ void DAQSystem::print(vector<const ECGGraphContainer *> & gcs)
   painter.end();
 }
 
+void DAQSystem::allChannelsOffSaveState (vector<uint> & v)
+{
+  uint i;
+
+  v.clear();
+  
+  for (i = 0; i < shmCtl.numChannels(ComediSubDevice::AnalogInput); i++) {
+    if (shmCtl.isChanOn(ComediSubDevice::AnalogInput, i)) 
+      v.push_back(i);
+    shmCtl.setChannel(ComediSubDevice::AnalogInput, i, false);
+  }
+}
+
+void DAQSystem::channelsOn (const vector<uint> & chanspec)
+{
+  uint i;
+
+  for (i = 0; i < chanspec.size(); i++) 
+    shmCtl.setChannel(ComediSubDevice::AnalogInput, chanspec[i], true);  
+}
+
 ReaderLoop::
 /* very comedi-specific constructor! Must change! */
 ReaderLoop(DAQSystem *d) :
@@ -1132,7 +1250,7 @@ PluginMenu::PluginMenu(DAQSystem * ds,
   layout->addWidget(load_button, 3, 0);
   layout->addWidget(remove_button, 3, 1);
 
-
+  
   vector<QString> plugin_search_path;
 
   { 

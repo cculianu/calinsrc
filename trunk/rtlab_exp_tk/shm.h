@@ -62,10 +62,18 @@ class ShmController
   uint channelRange(ComediSubDevice::SubdevType t, 
                     uint chan) const;   
   uint channelRange(int subdevtype, uint chan) const;
+  uint channelAREF(ComediSubDevice::SubdevType t, uint chan) const;
+  uint channelAREF(int subdevtype, uint chan) const;
+
   void setChannelRange(ComediSubDevice::SubdevType t, uint chan, 
                        uint r); 
   void setChannelRange(int subdevtype, uint chan, uint r);
- 
+
+  /* AREF values should come from comedi.h as the AREF_* set of #defines */
+  void setChannelAREF(ComediSubDevice::SubdevType s, uint chan, uint aref);
+  void setChannelAREF(int subdevtype, uint chan, uint aref);
+  void setAREFAll(ComediSubDevice::SubdevType s, uint aref);
+  void setAREFAll(int subdevtype, uint aref);
 
   /* is channel controls */
   bool isChanOn(ComediSubDevice::SubdevType t, uint chan) const;
@@ -166,6 +174,20 @@ ShmController::channelRange(int subdevtype, uint chan) const
   return CR_RANGE (const_cast<ShmController *>(this)->chanArray(subdevtype)[chan]);
 }
 
+inline
+uint 
+ShmController::channelAREF(ComediSubDevice::SubdevType t, uint chan) const
+{
+  return channelAREF(ComediSubDevice::sd2int(t), chan);
+}
+
+inline
+uint 
+ShmController::channelAREF(int subdevtype, uint chan) const
+{
+  return CR_AREF (const_cast<ShmController *>(this)->chanArray(subdevtype)[chan]);
+}
+
  
 inline
 void 
@@ -180,6 +202,39 @@ ShmController::setChannelRange(int s, uint c, uint r)
 {
   volatile uint *arr = chanArray(s);
   arr[c] = CR_PACK(CR_CHAN(arr[c]), r, CR_AREF(arr[c]));
+}
+
+
+inline
+void 
+ShmController::setChannelAREF(ComediSubDevice::SubdevType s, uint c, uint a)
+{
+  setChannelAREF(ComediSubDevice::sd2int(s), c, a);
+}
+
+inline
+void 
+ShmController::setChannelAREF(int s, uint c, uint a)
+{
+  volatile uint *arr = chanArray(s);
+  arr[c] = CR_PACK(CR_CHAN(arr[c]), CR_RANGE(arr[c]), a);
+}
+
+inline
+void 
+ShmController::setAREFAll(ComediSubDevice::SubdevType s, uint a)
+{
+  setAREFAll(ComediSubDevice::sd2int(s), a);
+}
+
+inline
+void 
+ShmController::setAREFAll(int s, uint a)
+{
+  int i, nc = numChannels(s);
+
+  for (i = 0; i < nc; i++) 
+    setChannelAREF(s, i, a);
 }
 
 
