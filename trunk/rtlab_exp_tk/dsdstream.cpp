@@ -847,8 +847,8 @@ void DSDIStream::seek(scan_index_t scan_index_offset, bool forward)
 
   if (forward) absolute_index = scanIndex() + scan_index_offset;
   else { // they wanna go backwards
-    /* check for underflow */
     absolute_index = scanIndex() - scan_index_offset;
+    /* check for underflow */
     if (absolute_index > scanIndex())  absolute_index = 0;
     
     QFile *f = dynamic_cast<QFile *>(device());
