@@ -272,7 +272,7 @@ void ECGGraph::initGrid (QPaintDevice & dev, int columns = 10, int rows = 4) {
     Usually called from resizeEvent() in order to scale the image to the
     new size before a repaint. */
 void ECGGraph::remakeAllPoints () {
-  unsigned int i, maxIndex;
+  uint i, maxIndex;
 
   computeSpikeTHoldPoints (); /* re-compute the spike threshold */
   initBuffer(); /* reset the background pixmap so that 

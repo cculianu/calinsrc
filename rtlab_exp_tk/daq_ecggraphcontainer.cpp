@@ -25,14 +25,14 @@
 
 DAQECGGraphContainer::
 DAQECGGraphContainer(ECGGraph *graph, 	
-		     unsigned int chan,
+		     uint chan,
 		     QWidget *parent = 0, 
 		     const char *name = 0, 
 		     WFlags flags = 0)
-  : ECGGraphContainer(graph, parent, name, flags | WDestructiveClose), 
-    channel_id(chan)
+  : ECGGraphContainer(graph, parent, name, flags | WDestructiveClose)
 
 {
+  this->setChannelId(chan);
   this->setCaption(graph->name());
   /* delete the defualt range setting as it breaks daq_system */
   deleteRangeSetting(0);
@@ -45,8 +45,8 @@ void
 DAQECGGraphContainer::
 closeEvent (QCloseEvent *e) 
 {
-  emit closing(channelId()); /* this tells daqsystem to remove us from 
-				the channel list */
+  emit closing(this); /* this tells daqsystem to remove us from 
+			 the channel list */
   ECGGraphContainer::closeEvent(e);
 }  
 
@@ -55,4 +55,11 @@ DAQECGGraphContainer::
 _rangeChangedWrapper(int range)
 {
   emit rangeChanged(channelId(), range);
+}
+
+void
+DAQECGGraphContainer::
+newSample(const SampleStruct *sample)
+{
+  graph->plot(sample->data);
 }

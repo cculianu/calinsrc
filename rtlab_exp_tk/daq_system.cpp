@@ -30,13 +30,14 @@
 #include <qinputdialog.h> 
 #include <qmessagebox.h>
 #include <qtimer.h>
-#include <qdatetime.h>
 #include <iostream>
 #include <map>
+#include <vector>
 #include <stdio.h>
 #include "configuration.h"
 #include "sample_source.h"
 #include "sample_reader.h"
+#include "sample_writer.h"
 #include "shm_mgr.h"
 #include "shared_stuff.h"
 #include "ecggraph.h"
@@ -54,7 +55,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   mainToolBar("DAQ System Toolbar", this, Top),
   addChannel(&mainToolBar),
   toolBarButtonGroup(this),
-  readerLoop(currentdevice.find(ComediSubDevice::AnalogInput), settings),
+  readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
+	     settings),
   daqSystemIsClosingMode(false) /* for now, this becomes true when
 					daq system is closing */
 {
@@ -79,8 +81,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
   /* now open up all the channel windows that are left over
      from the last session */
-  set<unsigned int> s = settings.windowSettingChannels();
-  for (set<unsigned int>::iterator i = s.begin(); i != s.end();  i++) {
+  set<uint> s = settings.windowSettingChannels();
+  for (set<uint>::iterator i = s.begin(); i != s.end();  i++) {
     openChannelWindow(*i, 0, 10); /* modify this to read other defaults too */
   }
   
@@ -99,7 +101,7 @@ void
 DAQSystem::channelOperation (ButtonOp op)
 {  
   bool ok;
-  unsigned int chan, range, n_secs;
+  uint chan, range, n_secs;
 
   switch (op) {
   case AddChannel:
@@ -114,15 +116,15 @@ DAQSystem::channelOperation (ButtonOp op)
 }
 
 bool
-DAQSystem::queryOpen(unsigned int & chan, unsigned int & range, 
-		     unsigned int & n_secs)
+DAQSystem::queryOpen(uint & chan, uint & range, 
+		     uint & n_secs)
 		     
 {
-  static const unsigned int n_seconds_options[] = { 5, 10, 15, 20, 25, 30 };
+  static const uint n_seconds_options[] = { 5, 10, 15, 20, 25, 30 };
   /* this remembers the last dialog interaction */
-  static unsigned int prevRange = 0, prevNSecs = 0;
+  static uint prevRange = 0, prevNSecs = 0;
   bool retval;
-  map<unsigned int, unsigned int> cbox2idMap,id2cboxMap;
+  map<uint, uint> cbox2idMap,id2cboxMap;
 
   QDialog openDialog(this, 0, true);
   QGridLayout gl(&openDialog, 7, 2); /* cheap and easy layout */
@@ -149,13 +151,13 @@ DAQSystem::queryOpen(unsigned int & chan, unsigned int & range,
   { /* build combo boxex */
     const ComediSubDevice & subdev 
       = currentDevice().find(ComediSubDevice::AnalogInput);
-    for (unsigned int i = 0, cboxid = 0; 
-	 i < (unsigned int)subdev.n_channels ||
+    for (uint i = 0, cboxid = 0; 
+	 i < (uint)subdev.n_channels ||
 	   i < subdev.ranges().size() ||
 	   i < sizeof(n_seconds_options) / sizeof(const int);
 	 i++) {
       
-      if (i < (unsigned int)subdev.n_channels 
+      if (i < (uint)subdev.n_channels 
 	  && ! readerLoop.graphListenerExists(i)) {
 	/* build channel id combo box inside here */
 	id.insertItem("Channel No. " + QString().setNum(i));
@@ -190,7 +192,7 @@ DAQSystem::queryOpen(unsigned int & chan, unsigned int & range,
 
   /* set defaults from last time */
   gain.setCurrentItem(prevRange);
-  for (unsigned int i = 0; 
+  for (uint i = 0; 
        i < sizeof(n_seconds_options) / sizeof(const int); i++) {
     /* find the correct n-seconds index */
     if (n_seconds_options[i] == prevNSecs)
@@ -211,10 +213,10 @@ DAQSystem::queryOpen(unsigned int & chan, unsigned int & range,
 }
 
 void
-DAQSystem::openChannelWindow(unsigned int chan, unsigned int range, 
-			     unsigned int n_secs)
+DAQSystem::openChannelWindow(uint chan, uint range, 
+			     uint n_secs)
 {
-
+  
   QRect pos(settings.getWindowSetting(chan)); /* grab window pos from file */
 
   /* leaky memory prevented by spaghetti-like destructive close
@@ -230,13 +232,11 @@ DAQSystem::openChannelWindow(unsigned int chan, unsigned int range,
     new DAQECGGraphContainer(graph, chan, &ws, 0);
   buildRangeSettings(gcont);
   gcont -> show(); /* will this help with window setting/geometry? */
-  readerLoop.addListeningGraph(gcont);
-  connect(gcont, SIGNAL(closing(unsigned int)),
-	  &readerLoop,SLOT(removeListeningGraph(unsigned int)));
-  connect(gcont, SIGNAL(closing(unsigned int)),
-	  this, SLOT(removeGraphContainer(unsigned int)));
-  connect(gcont, SIGNAL(rangeChanged(unsigned int, int)),
-	  this, SLOT(graphChangedRange(unsigned int, int)));
+  readerLoop.addListener(gcont);
+  connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
+	  this, SLOT(removeGraphContainer(const DAQECGGraphContainer *)));
+  connect(gcont, SIGNAL(rangeChanged(uint, int)),
+	  this, SLOT(graphChangedRange(uint, int)));
 
   gcont->rangeChange( range ); /* hopefully above slot will take effect 
 				  and update rt_process appropriately? */
@@ -257,19 +257,26 @@ DAQSystem::openChannelWindow(unsigned int chan, unsigned int range,
    the DAQSystem classes. It behaves slightly differently
    depending on who calls it. (daqSystemIsClosingMode is different). */
 void
-DAQSystem::removeGraphContainer(unsigned int chan)
+DAQSystem::removeGraphContainer(const DAQECGGraphContainer * gcont)
 {
-  QRect pos;
+  readerLoop.removeListener(gcont); /* this should really be connected to the
+			    DAQECGGraphContainer::closing() signal but
+			    stupid Qt can't convert C++ types between
+			    child and parent classes! */
 
-  if ( daqSystemIsClosingMode ) {
-    DAQECGGraphContainer * gcont = gcontainers.find(chan)->second;
-    if (gcont) {
-      pos = (gcont->geometry());
-      pos.setX(gcont->pos().x()); pos.setY(gcont->pos().y());
-    }
+  uint chan = gcont->channelId(); 
+
+  if (daqSystemIsClosingMode) {
+    /* save actual window settings */
+    QRect pos(gcont->geometry());
+    pos.setX(gcont->pos().x()); pos.setY(gcont->pos().y());
+    settings.setWindowSetting(chan, pos);
+  } else {
+    /* clear window settings to indicte this window should not be auto-opened
+       the next time */
+    settings.setWindowSetting(chan, QRect());
   }
-  
-  settings.setWindowSetting(chan, pos);
+
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, false);
   gcontainers.erase(chan);
 
@@ -280,10 +287,10 @@ DAQSystem::closeEvent (QCloseEvent * e)
 {
   daqSystemIsClosingMode = true; /* this changes the behavior of the
 				    removeGraphContainer() method */
-  map<unsigned int, DAQECGGraphContainer *>::iterator i;
+  map<uint, DAQECGGraphContainer *>::iterator i;
   for (i = gcontainers.begin(); i != gcontainers.end(); i++) {    
-    removeGraphContainer(i->first); /* this saves window settings for each
-				       open graph */
+    removeGraphContainer(i->second); /* this saves window settings for each
+					open graph */
   }
   QMainWindow::closeEvent(e);
 }
@@ -292,10 +299,10 @@ DAQSystem::closeEvent (QCloseEvent * e)
      channel's range/gain setting needs to be changed */
 void
 DAQSystem::
-graphChangedRange(unsigned int channel, int range)
+graphChangedRange(uint channel, int range)
 {
   ShmMgr::setChannelRange(ComediSubDevice::AnalogInput, channel, 
-			  (unsigned int)range);
+			  (uint)range);
 }
 
 /* populates the graphcontianer with the correct range options for this 
@@ -307,7 +314,7 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
   const vector<comedi_range> ranges = 
     currentDevice().find(ComediSubDevice::AnalogInput).ranges();
 
-  for (unsigned int i = 0; i < ranges.size(); i++) {
+  for (uint i = 0; i < ranges.size(); i++) {
     c->addRangeSetting(ranges[i].min, ranges[i].max,
 		       ( ranges[i].unit == UNIT_volt 
 			 ? ECGGraphContainer::Volts
@@ -334,9 +341,9 @@ ButtonOpGroup::id2ButtonOp (int id)
 }
 
 ReaderLoop::
-ReaderLoop(const ComediSubDevice & sdev, const DAQSettings & settings)
-  : sdev(sdev), pleaseStop(false), 
-    listeningGraphs(sdev.n_channels) /* very comedi-specific constructor! */
+/* very comedi-specific constructor! Must change! */
+ReaderLoop(uint n_channels, const DAQSettings & settings)
+  : pleaseStop(false), listeners(n_channels)
 {
   switch (settings.getInputSource()) {
   case DAQSettings::RTProcess:
@@ -345,6 +352,17 @@ ReaderLoop(const ComediSubDevice & sdev, const DAQSettings & settings)
     source->flush();
     /* build a non-blocking sample reader */
     reader = new SampleStructReader(source, 0);
+    writer = new SampleGZWriter(settings.getDataFile().latin1());
+    { /* setup the writer to listen */
+      uint *tmp = new uint [n_channels];
+      for (uint i = 0; i < n_channels; i++) {
+	tmp[i] = i;
+      }
+      writer->setChannelIds(tmp, n_channels);
+      delete tmp;
+
+    }
+    addListener(writer);
     break;
   default:
     throw UnimplementedException 
@@ -370,34 +388,32 @@ ReaderLoop::~ReaderLoop()
 	    : ""));
   delete reader; reader = 0;
   delete source; source = 0;
+  delete writer; writer = 0;
 }
 
 void
 ReaderLoop::loop()
 {
-  static QTime qTime;
   
   if (pleaseStop) return;
 
-  qTime.start(); /* for calculating sleep time below... :) */
-  
   /* the following readAll()  may (theoretically) block indefinitely which is 
      why eventually we should think about threading this bad boy... :) */
   
   const SampleStruct *sbuf = reader->readAll(); 
 
   int n_read = reader->numLastRead();
+  uint chan;
 
-  for (int i = 0; i < n_read; i++) {
-    unsigned int channel_id = sbuf[i].channel_id;
-
-    if (graphListenerExists(channel_id)) {
-      double unitdata = sdev.sampleToUnits(sbuf[i]);
-      listeningGraphs.graphs[channel_id]->graph->plot(unitdata);
+  for (int i = 0; i < n_read; i++) {    
+    if ( (chan = sbuf[i].channel_id) < listeners.size() ) {
+      for (uint j = 0; j < listeners[chan].size(); j++) {
+	listeners[chan][j]->newSample(sbuf + i);
+      }
     }
   }
   
-  QTimer::singleShot(reader->getSource()->suggestSleepTime(qTime.elapsed()), 
+  QTimer::singleShot(source->suggestPollWaitTime(), 
 		     this, SLOT(loop()));
 }
 
@@ -405,25 +421,66 @@ ReaderLoop::loop()
 /* adds a listening graph to the channel list for channel_id list */
 void 
 ReaderLoop::
-addListeningGraph(DAQECGGraphContainer * g) 
+addListener(SampleListener *listener) 
 { 
  
-  const unsigned int chan = g->channelId();
-  if (chan >= listeningGraphs.n_graphs || listeningGraphs.graphs[chan]) 
-    return;
+  const uint *chans;
+  uint size;
 
-  listeningGraphs.graphs[chan] = g;
+  chans = listener->channelIds(size);
 
+  for (uint i = 0; i < size; i++) {
+    uint chan = chans[i];
+    
+    if (chan >= listeners.size()) 
+      continue;
+  
+    listeners[chan].insert(listeners[chan].end(), listener);
+  }
 }
 
 void
-ReaderLoop::
-removeListeningGraph(unsigned int chan) 
+ReaderLoop::removeListener(const SampleListener *listener) 
 {
-  if (chan >= listeningGraphs.n_graphs)
-    return;
+  const uint *chans;
+  uint size;
 
-  if (listeningGraphs.graphs[chan]) {
-    listeningGraphs.graphs[chan] = 0;
+  chans = listener->channelIds(size);
+
+  for (uint i = 0; i < size; i++) {
+    uint chan = chans[i];
+
+    if (chan >= listeners.size()) 
+      continue;
+    for (uint j = 0; j < listeners[chan].size(); j++) {
+      if (listener == listeners[chan][j]) {
+	listeners[chan].erase(listeners[chan].begin() + j--);
+      }
+    }
   }
 }
+
+/* removes only the listeners that concern themselves with graphing */
+void 
+ReaderLoop::removeGraphListeners (uint chan)
+{
+  
+  if (chan < listeners.size())
+    for (uint i = 0; i < listeners[chan].size(); i++)
+      if (isGraphListener(chan, i)) 
+	listeners[chan].erase(listeners[chan].begin() + i--);      
+ 
+}
+
+/* true if the required channel has a graph listener  already
+   false otherwise */     
+bool 
+ReaderLoop::graphListenerExists(uint channel_id)
+{
+  if (channel_id < listeners.size())
+    for (uint i = 0; i < listeners[channel_id].size(); i++)
+      if (isGraphListener(channel_id, i)) 
+	return true;      
+  return false;
+}
+

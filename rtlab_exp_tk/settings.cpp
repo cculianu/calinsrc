@@ -323,7 +323,7 @@ DAQSettings::setDataFileFormat(DataFileFormat format)
 
 const
 QRect &
-DAQSettings::getWindowSetting(unsigned int channel_number) const
+DAQSettings::getWindowSetting(uint channel_number) const
 {
   static QRect nullRect;
   
@@ -335,7 +335,7 @@ DAQSettings::getWindowSetting(unsigned int channel_number) const
 }
 
 void
-DAQSettings::setWindowSetting(unsigned int channel_number, const QRect & rect)
+DAQSettings::setWindowSetting(uint channel_number, const QRect & rect)
 {
   if (rect.isNull()) {
     windowSettings.erase(channel_number);
@@ -345,12 +345,12 @@ DAQSettings::setWindowSetting(unsigned int channel_number, const QRect & rect)
   generateWindowSettingsString();
 }
 
-set<unsigned int>
+set<uint>
 DAQSettings::windowSettingChannels() const
 {
-  set<unsigned int> s;
+  set<uint> s;
 
-  for (map<unsigned int, QRect>::const_iterator i = windowSettings.begin(); 
+  for (map<uint, QRect>::const_iterator i = windowSettings.begin(); 
        i != windowSettings.end(); i++) {
     s.insert(i->first);
   }
@@ -387,9 +387,9 @@ DAQSettings::generateWindowSettingsString()
 {
   QString out;
 
-  map<unsigned int, QRect>::iterator i;
+  map<uint, QRect>::iterator i;
   for (i = windowSettings.begin(); i != windowSettings.end(); i++) {
-    unsigned int chan = i->first;
+    uint chan = i->first;
     QRect & r = i->second;
     out += 
       QString().setNum(chan) + ":"

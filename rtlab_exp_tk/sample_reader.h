@@ -73,10 +73,10 @@ class SampleStructReader {
   unsigned long long numDropped() const;
 
   /* the number of samples last read */
-  unsigned int numLastRead() const;
+  uint numLastRead() const;
   
   /* the of samples dropped at the last read */
-  unsigned int numLastDropped() const;
+  uint numLastDropped() const;
 
   /* returns the index of the smallest scan encountered */
   scan_index_t firstScanIndex() const;

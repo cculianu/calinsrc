@@ -25,6 +25,7 @@
 #include <linux/module.h> 
 #include <linux/kernel.h>
 #include <linux/version.h>
+#include <linux/types.h>
 #include <linux/errno.h>
 #include <asm/semaphore.h> /* for synchronizing the exported functions */
 #include <linux/malloc.h>
@@ -74,7 +75,10 @@ void cleanup_module(void);    /* clean up RT stuff */
 /* sets up RT shared memory */
 static int init_shared_mem(int ai_minor, int ai_subdev, int ai_fifo,
 			   int ao_minor, int ao_subdev, int ao_fifo);   
+/* sets up the krange cache */
+static int build_krange_cache(void);
 
+static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
 static void grabScanOffBoard (SharedMemStruct *s,
@@ -85,13 +89,32 @@ static int __rtp_set_f_active(rtfunction_t f, char v); /* internal */
 static int __rtp_register_function(rtfunction_t function); /* internal */
 static int __rtp_unregister_function(rtfunction_t function); /* internal */
 
+typedef enum SubDevT {
+  AI = 0,
+  AO
+} SubDevT;
+
+/* operates on krange_cache below to determine the voltage for a sample */
+inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t data);
+
 static pthread_t daq_task = 0;          /* main RT task */
 static SharedMemStruct *sh_mem = 0;     /* define mbuff shared memory */
 
+struct krange_cache {
+  comedi_krange *ai_ranges;
+  comedi_krange *ao_ranges;
+  int            ai_max_n_ranges; /* --|__ these two members are column size */
+  int            ao_max_n_ranges; /* --|   for each row in above  2d arrays */
+  lsampl_t      *ai_maxdatas;
+  lsampl_t      *ao_maxdatas;
+};
+
+static struct krange_cache krange_cache = {0, 0, 0, 0, 0, 0};
+
 static struct rt_function_list 
-  *rt_functions, /* circularly linked-list of functions to run
-		    from main rt loop */
-  __end_of_func_list = {0}; /* circular linked list terminator */
+             *rt_functions, /* circularly linked-list of functions to run
+			       from main rt loop */
+             __end_of_func_list = {0}; /* circular linked list terminator */
 
 DECLARE_MUTEX(rt_functions_sem);
 
@@ -116,13 +139,7 @@ static void *daq_rt_task (void *arg)
   struct rt_function_list *curr;
 #ifdef TIME_RT_LOOP
   register hrtime_t looptime = 0, max = 0, min = HRTIME_INFINITY;
-  unsigned int avg_total_time = 0;
-#endif
-
-#ifdef INTERRUPTIBLE_FLOATOPS
-  /* tell the RT context switcher that yes, we want to keep the
-     floating point registers across context switches on this CPU */
-  pthread_setfp_np(daq_task, 1);
+  uint avg_total_time = 0;
 #endif
 
   do {
@@ -159,7 +176,7 @@ static void *daq_rt_task (void *arg)
       max = looptime;
 
     avg_total_time -= 
-      ((unsigned int)(avg_total_time - looptime)) 
+      ((uint)(avg_total_time - looptime)) 
       / (sh_mem->scan_index + 1);
 
 
@@ -263,6 +280,14 @@ int init_module(void)
     goto init_error;
   }
 
+  /* cache the krange list... */
+  if (!build_krange_cache()) {
+    /* cannot allocate memory for krange cache */
+    errorMessage = "Cannot allocate memory for some internal data structures. "
+                   "Are we low on memory?";
+    error = -ENOMEM;
+  }
+  
   if ( (error = rtf_create(sh_mem->ai_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
@@ -276,6 +301,7 @@ int init_module(void)
 
   /* create the realtime task */
   pthread_attr_init(&attr);
+  pthread_attr_setfp_np(&attr, 1);
   sched_param.sched_priority = 1;
   pthread_attr_setschedparam(&attr, &sched_param);
   if ( (error = pthread_create(&daq_task, &attr, 
@@ -301,7 +327,7 @@ int init_module(void)
 static int init_shared_mem(int im, int is, int iF, int om, int os, int oF) 
 { 
 
-  unsigned int i;
+  uint i;
 
   /* Open mbuff Shared Memory structure */
   sh_mem = 
@@ -341,15 +367,69 @@ static int init_shared_mem(int im, int is, int iF, int om, int os, int oF)
   return 1;
 }
 
-void cleanup_module(void) 
+static
+int build_krange_cache(void)
 {
-  
+  int i, j, *ai_n_ranges = 0, *ao_n_ranges = 0, ret = 0;
 
+  if (!(ai_n_ranges = kmalloc(sizeof(int) * sh_mem->n_ai_chans, GFP_KERNEL)) ||
+      !(ao_n_ranges = kmalloc(sizeof(int) * sh_mem->n_ao_chans, GFP_KERNEL)) ||
+      !(krange_cache.ai_maxdatas = kmalloc(sizeof(lsampl_t) * sh_mem->n_ai_chans, GFP_KERNEL)) ||
+      !(krange_cache.ao_maxdatas = kmalloc(sizeof(lsampl_t) * sh_mem->n_ao_chans, GFP_KERNEL)) )
+    goto end;
+  
+  /* record the number of ranges for each channel */
+  for (i = 0; i < sh_mem->n_ai_chans; i++) {
+    if ( (ai_n_ranges[i] = 
+	  comedi_get_n_ranges(sh_mem->ai_minor, sh_mem->ai_subdev, i)) 
+	 > krange_cache.ai_max_n_ranges )
+      krange_cache.ai_max_n_ranges = ai_n_ranges[i];
+    krange_cache.ai_maxdatas[i] = 
+      comedi_get_maxdata(sh_mem->ai_minor, sh_mem->ai_subdev, i);
+  }
+  for (i = 0; i < sh_mem->n_ao_chans; i++) {
+      if ( (ao_n_ranges[i] =
+	    comedi_get_n_ranges(sh_mem->ao_minor, sh_mem->ao_subdev, i))
+	   > krange_cache.ao_max_n_ranges )
+	krange_cache.ao_max_n_ranges = ao_n_ranges[i];
+      krange_cache.ao_maxdatas[i] = 
+	comedi_get_maxdata(sh_mem->ao_minor, sh_mem->ao_subdev, i);
+  }
+
+  if (!(krange_cache.ai_ranges =
+	kmalloc(sizeof(comedi_krange) * sh_mem->n_ai_chans 
+		* krange_cache.ai_max_n_ranges, GFP_KERNEL)) ||
+      !(krange_cache.ao_ranges =
+	kmalloc	(sizeof(comedi_krange) * sh_mem->n_ao_chans 
+		 * krange_cache.ao_max_n_ranges, GFP_KERNEL)))
+    goto end;
+ 
+  for (i = 0; i < sh_mem->n_ai_chans; i++) {
+    for (j = 0; j < ai_n_ranges[i]; j++)
+      comedi_get_krange(sh_mem->ai_minor, sh_mem->ai_subdev, i, j, 
+			krange_cache.ai_ranges + i 
+			* krange_cache.ai_max_n_ranges + j);
+  }
+  for (i = 0; i < sh_mem->n_ao_chans; i++) {
+    for (j = 0; j < ao_n_ranges[i]; j++)
+      comedi_get_krange(sh_mem->ao_minor, sh_mem->ao_subdev, i, j, 
+			krange_cache.ao_ranges + i 
+			* krange_cache.ao_max_n_ranges + j);
+  }
+  ret = 1;
+  end:
+  if (ai_n_ranges) { kfree(ai_n_ranges); ai_n_ranges = 0; }
+  if (ao_n_ranges) { kfree(ao_n_ranges); ao_n_ranges = 0; }  
+  return ret;
+}
+
+void cleanup_module(void) 
+{ 
   /* delete daq_task */
   if (daq_task) {
     if (!pthread_delete_np(daq_task)) 
-      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lld cycles.\n",
-	      (sh_mem ? sh_mem->scan_index + 1 : 0));
+      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles.\n",
+	      (unsigned long int)(sh_mem ? sh_mem->scan_index + 1 : 0));
     else 
       printk (RT_PROCESS_MODULE_NAME": cannot find RT task (it died?).\n");
   }
@@ -366,14 +446,15 @@ void cleanup_module(void)
   /* release comedi-related resources */
   cleanup_comedi_stuff();
 
+  /* release memory for the krange */
+  cleanup_krange_cache();
+
   if (sh_mem) {
     /* free up shared memory */
     mbuff_free(SHARED_MEM_NAME,(void *)sh_mem);
   }
 
 }
-
-
 static void cleanup_fifos (void) 
 {
   if (! sh_mem) return;
@@ -418,11 +499,35 @@ static void cleanup_comedi_stuff (void)
 
 }
 
+static 
+void cleanup_krange_cache (void) 
+{
+  /* release the cache of kranges */
+  if (krange_cache.ai_ranges) {
+    kfree(krange_cache.ai_ranges);
+    krange_cache.ai_ranges = 0;
+  }
+  if (krange_cache.ao_ranges) {
+    kfree(krange_cache.ao_ranges);
+    krange_cache.ao_ranges = 0;
+  }
+  if (krange_cache.ai_maxdatas) {
+    kfree(krange_cache.ai_maxdatas);
+    krange_cache.ai_maxdatas = 0;
+  }
+  if (krange_cache.ao_maxdatas) {
+    kfree(krange_cache.ao_maxdatas);
+    krange_cache.ao_maxdatas = 0;
+  }
+
+}
+
 static void grabScanOffBoard (SharedMemStruct *s,
 			      MultiSampleStruct *m)
 {
-  register unsigned int i, packed_param;
-  
+  register uint i, packed_param;
+  lsampl_t samp;
+
 /*---------------------------------------------------------------------------
   Data Acquisition below...
   -------------------------
@@ -444,13 +549,14 @@ static void grabScanOffBoard (SharedMemStruct *s,
       packed_param = s->ai_chan[i]; /* for shorter line length  below... */
       comedi_data_read(s->ai_minor, s->ai_subdev, 
 		       CR_CHAN(packed_param),CR_RANGE(packed_param), 
-		       CR_AREF(packed_param),&m->samples[m->n_samples].data);
+		       CR_AREF(packed_param),&samp);      
+      m->samples[m->n_samples].data = 
+	sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
       m->samples[m->n_samples].scan_index = s->scan_index;
       m->samples[m->n_samples].channel_id = i;
-      m->samples[m->n_samples].range = CR_RANGE(packed_param);
       m->n_samples++;
     }
-  }
+  }  
   m->acq_end = gethrtime();
 /*---------------------------------------------------------------------------
   /End data acquisition/
@@ -646,6 +752,31 @@ static int __rtp_set_f_active(rtfunction_t f, char v)
   up(&rt_functions_sem);
   
   return retval;
+}
+
+inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
+{
+  comedi_krange *krange;
+  lsampl_t maxdata;
+  double ret;
+
+  if (t == AI) {
+    krange = 
+      krange_cache.ai_ranges + chan * krange_cache.ai_max_n_ranges + range;
+    maxdata = krange_cache.ai_maxdatas[chan];
+  } else {
+    krange = 
+      krange_cache.ao_ranges + chan * krange_cache.ao_max_n_ranges + range;
+    maxdata = krange_cache.ao_maxdatas[chan];    
+  }
+  
+  ret = ((krange->max - krange->min) * (sampl/(double)maxdata) + krange->min) 
+        * 1e-6;
+
+  if (RF_UNIT(krange->flags) == UNIT_mA) 
+    ret *= 0.001;
+  
+  return ret;
 }
 
 #undef __I_AM_BUSY

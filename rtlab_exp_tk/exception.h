@@ -129,4 +129,14 @@ class SampleDeviceEOFException : public SampleDeviceException
     : SampleDeviceException(brief, full) {};
 };
 
+class SampleOutputFileException : public Exception
+{
+ public:
+  SampleOutputFileException(const QString & brief = "There was an error "
+			    "with the output file.",
+			    const QString & full = "Some error occurred "
+			    "when outputting samples to a file.") 
+    : Exception(brief, full) {};
+};
+
 #endif

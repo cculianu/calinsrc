@@ -56,10 +56,10 @@ class ComediSubDevice
   lsampl_t maxData() const { return maxdata; }
   lsampl_t & maxData() { return maxdata; }
 
-  double sampleToUnits(const SampleStruct & sample, 
-		       unsigned int *unit = 0) const;
-
-  lsampl_t unitsToSample(SampleStruct & s, double unitdata) const;
+  /*double sampleToUnits(const SampleStruct & sample, 
+		       uint *unit = 0) const;
+		       
+    lsampl_t unitsToSample(SampleStruct & s, double unitdata) const;*/
 
   /* convert a SubdevType to a native comedi int */
   static int sd2int(SubdevType t);
@@ -146,17 +146,20 @@ ComediSubDevice::int2sd(int i)
 }
 #undef _cd_undefinedval
 
-/* pass optional int * to save the unit type in the param */
+/* pass optional int * to save the unit type in the param 
+
+this is no longer needed?
 inline
 double 
 ComediSubDevice::
-sampleToUnits(const SampleStruct &s, unsigned int *unit = 0) const   
+sampleToUnits(const SampleStruct &s, uint *unit = 0) const   
 { 
   if (unit) { *unit = _ranges[s.range].unit; }
   return (_ranges[s.range].max - _ranges[s.range].min) * s.data/(double)maxdata
          + _ranges[s.range].min;
 }
 
+*/
 
 
 #endif

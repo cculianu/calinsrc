@@ -30,10 +30,12 @@
 #include <qtoolbutton.h>
 #include <qbuttongroup.h>
 #include <map>
+#include <vector>
 #include "string.h"
 #include "configuration.h"
 #include "sample_source.h"
 #include "sample_reader.h"
+#include "sample_writer.h"
 #include "ecggraph.h"
 #include "daq_ecggraphcontainer.h"
 #ifdef __RTLINUX__
@@ -83,57 +85,43 @@ class ReaderLoop: public QObject
 
   friend class DAQSystem;
 
-  ReaderLoop(const ComediSubDevice & sdev, const DAQSettings & settings);
+  ReaderLoop(uint n_channels, const DAQSettings & settings);
   ~ReaderLoop();
   
   
-  class GraphList {
-    friend class ReaderLoop;
-
-    GraphList (unsigned int n_channels)  
-      : n_graphs(n_channels)
-      { 
-	graphs = new DAQECGGraphContainer * volatile [n_channels];
-        for (unsigned int i = 0; i < n_channels; graphs[i++] = 0);
-      }
-
-    ~GraphList () { if (graphs) delete graphs; n_graphs = 0; }
-
-    DAQECGGraphContainer * volatile * volatile graphs;
-    unsigned int n_graphs;    
-  };
-
-  /* adds a listening graph to the list for channel graph->channelId() */
-  void addListeningGraph(DAQECGGraphContainer *graph);
+  /* adds a listener to the list for channels in listener->channelIds() */
+  void addListener(SampleListener *listnener);
 
  protected slots:
-  /* remove a listening graph from the list for channel graph->channelId() */
-  void removeListeningGraph(unsigned int chan);
-
- /* this should be the target of a singleshot timer */
+  /* removes a listeners from the list*/
+  void removeListener(const SampleListener *listener);
+  /* removes only the listeners that concern themselves with graphing */
+  void removeGraphListeners (uint chan);
+  /* this should be the target of a singleshot timer */
   void loop();
 
 
  protected:
-  /* true if the required channel has a graph listener  already
-     false otherwise */     
-  bool graphListenerExists(unsigned int channel_id)
-    {
-      if (channel_id < listeningGraphs.n_graphs 
-	  && listeningGraphs.graphs[channel_id] )
-	return true;
-      return false;
-    }
 
-  const ComediSubDevice &sdev;
+  bool isGraphListener(uint channel_id, uint index)
+  {
+    if (channel_id < listeners.size() && index < listeners[channel_id].size())
+      return dynamic_cast<DAQECGGraphContainer*>(listeners[channel_id][index]);  
+    return false;
+  }
+
+  bool graphListenerExists(uint channel_id);
+
   SampleStructSource *source;
   SampleStructReader *reader;
+  SampleGZWriter *writer;
   
   bool pleaseStop;
 
-  /* graphList [channel_index] = a list of graph pointers that are interested 
-     in channel 'channel_index' */
-  GraphList listeningGraphs;
+  /* listeners[channel_index] = 
+     a vector of sample listener pointers that  are interested in channel 
+     'channel_index' */
+  vector<vector<SampleListener *> > listeners;
 };
 
 class DAQSystem : public QMainWindow, public DAQSystemGUIObject
@@ -151,14 +139,14 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
 
  public slots:
   void channelOperation(ButtonOp op); 
-  void openChannelWindow(unsigned int chan, unsigned int range, 
-			 unsigned int n_secs);
-  void removeGraphContainer(unsigned int chan);
+  void openChannelWindow(uint chan, uint range, 
+			 uint n_secs);
+  void removeGraphContainer(const DAQECGGraphContainer *);
 
  protected slots:
   /* this slot does the necessary work to tell the rt-process that a 
      channel's range/gain setting needs to be changed */
-  void graphChangedRange(unsigned int channel, int range); 
+  void graphChangedRange(uint channel, int range); 
 
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
@@ -168,8 +156,8 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
   const ComediDevice & currentdevice;
 
  private:
-  bool queryOpen(unsigned int & chan, unsigned int & range, 
-		 unsigned int & n_secs);
+  bool queryOpen(uint & chan, uint & range, 
+		 uint & n_secs);
   void buildRangeSettings(ECGGraphContainer *contianer);
 
   QWorkspace ws;
@@ -179,7 +167,7 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
   ReaderLoop readerLoop;
 
   /* keep track of the mdi windows we have */
-  map <unsigned int, DAQECGGraphContainer *> gcontainers;
+  map <uint, DAQECGGraphContainer *> gcontainers;
   bool daqSystemIsClosingMode;
 };
 
