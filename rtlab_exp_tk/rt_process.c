@@ -345,15 +345,21 @@ int init_module(void)
 static int determine_comedi_minor(const char *file)
 {
   struct nameidata nd;
-  int err;
+  int ret;
 
   if (!file || !*file) return -EINVAL;
-  if (!path_init("/", 0, &nd)) return -ENOENT;
-  if ( (err = path_walk(file, &nd)) ) return err;
-  if (!S_ISCHR(nd.dentry->d_inode->i_mode)) return -ENODEV;
-  if (MAJOR(nd.dentry->d_inode->i_rdev) != COMEDI_MAJOR) return -EINVAL;
+  if (!path_init("/", 0, &nd)) { ret = -ENOENT; goto release; }
+  if ( (ret = path_walk(file, &nd)) ) return ret;
+  if (!S_ISCHR(nd.dentry->d_inode->i_mode)) { ret = -ENODEV; goto release; }
+  if (MAJOR(nd.dentry->d_inode->i_rdev) != COMEDI_MAJOR) { 
+    ret = -ENODEV; 
+    goto release;
+  }
   
-  return MINOR(nd.dentry->d_inode->i_rdev);
+  ret = MINOR(nd.dentry->d_inode->i_rdev);
+ release:
+  path_release(&nd);
+  return ret;
 }
 
 static int
@@ -377,9 +383,9 @@ init_comedi(void)
 
 #ifdef NEW_STYLE_KCOMEDILIB
   {
-    char tempbuf[32];
+    char tempbuf[13];
 
-    sprintf(tempbuf, "/dev/comedi%d", ai_minor);
+    snprintf(tempbuf, 13, "/dev/comedi%d", ai_minor);
 
     rtp_comedi_ai_dev_handle = comedi_open(tempbuf);
 
