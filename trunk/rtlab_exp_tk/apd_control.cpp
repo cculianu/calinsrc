@@ -120,11 +120,11 @@ static const int num_gridlines = 5;
    struct APDcontrol::GraphRangeSettings {  double min;  double max;  };
 */
 
-const int APDcontrol::n_apd_ranges = 5;
+const int APDcontrol::n_apd_ranges = 8;
 const APDcontrol::GraphRangeSettings APDcontrol::apd_ranges[n_apd_ranges] =
   { 
-    { min: 50, max: 180 }, { min: 0, max: 200 }, { min: 0, max: 400 },
-    { min: -10, max: 600 }, { min: 0,  max: 1000 } 
+    { min: 0, max: 200 }, { min: 0, max: 300 }, { min: 0, max: 400 }, { min: 0,  max: 1000 },
+    { min: 100, max: 200 }, { min: 100, max: 300 }, { min: 200, max: 300 }, { min: 200,  max: 400 },
   };
 
 /* This is the color of every other action potential the APD graphs */
@@ -219,10 +219,11 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
     if (which_apd_graph < NumAPDGraphs)
-      graphlayout->addWidget(new QLabel(QString("Electrode %1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+      //graphlayout->addWidget(new QLabel(QString("Electrode %1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+      graphlayout->addWidget(new QLabel(QString("%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
     else {
       // the 'All APD's' graph..
-      graphlayout->addWidget(new QLabel(QString("All Used Electrodes"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+      //graphlayout->addWidget(new QLabel(QString("All Used Electrodes"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
       // create the interleaver class that talks to this graph
       apd_interleaver = new APDInterleaver(this, apd_graph[which_apd_graph],
@@ -242,10 +243,10 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
   graphlayout->addWidget(vb, which_graph_row, which_graph_column);
   QHBox *eoBox = new QHBox(vb);
-  (void)new QLabel("Master Electrode Order: ", eoBox);
+  (void)new QLabel("AI Channel Spatial Order: ", eoBox);
   QLineEdit *eo = new QLineEdit(apd_monitor->masterOrder(), eoBox);
   eoBox = new QHBox(vb);
-  (void)new QLabel("Actual Order Being Used: ", eoBox);
+  (void)new QLabel("Stored AI Channel Spatial Order: ", eoBox);
   QLabel *eoLabel = new QLabel(apd_monitor->orderString(), eoBox);
   eo->setValidator(new QRegExpValidator(ELECTRODE_ORDER_RE, eo));
   connect(eo, SIGNAL(textChanged(const QString &)),
