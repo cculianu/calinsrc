@@ -41,7 +41,6 @@ extern "C" {
 #include "daq_settings.h"
 #include "configuration.h"
 #include "daq_system.h"
-#include "daq_help_sources.h"
 static void testAndMakeDaqSystemDirOrQuit(void);
 static void init(void);
 static void uninit();
