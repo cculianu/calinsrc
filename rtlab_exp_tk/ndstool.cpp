@@ -118,7 +118,7 @@ struct SynopsisOp: public Op
 
 struct InfoOp : public Op
 {
-  InfoOp() { name = "info"; description = "Shows information on a .nds file";
+  InfoOp() { name = "info"; description = "Shows information on an NDS file";
              op_state = new InfoOpState; buildAllArgs(); }
   
   int doIt();
@@ -131,7 +131,7 @@ struct RepairOp : public Op
 {
   RepairOp() { 
     name = "repair"; 
-    description = "Attempts to repair a corrupt .nds file";
+    description = "Attempts to repair a corrupt NDS file";
     op_state = new RepairOpState; buildAllArgs(); 
   }
   
@@ -420,7 +420,7 @@ bool InfoOpState::checkConstraints()
 int  InfoOpState::constraintsError() const
 {
   cerr << "A required argument to 'info' is missing. " << endl
-       << "You need to specify a valid .nds file." 
+       << "You need to specify a valid NDS file." 
        << endl;
   return EINVAL;  
 }
@@ -434,7 +434,7 @@ bool RepairOpState::checkConstraints()
 int  RepairOpState::constraintsError() const
 {
   cerr << "A required argument to 'repair' is missing. " << endl
-       << "You need to specify a valid .nds file." 
+       << "You need to specify a valid NDS file." 
        << endl;
   return EINVAL;  
 }
@@ -449,7 +449,7 @@ int SynopsisOpState::constraintsError() const
   
   cerr << endl 
        << "NDSTool v0.1 by Calin A. Culianu <calin@ajvar.org>" << endl
-       << "(.nds file format utility program)" << endl << endl
+       << "(NDS file format utility program)" << endl << endl
        << "Synopsis: " << endl << endl 
        << "    ndstool operation [arg=value ...]" << endl;
 
