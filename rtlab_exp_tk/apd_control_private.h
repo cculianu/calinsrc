@@ -33,6 +33,7 @@ struct MCSnapShot;
 class QGridLayout;
 class QLabel;
 class SearchableComboBox;
+class QComboBox;
 class QTimer;
 class QSpinBox;
 class QLineEdit;
@@ -77,7 +78,7 @@ private slots:
   void toggleTargetShorter(bool); /* toggles target_shorter, which, if control is active,
 			           sets the initial control pacing interval equal to a value
                                                            that will obtain an APD equal to the short alternating APD.
-				   i.e., two short APDs in a row. */
+				   i.e., two short APDs in a row. */  
   void gAdjManualOnly(int);
   void changeG(const QString &);
   void changeDG(int);  
@@ -86,6 +87,11 @@ private slots:
   void save();
   void saveAs();
   void safelyQuit();
+
+  void graphHasChangedRange(int range); /* uses QObject::sender to determine
+                                           correct graph to apply range change
+                                           to.  See apd_range_ctl, et al 
+                                           below */
 
 private:
 
@@ -105,6 +111,21 @@ private:
               *controlslayout;
 
   ECGGraph *apd_graph, *delta_pi_graph, *g_graph;
+  /* Dummy Widget that contains 3 qlabels, 1 per axis label */
+  QWidget *apd_graph_labels, *delta_pi_graph_labels, *g_graph_labels;
+  /* Combo box atop each graph that controls graph ranges.. this gets populated
+     with GraphRangeSettings for each combo box, see apd_control.cpp */
+  QComboBox *apd_range_ctl, *delta_pi_range_ctl, *g_range_ctl;
+  /* this stuff defines the contents of the above combo boxes and also
+     controls the range settings of the ECGGraph * graphs above */
+  struct GraphRangeSettings { double min; double max; };
+  static const int n_apd_ranges, n_delta_pi_ranges, n_g_ranges;
+  static const GraphRangeSettings apd_ranges[], delta_pi_ranges[], g_ranges[];
+  /* populates the QComboBoxes above with the stuff from the 
+     static const GraphRangeSettings structs (see apd_control.cpp for actual
+     min/max values for each range setting ) */
+  void buildRangeComboBoxesAndConnectSignals(); 
+                                                   
 
   QLabel *gui_indicator_pi, *gui_indicator_delta_pi, *gui_indicator_apd, 
     *gui_indicator_di, *gui_indicator_v_apa, *gui_indicator_v_baseline, 
@@ -121,7 +142,10 @@ private:
 
   TempSpooler<MCSnapShot> *spooler;
 
-  void addAxisLabels(); /* puts the axis labels for the above graphs in */
+  /* puts the axis labels for the above graphs in
+     if rebuildOnlyNull is true, then check if the graph already has labels,
+     before blindly re-creating new ones */
+  void addAxisLabels(bool rebuildOnlyNull = false); 
   void populateAOComboBox();  
   void synchAOChan();  /* synch the ao_channels combobox with the kernel */
 

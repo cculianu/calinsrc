@@ -105,11 +105,42 @@ extern "C" {
 static const int beats_per_gridline = 100;
 static const int num_gridlines = 5;
 static const double apd_min   = 75.0,   //for graph axis
-  apd_max   = 200.0,  //for graph axis
-  delta_pi_min = -50,  //for graph axis
-  delta_pi_max = 50,  //for graph axis
-  g_min    = 0.0,  //for graph axis
-  g_max    = 5.0;  //for graph axis
+                    apd_max   = 200.0,  //for graph axis
+                    delta_pi_min = -50,  //for graph axis
+                    delta_pi_max = 50,  //for graph axis
+                    g_min    = 0.0,  //for graph axis
+                    g_max    = 5.0;  //for graph axis
+
+/* the following struct and the static arrays of that struct are used
+   to populate the graph axes controls.  These correspond to 
+   member variables of this class (see apd_control_private.h) of type 
+   ECGGraph *  
+
+   Here is the definition of this struct, as found in apd_control_private.h:
+
+   struct APDcontrol::GraphRangeSettings {  double min;  double max;  };
+*/
+
+const int APDcontrol::n_apd_ranges = 5;
+const APDcontrol::GraphRangeSettings APDcontrol::apd_ranges[n_apd_ranges] =
+  { 
+    { min: 75, max: 200 }, { min: 0, max: 200 }, { min: 0, max: 400 },
+    { min: -10, max: 600 }, { min: 0,  max: 1000 } 
+  };
+
+const int APDcontrol::n_delta_pi_ranges = 4;
+const APDcontrol::GraphRangeSettings APDcontrol::delta_pi_ranges[n_delta_pi_ranges] = 
+  {
+    { min: -50, max: 50 }, { min: -75, max: 75 }, { min: -100, max: 100},
+    { min: -200, max: 200 }
+  };
+
+const int APDcontrol::n_g_ranges = 4;
+const APDcontrol::GraphRangeSettings APDcontrol::g_ranges[n_g_ranges] = 
+  {
+    { min: 0, max: 5 }, { min: 0, max: 10 }, { min: 0, max: 20},
+    { min: 0, max: 40 }
+  };
 
 /********************************************************************/
 /*
@@ -144,36 +175,48 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   fileMenu->insertItem("Save&As", this, SLOT ( saveAs() ) );
 
   /* graphs.. */
-  graphs = new QWidget(window);
+  graphs = new QWidget(window, "APD Control Graph Virtual Widget");
   masterlayout->addWidget(graphs, 1, 1);
   masterlayout->setColStretch(1, 2);
 
-  graphlayout = new QGridLayout(graphs, 6, 2);
+  graphlayout = new QGridLayout(graphs, 6, 3);
   graphlayout->setColStretch(1, 1);
   
   apd_graph   = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             apd_min, apd_max, 
+                             apd_ranges[0].min, apd_ranges[0].max, 
                              graphs, QString(name()) + " - RR Interval");
   delta_pi_graph = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             delta_pi_min, delta_pi_max, 
+                             delta_pi_ranges[0].min, delta_pi_ranges[0].max, 
                              graphs, QString(name()) + " - Number of Stimuli");
   
   g_graph    = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             g_min, g_max,
+                             g_ranges[0].min, g_ranges[0].max,
                              graphs, QString(name()) + " - G Values");
 
   g_graph->plotFactor = delta_pi_graph->plotFactor = apd_graph->plotFactor = 2;
 
-  graphlayout->addWidget(apd_graph, 1, 1); graphlayout->setRowStretch(1, 3);
-  graphlayout->addWidget(delta_pi_graph, 3, 1); graphlayout->setRowStretch(3, 3);
-  graphlayout->addWidget(g_graph, 5, 1); graphlayout->setRowStretch(5, 3);
+  graphlayout->addMultiCellWidget(apd_graph, 1, 1, 1, 2); 
+  graphlayout->setRowStretch(1, 3);
+  graphlayout->addMultiCellWidget(delta_pi_graph, 3, 3, 1, 2); 
+  graphlayout->setRowStretch(3, 3);
+  graphlayout->addMultiCellWidget(g_graph, 5, 5, 1, 2); 
+  graphlayout->setRowStretch(5, 3);
   
-
   graphlayout->addWidget(new QLabel("APD", graphs), 0, 1);
   graphlayout->addWidget(new QLabel("Delta PI", graphs), 2, 1);
   graphlayout->addWidget(new QLabel("g", graphs), 4, 1);
 
+  apd_range_ctl = new QComboBox(false, graphs, "APD Range Combo box");
+  delta_pi_range_ctl = new QComboBox(false, graphs, "Delta Pi Range Combo box");
+  g_range_ctl = new QComboBox(false, graphs, "G Range Combo box");
+
+  graphlayout->addWidget(apd_range_ctl, 0, 2);
+  graphlayout->addWidget(delta_pi_range_ctl, 2, 2);
+  graphlayout->addWidget(g_range_ctl, 4, 2);  
+
   addAxisLabels();
+
+  buildRangeComboBoxesAndConnectSignals();
   /* end graphs... */
 
 /*******************************************************/
@@ -479,58 +522,77 @@ DAQSystem * APDcontrol::daqSystem()
 
 
 /* Very long-winded code to build the graph axis labels... */
-void APDcontrol::addAxisLabels()
+void APDcontrol::addAxisLabels(bool onlyNull)
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
-  QWidget *w;
   QLabel *tmp_l; // temporary pointer to axis labels
   QFont f; f.setPointSize(8); // label point size
 
-  /* RR Interval Axis Labels */
-  w = new QWidget(graphs); // dummy widget to have nested grids
-  graphlayout->addWidget(w, 1, 0);
 
-  tmp_lo = new QGridLayout(w, 3, 1);
+  QWidget *w; /* tmp working wiget pointer points to members:
+                 apd_graph_labels, delta_pi_graph_labels, etc.. */
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
-  tmp_l->setFont(f);
+  if (!onlyNull || !apd_graph_labels) {
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((apd_graph->rangeMax() - apd_graph->rangeMin()) / 2.0 + apd_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
-  tmp_l->setFont(f);
+    /* APD Graph Axis Labels */
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
-  tmp_l->setFont(f);
+    w = apd_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
 
-  /* Stim Graph Axis Labels */
-  w = new QWidget(graphs); // dummy widget to have nested grids
-  graphlayout->addWidget(w, 3, 0);
+    graphlayout->addWidget(w, 1, 0);
+    
+    tmp_lo = new QGridLayout(w, 3, 1);
 
-  tmp_lo = new QGridLayout(w, 3, 1);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+    tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
-  tmp_l->setFont(f);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((apd_graph->rangeMax() - apd_graph->rangeMin()) / 2.0 + apd_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+    tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((delta_pi_graph->rangeMax() - delta_pi_graph->rangeMin()) / 2.0 + delta_pi_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
-  tmp_l->setFont(f);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+    tmp_l->setFont(f);
+  }
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
-  tmp_l->setFont(f);
 
-  /* G Graph Axis Labels */
-  w = new QWidget(graphs); // dummy widget to have nested grids
-  graphlayout->addWidget(w, 5, 0);
+  if (!onlyNull || !delta_pi_graph_labels) { 
 
-  tmp_lo = new QGridLayout(w, 3, 1);
+    /* Stim Graph Axis Labels */
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
-  tmp_l->setFont(f);
+    w = delta_pi_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
+    graphlayout->addWidget(w, 3, 0);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((g_graph->rangeMax() - g_graph->rangeMin()) / 2.0 + g_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
-  tmp_l->setFont(f);
+    tmp_lo = new QGridLayout(w, 3, 1);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
-  tmp_l->setFont(f);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+    tmp_l->setFont(f);
+
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((delta_pi_graph->rangeMax() - delta_pi_graph->rangeMin()) / 2.0 + delta_pi_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+    tmp_l->setFont(f);
+
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+    tmp_l->setFont(f);
+
+  }
+
+  if (!onlyNull || !g_graph_labels) {
+
+    /* G Graph Axis Labels */
+
+    w = g_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
+    graphlayout->addWidget(w, 5, 0);
+
+    tmp_lo = new QGridLayout(w, 3, 1);
+
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+    tmp_l->setFont(f);
+
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((g_graph->rangeMax() - g_graph->rangeMin()) / 2.0 + g_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+    tmp_l->setFont(f);
+
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+    tmp_l->setFont(f);
+
+  }
 
 }
 
@@ -873,5 +935,67 @@ void APDcontrol::safelyQuit()
 				     they will be prompted to save */
   }
 }
+
+
+void APDcontrol::buildRangeComboBoxesAndConnectSignals()
+{
+  static const GraphRangeSettings *arrays[] 
+    = { apd_ranges, delta_pi_ranges, g_ranges, 0 };
+  static const int sizes[] = { n_apd_ranges, n_delta_pi_ranges, n_g_ranges };
+  QComboBox *boxes[] = { apd_range_ctl, delta_pi_range_ctl, g_range_ctl };
+
+  QComboBox **box;
+  const GraphRangeSettings **array;
+  const int *size;
+  int i;
+
+  for ( box = boxes, size = sizes, array = arrays; 
+        *array; 
+        array++, size++, box++ ) 
+    {
+      for (i = 0; i < *size; i++) {
+        const GraphRangeSettings & s = (*array)[i];
+        (*box)->insertItem(QString().setNum(s.min) + " - " 
+                           + QString().setNum(s.max), i);
+      }
+      (*box)->setCurrentItem(0);
+      connect(*box, SIGNAL(activated(int)), 
+              this, SLOT(graphHasChangedRange(int)));
+    } 
+}
+
+
+void APDcontrol::graphHasChangedRange(int index)
+{
+  static const GraphRangeSettings *arrays[] 
+    = { apd_ranges, delta_pi_ranges, g_ranges };
+  ECGGraph * graphs[] = { apd_graph, delta_pi_graph, g_graph };
+  const QComboBox *boxes[] = { apd_range_ctl, delta_pi_range_ctl, g_range_ctl, 0};
+  QWidget **labelWidgets[] = { &apd_graph_labels, &delta_pi_graph_labels,
+                               &g_graph_labels };
+  
+  QWidget ***w;
+  ECGGraph **g;
+  const QComboBox **box;
+  const QObject *s = sender();
+
+  for (g = graphs, box = boxes, w = labelWidgets; *box; g++, box++, w++) {
+    if (s == *box) {
+      const GraphRangeSettings & setting = (arrays[g - graphs])[index];
+      (*g)->setRange(setting.min, setting.max);
+      /* lazy man's rebuilding of all the labels -- slow, but fast enough */
+      delete **w; **w = 0;
+
+      /* now that the particular label is deleted, 
+         re-create it using addAxisLabels(false)  then show() them.. */
+      addAxisLabels(true);
+
+      (**w)->show();
+
+      break;
+    }
+  }
+}
+
 
 #undef spooler
