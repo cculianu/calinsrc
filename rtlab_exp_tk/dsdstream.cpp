@@ -321,6 +321,8 @@ template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) //thro
     s->scan_index = currentIndex;
     s->channel_id = chan;
     s->data = sampleData[maskState.id_to_pos_map[chan]];
+    s->spike = 0; /* spike information in datafiles not yet supported! */
+    s->magic_number = SAMPLE_STRUCT_MAGIC;
     chans_this_scan--;
     if (! chans_this_scan)  maskState.endIndex = rateState.endIndex = ++currentIndex;
     return true;
