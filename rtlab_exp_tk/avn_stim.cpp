@@ -65,6 +65,8 @@
 
 static const int MAX_DATA_VECTOR_SIZE = 1000000;
 
+static const char *RCS_VERSION_STRING = "$Id$";
+
 class SearchableComboBox : public QComboBox
 {
 public:

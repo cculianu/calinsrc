@@ -44,7 +44,6 @@ static const QString
   SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
   LAST_SPIKE_FORMAT("Last Spike %1 V at %2"),
   SPIKE_FREQUENCY_FORMAT ("Spike Freq: %1 BPM (%2 hz or %3 ms/spike)");
-  
 
 /* used for string parsing and building in the combo box
    see also enum RangeUnit */
@@ -441,12 +440,11 @@ detectSpike(const SampleStruct *s)
     double freq_hz = 1000.0 / (s->spike_period != 0 ? s->spike_period : -1),
            bpm     = freq_hz * 60;
            
-    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm).arg(freq_hz).arg(s->spike_period));
+    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm, 0, 'f', 3).arg(freq_hz, 0, 'f', 3).arg(s->spike_period, 0, 'f', 3));
 
     /* update last spike label .. */
-    lastSpike->setText(LAST_SPIKE_FORMAT.arg(s->data)
-                       .arg(static_cast<ulong>(last_spike_index 
-                                               = s->scan_index)));    
+    lastSpike->setText(LAST_SPIKE_FORMAT.arg(s->data, 0, 'f', 3)
+                       .arg(uint64_to_cstr(s->scan_index)));    
   }
 }
 
@@ -456,7 +454,7 @@ setCurrentIndexStatus(scan_index_t index)
 {
   if (index - last_scan_index >= scan_index_threshold) {
     last_scan_index = index;
-    currentIndex->setText(CURRENT_INDEX_FORMAT.arg((ulong) index));
+    currentIndex->setText(CURRENT_INDEX_FORMAT.arg(uint64_to_cstr(index)));
   }
 }
 
@@ -472,14 +470,14 @@ void
 ECGGraphContainer::
 setMouseVectorStatus(double voltage, scan_index_t index)
 {   
-  mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage).arg((long int)index));
+  mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage, 0, 'f', 3).arg(uint64_to_cstr(index)));
 }
 
 void
 ECGGraphContainer::
 setSpikeThresholdStatus(double voltage)
 {
-  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg(voltage));
+  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg(voltage, 0, 'f', 3));
 }
 
 void
@@ -556,7 +554,6 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
                                        sample_indices)
 {
   int i;
-  char buf[64];
   bool hidenshow = false;
 
   
@@ -602,8 +599,7 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
     double time = sample_indices[i] 
                  / (double)(graph->sampleRateHz() ? graph->sampleRateHz() : 1);
 
-    snprintf(buf, 64, "%.1f", time); /* cheesy way to round to nearest 10th */
-    xaxis_labels[i]->setText(QString() + buf + " sec.");
+    xaxis_labels[i]->setText(QString::number(time, 'f', 1) + " sec.");
   }
 
   saved_sample_indices = sample_indices;

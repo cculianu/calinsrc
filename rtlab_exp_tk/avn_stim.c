@@ -79,7 +79,7 @@ inline int avn_rel_index(int index, int offset, const int *w_flg);
 #define MODULE_NAME "AVN Stim"
 
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
-MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rt_process.o.");
+MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rt_process.o.\n$Id$");
 
 int avn_stim_init(void); 
 void avn_stim_cleanup(void);
