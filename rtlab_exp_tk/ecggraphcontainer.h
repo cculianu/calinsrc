@@ -9,6 +9,8 @@
 #include <qevent.h>
 #include <qcombobox.h>
 #include <qspinbox.h>
+#include <qbuttongroup.h>
+#include <qradiobutton.h>
 #include "ecggraph.h"
 
 
@@ -43,10 +45,16 @@ public:
       or -1 if the setting is not found in the range combo box */
   int findRangeSetting(double rangeMin, double rangeMax, RangeUnit unit);
 
+  /* the index of the current range setting.. basically retrieved from
+     the gui widget that controls the range settings */
+  int currentRange() const { return rangeComboBox->currentItem(); };
+
   /** an array of strings to translate Volts and MilliVolts constants
       into pretty strings for display: 
       Ex. usage: QString volts = ECGGraphContainer::unitStrings[Volts]; */
   static const QString unitStrings[];
+
+  typedef ECGGraph::SpikePolarity SpikePolarity; // Qt signal/slot workaround
 
  signals:
   void rangeChanged( int newIndex );
@@ -66,6 +74,8 @@ public slots:
       signal in the ECGGraph instance bound to this object instance */
   void updateYAxisLabels(double rangeMin, double rangeMax);
 
+  void spikePolaritySet(SpikePolarity p)
+    {spikePolarityButtons->setButton(p);};
 
  protected:
 
@@ -93,7 +103,10 @@ public slots:
 
   QComboBox *rangeComboBox;  // holds range labels
   QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
-  
+  QLabel *spikePolarityLabel;
+  QButtonGroup *spikePolarityButtons;
+  QRadioButton *polarityPlusButton, *polarityMinusButton;
+  QSpinBox *spikeBlanking;
 };
 
 #endif

@@ -135,18 +135,20 @@ template <class T> class Producer : public TwoWayNode
   class TellConsumer 
   { 
     public:
-      T t;
+      T thing;
       uint count;
-      TellConsumer(T t): t(t), count(0) {};
+      TellConsumer(T t): thing(t), count(0) {};
       void operator() (TwoWayNode * r) 
 	{ 
 	  Consumer<T> *c;
 	  if ( ( c = dynamic_cast<Consumer <T> *>(r)))
-	    c->consume(t); count++; 
+	    c->consume(thing); count++; 
 	};
+
   };
 
  public:  
+
   /* calls consume(thing) on all the consumers in the consumer list for
      thing */
   uint produce(T thing) 

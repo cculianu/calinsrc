@@ -60,9 +60,10 @@ ECGGraph::ECGGraph (int sampleRateHz = 1000,
   _totalSampleCount(0),    
   _gridColor(black),
   _backgroundColor ("#334535"),
+  outside_concept_of_a_sample_index(0),
   spikeTHoldEnabled(false),
-  spikeBlanking(100),
-  spikeStatus(0)
+  _spikeBlanking(100),
+  _spikePolarity(Positive)
 {
   samples = new double[numSamples];
   points  = new QPointArray (numSamples);
@@ -144,9 +145,15 @@ void ECGGraph::setRange(double newRangeMin, double newRangeMax) {
 }
 
 // plots a sample at the next position
+void ECGGraph::plot (double amplitude, uint64 sample_index) {
+  outside_concept_of_a_sample_index = sample_index;  
+  plot(amplitude);
+}
+
 void ECGGraph::plot (double amplitude) {
 
-  int plotFactor = 10; // actually draw to screen every plotFactor-th sample
+  static const int plotFactor = 10; /* actually draw to screen every 
+				       plotFactor-th sample */
 
   if (currentSampleIndex && currentSampleIndex != _totalSampleCount
       && !(currentSampleIndex  % plotFactor)) {
@@ -161,7 +168,7 @@ void ECGGraph::plot (double amplitude) {
   currentSampleIndex = ++currentSampleIndex % numSamples;
   _totalSampleCount++;  
 
-  detectSpike();
+  detectSpike(amplitude);
 
 }
 
@@ -447,43 +454,52 @@ void ECGGraph::setSecondsVisible(int seconds)
   // now redraw the graph with the new grid and x-axis scale
   initBuffer();
   remakeAllPoints();
+  emit secondsVisibleChanged(seconds);
 }
+
+ECGGraph::SpikePolarity
+ECGGraph::spikePolarity() const
+{
+  return _spikePolarity;
+}
+
+void
+ECGGraph::setSpikePolarity(SpikePolarity p)
+{
+  _spikePolarity = p;
+  emit spikePolaritySet(p);
+}
+
+int
+ECGGraph::spikeBlanking () const 
+{ return _spikeBlanking; }
+
+void
+ECGGraph::setSpikeBlanking(int sb)
+{ _spikeBlanking = sb; emit spikeBlankingSet(sb); }
 
 /* super internal helper for plot() ... should be called every
    time plot() is called */
 void
-ECGGraph::detectSpike() {
+ECGGraph::detectSpike(double amplitude) {
   /*
   if (currentSampleIndex < 1) return;
   */
   // spike blanking? if so do nothing and return
-  if (_totalSampleCount - lastSpike.index < spikeBlanking) return;
-  /*
-  double curr = samples[currentSampleIndex], 
-         last = samples[currentSampleIndex-1];
-
-  if (spikeStatus == 0) {
-    / * no spike.. detect one * /
-    
-  } else if (spikeStatus > 0) {
-    / * we are currently in a positive polarity spike .. check to see
-       if we should come out of it * /
-
-
-
-  } else if (spikeStatus < 0) {
-    / * we are currently in a negative polarity spike * /
-
-  
-  }
-  */
-
-  register double amplitude = samples[currentSampleIndex];
-  if (spikeTHoldEnabled && spikeTHold <= amplitude) {
-    emit spikeDetected((uint64)_totalSampleCount, amplitude);
-    lastSpike.index = _totalSampleCount;
+  if ( !spikeTHoldEnabled || 
+       (outside_concept_of_a_sample_index && 
+        ((int64)outside_concept_of_a_sample_index) - lastSpike.index < _spikeBlanking) 
+       || (!outside_concept_of_a_sample_index &&
+           _totalSampleCount - lastSpike.index < _spikeBlanking) ) return;
+ 
+  if ( ( _spikePolarity == Positive && amplitude >= spikeTHold)
+       || ( _spikePolarity == Negative && amplitude <= spikeTHold) ) {
+    lastSpike.index = (outside_concept_of_a_sample_index 
+                       ? outside_concept_of_a_sample_index
+                       : _totalSampleCount);
     lastSpike.amplitude = amplitude;
     emit spikeDetected(lastSpike);    
+    emit spikeDetected(lastSpike.index, lastSpike.amplitude);
   }
   
 }

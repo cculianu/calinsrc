@@ -72,6 +72,9 @@ DAQSettings::DaqMasterDefaults::DaqMasterDefaults()
      a special-format list of the format: 
      [channel-id:x,y,width,height[{;}...]] */
   me [ KEY_CHAN_WIN_SETTINGS ] = "0:0,0,300,400;";
+
+  /* channel params settings */
+  me [ KEY_CHANNEL_PARAMS ] = "";
 }
 
 
@@ -211,6 +214,7 @@ DAQSettings::DAQSettings(const char *filename = 0)
   setConfigFileName(filename);
   parseConfig();
   parseWindowSettings();
+  parseChannelParameters();
 }
 
 const QString &
@@ -357,6 +361,33 @@ DAQSettings::windowSettingChannels() const
   return s;
 }
 
+const
+DAQSettings::ChannelParams &
+DAQSettings::getChannelParameters(uint channel_number) const
+{
+  static const ChannelParams nullCP;
+
+  map<uint, ChannelParams>::const_iterator i = channelParams.find(channel_number);
+
+  if (i != channelParams.end()) {
+    return i->second;
+  }
+
+  return nullCP;
+}
+
+void
+DAQSettings::setChannelParameters(uint channel_number, 
+                                  const ChannelParams & cp)
+{
+  if (cp.isNull()) {
+    channelParams.erase(channel_number);
+  } else {
+    channelParams [ channel_number ] = cp;
+  }
+  generateChannelParametersString();
+}
+
 void
 DAQSettings::parseWindowSettings()
 {
@@ -401,4 +432,58 @@ DAQSettings::generateWindowSettingsString()
   settingsMap [ KEY_CHAN_WIN_SETTINGS ] = out;
   dirtySettings.insert(KEY_CHAN_WIN_SETTINGS);
   //cerr << "Settings string: " << out << endl;
+}
+
+void
+DAQSettings::parseChannelParameters()
+{
+  channelParams.clear(); /* empty it out */
+
+  const QString & cp(settingsMap [ KEY_CHANNEL_PARAMS ]);
+  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+.?\\d*,\\d+,\\d+;");
+  int curr_match = 0, len = 0;
+  while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
+    ChannelParams c; 
+    int chan, tmp; chan = tmp = -1;
+    QString match = cp.mid(curr_match, len);
+    chan = match.left((tmp = match.find(':'))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.n_secs = match.left((tmp = match.find(','))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.range = match.left((tmp = match.find(','))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.spike_on = match.left((tmp = match.find(','))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.spike_thold = match.left((tmp = match.find(','))).toDouble(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.spike_polarity = match.left((tmp = match.find(','))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.spike_blanking = match.left((tmp = match.find(';'))).toInt(); // parse number
+    match = match.mid(tmp + 1); // consume number
+    c.setNull(false);
+    channelParams[ chan ] = c; // add channel params to map
+  }
+}
+
+void
+DAQSettings::generateChannelParametersString()
+{
+  QString out;
+
+  map<uint, ChannelParams>::iterator i;
+  for (i = channelParams.begin(); i != channelParams.end(); i++) {
+    uint chan = i->first;
+    ChannelParams & c = i->second;
+    out += 
+      QString().setNum(chan) + ":" +
+      QString().setNum(c.n_secs) + "," +
+      QString().setNum(c.range) + "," +
+      QString().setNum((short)c.spike_on) + "," +
+      QString().setNum(c.spike_thold) + "," +
+      QString().setNum((short)c.spike_polarity) + "," +
+      QString().setNum(c.spike_blanking) + ";";
+  }
+
+  settingsMap [ KEY_CHANNEL_PARAMS ] = out;
+  dirtySettings.insert(KEY_CHANNEL_PARAMS);
 }

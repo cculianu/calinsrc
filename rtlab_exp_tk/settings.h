@@ -156,15 +156,42 @@ class DAQSettings: public Settings
      QRect in getWindowSettings() */
   set<uint> windowSettingChannels() const;
 
+  /* Struct used by daq system to communicate with the settings class */
+  struct ChannelParams {
+    uint n_secs;
+    uint range;
+    bool spike_on;
+    double spike_thold;
+    bool spike_polarity;
+    uint spike_blanking;
+
+    void setNull(bool n) { isnull = n; };
+    bool isNull() const { return isnull; };
+    ChannelParams() { setNull(true); };
+   private:
+    bool isnull; // means this channel params struct is ignoreable
+  };
+
+  void setChannelParameters(uint channel_number, const ChannelParams & cp);
+  const ChannelParams & getChannelParameters(uint channel_number) const;
+
  private:
 
   map<uint, QRect> windowSettings;
+
+  map<uint, ChannelParams> channelParams;
 
   /* parses the windosettings string and sets up the windowSettings map */
   void parseWindowSettings();
   
   /* generates the windowsettings string to be saved to config file */
   void generateWindowSettingsString();
+
+  /* parses the channel parameters string and sets up the channelParams map */
+  void parseChannelParameters();
+
+  /* generates the channel params string to be saved to config file */
+  void generateChannelParametersString();
 
   /* master list of all settings we like to worry about in daq system */
   static const DaqMasterDefaults daqMasterSettings; 
@@ -179,8 +206,10 @@ class DAQSettings: public Settings
     * const KEY_SHOW_CONFIG_ON_STARTUP = "showConfigOnStartup",
     * const KEY_DATA_FILE = "dataFile",
     * const KEY_DATA_FORMAT = "dataFileDefaultFormat",
-    * const KEY_CHAN_WIN_SETTINGS = "channelWindowSettings";
+    * const KEY_CHAN_WIN_SETTINGS = "channelWindowSettings",
 
+
+    * const KEY_CHANNEL_PARAMS = "channelParameters";
 
 };
 
