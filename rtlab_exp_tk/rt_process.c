@@ -935,8 +935,10 @@ static void detectSpikes (MultiSampleStruct *m)
     if (test_bit(chan, spike_info.in_spike)) {
       /* IN SPIKE.. */
 
-      if ( /* chan is positive polarity and sample dipped below thold */
-          (saved_polarity && m->samples[i].data <= saved_thold) 
+      if (/* polarity or threshold changed, so abort spike early.. */
+          saved_thold != thold || polarity != saved_polarity 
+          /* chan is positive polarity and sample dipped below thold */
+          || (saved_polarity && m->samples[i].data <= saved_thold) 
           /* OR chan is negative polarity and sample dipped above thold */
           || (!saved_polarity && m->samples[i].data >= saved_thold) 
          )  {
