@@ -40,13 +40,13 @@ class QScrollBar;
 class QCheckBox;
 template<class T> class TempSpooler;
 
-class MapControl: public QObject, public Plugin
+class APDcontrol: public QObject, public Plugin
 {
   Q_OBJECT
 
 public:
-  MapControl(DAQSystem *daqSystem);
-  virtual ~MapControl();  
+  APDcontrol(DAQSystem *daqSystem);
+  virtual ~APDcontrol();  
   virtual const char *name() const;
   virtual const char *description() const;
 
@@ -64,7 +64,8 @@ private slots:
   void toggleControl(bool); /* disables control by making control_on be false 
                                and also setting g_adjustment_mode to 
                                MC_G_ADJ_MANUAL */
-
+  void toggleOnlyNegativePerturbations(bool); /* If ON, then allow only negative perturbations
+                                                                                if OFF both positive and negative control perturbations */
 
   void togglePacing(bool);    /* disables pacing by making pacing_on false */
   void changeNominalPI(int); /* change the nominal Pacing Interval */
@@ -80,6 +81,7 @@ private slots:
   void gAdjManualOnly(int);
   void changeG(const QString &);
   void changeDG(int);  
+  void changeAPDxx(const QString &);
 
   void save();
   void saveAs();
@@ -105,18 +107,17 @@ private:
   ECGGraph *apd_graph, *delta_pi_graph, *g_graph;
 
   QLabel *gui_indicator_pi, *gui_indicator_delta_pi, *gui_indicator_apd, 
-    *gui_indicator_previous_apd, *gui_indicator_apd_fp,
-    *gui_indicator_di, *gui_indicator_previous_di, *gui_indicator_vmax, *gui_indicator_vmin, 
-    *gui_indicator_ap_ti, *gui_indicator_ap_t90,
-    *gui_indicator_g, *gui_indicator_g_val, *gui_indicator_delta_g, *gui_indicator_consec_alternating, 
-    *gui_indicator_last_beat_index, *gui_indicator_delta_g_bar_value;
+    *gui_indicator_di, *gui_indicator_v_apa, *gui_indicator_v_baseline, 
+    *gui_indicator_ap_ti, *gui_indicator_ap_tf,
+    *gui_indicator_g_val, *gui_indicator_delta_g, *gui_indicator_consec_alternating, 
+    *gui_indicator_delta_g_bar_value;
 
   SearchableComboBox *ao_channels, *ai_channels;
   QSpinBox *nominal_pi;
-  QLineEdit *gval;
+  QLineEdit *gval, *apd_xx_edit_box;
   QScrollBar *delta_g_bar;
-  QCheckBox *g_adj_manual_only, *control_toggle, *pacing_toggle, *underlying_toggle, 
-	        *target_shorter_toggle;
+  QCheckBox *pacing_toggle, *control_toggle, *only_negative_toggle, *underlying_toggle, 
+	        *target_shorter_toggle, *g_adj_manual_only;
 
   TempSpooler<MCSnapShot> *spooler;
 

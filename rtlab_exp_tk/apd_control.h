@@ -1,4 +1,4 @@
-/*! Map Control - The kernel side defs.. */
+/*! APD Control - The kernel side defs.. */
 
 /*
  * This file is part of the RT-Linux Multichannel Data Acquisition System
@@ -22,8 +22,8 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#ifndef _MAP_CONTROL_H
-#  define _MAP_CONTROL_H
+#ifndef _APD_CONTROL_H
+#  define _APD_CONTROL_H
 
 #include "shared_stuff.h"
 
@@ -45,20 +45,20 @@ struct MCSnapShot {
 
   /* some of these could be inferred from the structs in shared memory 
      but is copied to the MCSnapShot structs for historical purposes */
+  scan_index_t scan_index; /* current scan index */
   int pi; /* the pacing interval in ms for this beat */
   int delta_pi; /* the perturbation to pacing interval in ms */
+  int apd_xx; 
   int apd; /* computed current apd */
   int previous_apd; /* previous apd */
   int di; /* current di */
   int previous_di; /* current di */
-  double vmax; /* current AP max voltage */
-  double vmin; /* current AP diastolic voltage */
-  scan_index_t ap_ti; /* current AP initial time (when crossed threshold in upward direction) */
-  scan_index_t ap_t90; /* current AP end time (when crossed below APD90 voltage value) */
+  double v_apa; /* Action Potential Amplitude (APA) in volts */
+  double v_baseline; /* baseline voltage */
+  scan_index_t ap_ti; /* AP initial time (when crossed threshold in upward direction) */
+  scan_index_t ap_tf; /* AP end time (when crossed below APDxx voltage value) */
   int consec_alternating; /* number of perturbations in a row that alternated on, off, on, off */
   double g_val; /* the value of our magic coefficient g */
-  scan_index_t scan_index; /* copied from rt_process's rtp_shm */
-  //scan_index_t last_beat_index;
 
   /* all below fields are here as a record of what the ui had told the
      realtime process to do during this scan -- the actual
@@ -67,6 +67,7 @@ struct MCSnapShot {
   int nominal_pi; /* ui-controlled */
   char control_on;    /* ui-controlled */
   char continue_underlying;    /* ui-controlled */
+  char only_negative_perturbations;  /* ui-controlled */
   char target_shorter;   /* ui-controlled */
   char g_adjustment_mode; /* ui-controlled */
   float delta_g; /* ui-controlled */
@@ -85,12 +86,14 @@ struct MCSnapShot {
 
 //shared memory
 struct MCShared {
-  int map_channel; /* The channel we are monitoring in the kernel */
+  int apd_channel; /* The channel we are monitoring in the kernel */
+  double apd_xx; // xx=0.1 for APD90, 0.2 for APD80, etc.
   int ao_chan; /* The channel that is doing the control, specified by user interface */
   char pacing_on;    /* if nonzero, pace */
   int nominal_pi; /* in milliseconds */  
   char control_on;    /* if nonzero, control */
   char continue_underlying;    /* if nonzero, continue underlying pacing during control */
+  char only_negative_perturbations;    /* if nonzero, then allow only negative perturbations, otherwise both + and - */
   char target_shorter;    /* if nonzero, target shorter APD for first control attempt */
   char g_adjustment_mode; /* see above #defines */
 
