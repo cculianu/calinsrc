@@ -104,8 +104,8 @@ extern "C" {
 /* default values for the graphs */
 static const int beats_per_gridline = 100;
 static const int num_gridlines = 5;
-static const double apd_min   = 0.0,   //for graph axis
-  apd_max   = 500.0,  //for graph axis
+static const double apd_min   = 75.0,   //for graph axis
+  apd_max   = 200.0,  //for graph axis
   delta_pi_min = -50,  //for graph axis
   delta_pi_max = 50,  //for graph axis
   g_min    = -15.0,  //for graph axis

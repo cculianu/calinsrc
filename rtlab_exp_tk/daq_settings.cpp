@@ -34,7 +34,7 @@ const DAQSettings::DAQMasterDefaults DAQSettings::daqMasterSettings;
 
 const QString DAQSettings::fileFormatExts [2] = {
   ".nds",
-  ".nds-ascii.gz"
+  ".gz"
 };
 
 
