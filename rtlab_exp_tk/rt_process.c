@@ -37,7 +37,6 @@
 #include <rtl.h>
 #include <rtl_fifo.h>
 #include <rtl_sched.h>
-#include <rtl_sync.h>
 #include <mbuff.h>
 
 #ifdef TIME_RT_LOOP
@@ -378,6 +377,7 @@ int init_module(void)
     if ( (error = pthread_create(&daq_task, &attr, 
                                  daq_rt_task, (void *)0) ) ) {
       errorMessage = "Cannot create the daq pthread";
+      goto init_error;
     }
   }
 
