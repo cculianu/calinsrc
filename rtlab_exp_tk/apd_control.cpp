@@ -828,7 +828,7 @@ void APDcontrol::changeDG(int new_dg_sliderval)
 const char * APDcontrol::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD, previous_APD, DI, previous_DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
+"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_channel, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
 
 //save important snapshot values to disk 
 //important to edit this to suit your data needs
@@ -844,11 +844,11 @@ struct PVSaver
             apTf     (uint64_to_cstr(ws.ap_tf));
     
     dummy.sprintf
-      ("%s %d %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
+      ("%s %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
        scanIndex.latin1(), 
        (int)ws.pacing_on, (int)ws.control_on,
-       ws.nominal_pi, ws.pi, ws.delta_pi, 
-       ws.apd_xx, ws.apd, ws.previous_apd, ws.di, ws.previous_di, 
+       ws.nominal_pi, ws.pi, ws.delta_pi, ws.apd_channel,
+       ws.apd_xx, ws.apd, ws.di, 
        apTi.latin1(), apTf.latin1(), ws.v_apa, ws.v_baseline, 
        ws.g_val, ws.delta_g, (int)ws.g_adjustment_mode, ws.consec_alternating, 
        (int)ws.only_negative_perturbations, (int)ws.continue_underlying, (int)ws.target_shorter);

@@ -48,6 +48,7 @@ struct MCSnapShot {
   scan_index_t scan_index; /* current scan index */
   int pi; /* the pacing interval in ms for this beat */
   int delta_pi; /* the perturbation to pacing interval in ms */
+  int apd_channel; /* the channel with the apd's that the algorithm are trying to control */
   int apd_xx; 
   int apd; /* computed current apd */
   int previous_apd; /* previous apd */
@@ -116,7 +117,7 @@ struct MCShared {
 #define MC_FIFO_SZ (sizeof(struct MCSnapShot) * 100)
 
 /* Some sanity limits imposed by both UI and realtime thread */
-#define MC_DELTA_G_MIN ((float)0.01)
+#define MC_DELTA_G_MIN ((float)0.001)
 #define MC_DELTA_G_MAX ((float)0.5)
 
 static inline   int mc_delta_g_toint(float x) { return (int)(x * 100); }
