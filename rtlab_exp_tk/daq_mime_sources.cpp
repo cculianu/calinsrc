@@ -20,40 +20,43 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#include <string>
-
 #include <qmime.h>
 #include <qimage.h>
 
-#include "daq_help_sources.h"
+#include "daq_mime_sources.h"
 #include "daq_images.h"
 #include "common.h"
 
-QString DAQHelpSources::configWindowHelpSource = "confwindow.html",
-        DAQHelpSources::mainWindowHelpSource   = "main.html",
-        DAQHelpSources::recordHelpSource       = "record.html",
-        DAQHelpSources::addChannelHelpSource   = "addchannel.html",
-        DAQHelpSources::pauseHelpSource        = "pause.html",
-        DAQHelpSources::spikeHelpSource        = "spike.html",
-        DAQHelpSources::logHelpSource          = "log.html",
-        DAQHelpSources::aboutHelpSource        = "about.html",
-        DAQHelpSources::pluginHelpSource       = "plugin.html",
-        DAQHelpSources::printHelpSource        = "print.html",
+static QMimeSourceFactory * initFactory();
 
-        DAQHelpSources::addChannelImage        = "addChannel.img",
-        DAQHelpSources::pauseImage             = "pause.img",
-        DAQHelpSources::playImage              = "play.img",
-        DAQHelpSources::spikeMinusImage        = "spikeMinus.img",
-        DAQHelpSources::spikePlusImage         = "spikePlus.img",
-        DAQHelpSources::synchImage             = "synch.img",
-        DAQHelpSources::timeStampImage         = "timeStamp.img";
+
+const QString 
+    DAQMimeSources::HTML::configWindow = "confwindow.html",
+    DAQMimeSources::HTML::index        = "index.html",
+    DAQMimeSources::HTML::record       = "record.html",
+    DAQMimeSources::HTML::addChannel   = "addchannel.html",
+    DAQMimeSources::HTML::pause        = "pause.html",
+    DAQMimeSources::HTML::spike        = "spike.html",
+    DAQMimeSources::HTML::log          = "log.html",
+    DAQMimeSources::HTML::about        = "about.html",
+    DAQMimeSources::HTML::plugin       = "plugin.html",
+    DAQMimeSources::HTML::print        = "print.html",
+
+    DAQMimeSources::Images::addChannel        = "addChannel.img",
+    DAQMimeSources::Images::pause             = "pause.img",
+    DAQMimeSources::Images::play              = "play.img",
+    DAQMimeSources::Images::spikeMinus        = "spikeMinus.img",
+    DAQMimeSources::Images::spikePlus         = "spikePlus.img",
+    DAQMimeSources::Images::synch             = "synch.img",
+    DAQMimeSources::Images::timeStamp         = "timeStamp.img";
 
 
 /*--------------------------------------------------------------------------
    Actual html for help
 --------------------------------------------------------------------------*/
 
-using namespace DAQHelpSources;
+using namespace DAQMimeSources;
+using namespace DAQMimeSources::HTML;
 
 static const QString 
 
@@ -82,27 +85,27 @@ configHelpText =
 "<p>Setting changes will take effect next time the application is started."
 "</qt>",
 
-mainHelpText =
+indexHelpText =
   "<qt>"
 "This Real-Time Linux based system can be used for acquisition of analog "
 "voltage signals. The graphical user interface uses the Qt graphical library."
 "<p align=center><b>DAQ System Components</b></p>"
-"<p><a href=\"" + configWindowHelpSource + "\">Configurating DAQ System</a>"
-"<p><a href=\"" + recordHelpSource + "\">Recording</a>"
-"<p><a href=\"" + addChannelHelpSource +"\">Adding A Channel</a>"
-"<p><a href=\"" + pauseHelpSource + "\">Pausing the Display</a>"
-"<p><a href=\"" + spikeHelpSource + "\">Spike Detection Controls</a>"
-  "<p><a href=\"" + logHelpSource + "\">Saving Text Comments in the Log</a>"
-  "<p><a href=\"" + printHelpSource + "\">Printing</a>"
-  "<p><a href=\"" + pluginHelpSource + "\">Plugins</a>"
-  "<p><a href=\"" + aboutHelpSource + "\">About DAQ System</a></qt>",
+"<p><a href=\"" + configWindow       + "\">Configurating DAQ System</a>"
+"<p><a href=\"" + record       + "\">Recording</a>"
+"<p><a href=\"" + addChannel       +"\">Adding A Channel</a>"
+"<p><a href=\"" + pause       + "\">Pausing the Display</a>"
+"<p><a href=\"" + spike       + "\">Spike Detection Controls</a>"
+  "<p><a href=\"" + log       + "\">Saving Text Comments in the Log</a>"
+  "<p><a href=\"" + print       + "\">Printing</a>"
+  "<p><a href=\"" + plugin       + "\">Plugins</a>"
+  "<p><a href=\"" + about       + "\">About DAQ System</a></qt>",
 
 aboutHelpText =
   "<qt>"
-"This file is part of the RT-Linux Multichannel Data Acquisition System"
-
+"This program is part of the RT-Linux Multichannel Data Acquisition System"
+" (http://www.rtlab.org) "
 "<p> Copyright (C) 1999,2000 David Christini"
-"<p> Copyright (c) 2001 David Christini, Lyuba Golub, Calin Culianu"
+"<p> Copyright (c) 2001 Calin Culianu, Lyuba Golub, David Christini"
 
 "<p> This program is free software; you can redistribute it and/or modify it under " 
 "the terms of the GNU General Public License as published by the Free Software "
@@ -127,23 +130,23 @@ aboutHelpText =
 
   addChannelHelpText = "<qt><u>Adding a Channel</u><p>"
   "Select <b>Channels - Add Channel</b> or click on the" 
-  " <b>Add Channel</b> <br><img src=\"" + addChannelImage + "\"><br> icon in the toolbar. Keyboard shortcut: <b>Ctrl + A</b>. You will be"
+  " <b>Add Channel</b> <br><img src=\"" + DAQMimeSources::Images::addChannel + "\"><br> icon in the toolbar. Keyboard shortcut: <b>Ctrl + A</b>. You will be"
   " asked to select the channel to monitor, the voltage"
   " gain for the channel, and the number of seconds to display."
   "</qt>",
 
   pauseHelpText = "<qt><u>Pausing the Display</u><p>"
-  "Press the <b>Pause</b><br><img src=\"" + pauseImage + "\"><br> button to pause the display,"
+  "Press the <b>Pause</b><br><img src=\"" + DAQMimeSources::Images::pause + "\"><br> button to pause the display,"
   " but not the data acquisition. The button will become a play button."
-  "<br><img src=\"" + playImage + "\"><br>"
+  "<br><img src=\"" + DAQMimeSources::Images::play + "\"><br>"
 "Press the button again to play."
   "</qt>",
 
   spikeHelpText = "<qt><u>Spike Detection Controls</u><p>"
   "Press the Postive/Negative button "
 "to toggle between"
-  " <b>positive</b> <img src=\"" + spikePlusImage + "\"> "
-"and <b>negative</b> <img src=\"" + spikeMinusImage + "\"> spike polarity."
+  " <b>positive</b> <img src=\"" + DAQMimeSources::Images::spikePlus + "\"> "
+"and <b>negative</b> <img src=\"" + DAQMimeSources::Images::spikeMinus + "\"> spike polarity."
   "<p>Click on the graph and drag the red bar to change the spike threshold."
   "</qt>",
   
@@ -152,54 +155,70 @@ aboutHelpText =
   " print by checking the box to the left of each graph."
   "<qt>",
 
-  pluginHelpText = "Plugins",
+  pluginHelpText = "<qt><u>Plugins</u></qt><p>"
+"<u>Description</u> - "
+"Plugins are custom pieces of software that are designed to fit in to this "
+"application seamlessly.  Their purpose is to modify or enhance the behavior "
+"of the DAQ System program.  Plugins may be written by following the example "
+"set by the <a href=\"#avnstim\"><code>avn_stim.so</code></a> plugin."
+"<P>"
+"<dl><dt><a name=\"avnstim\"><B>avn_stim.so</b></a></dt>"
+"    <dd>avn_stim is a plugin written by Calin Culianu and David Christini "
+"        of Cornell Medical College's Cardiac Electrodynamics department."
+"        It comes in two pieces: the kernel module avn_stim.o which isl"
+"        designed to run at realtime priority, and avn_stim.so, which"
+"        is the .so file loaded by the daq_system user application.</dd>"
+
+,
   
   logHelpText = "<qt><u>Log</u><p>"
   "<u>Opening the Log Window</u>"
   " Select <b>Log - Show Log Window</b> or press <b>Ctrl + L</b>."
   "<p><u>Selecting the log template file</u>"
-  " Open the <a href=\"" + configWindowHelpSource + "\">configuration window</a>."
+  " Open the <a href=\"" + configWindow       + "\">configuration window</a>."
   " Type a file name into the <b>Log Template Selection field</b>"
   " or press <b>Browse</b> to choose from files on your computer."
   " The template file you selected will appear in the <b>Log"
   " Template Preview</b> window."
   "<p><u>Adding a time stamp to the log</u> Press the <b>timestamp</b>"
   " button"
-  "<br><img src=\"" + timeStampImage + "\">"
+  "<br><img src=\"" + DAQMimeSources::Images::timeStamp + "\">"
   "<br>on the toolbar or select <b>Log - Insert Timestamp</b>. Keyboard"
   " shortcut: <b>Ctrl + T</b>."
   "</qt>";
 
-QMimeSourceFactory * DAQHelpSources::initFactory()
+static QMimeSourceFactory * initFactory()
 {
-  static bool initialized = false;
-  static QMimeSourceFactory *mimeFactory = QMimeSourceFactory::defaultFactory();
+  static QMimeSourceFactory *mimeFactory = 0;
 
+  if (!mimeFactory) {
 
-  if (!initialized) {
-
-      mimeFactory->setText( configWindowHelpSource, configHelpText );
-      mimeFactory->setText( mainWindowHelpSource, mainHelpText );
-      mimeFactory->setText( aboutHelpSource, aboutHelpText );
-      mimeFactory->setText( recordHelpSource, recordHelpText );
-      mimeFactory->setText( addChannelHelpSource, addChannelHelpText );
-      mimeFactory->setText( pauseHelpSource, pauseHelpText );
-      mimeFactory->setText( spikeHelpSource, spikeHelpText );
-      mimeFactory->setText( logHelpSource, logHelpText );
-      mimeFactory->setText( printHelpSource, printHelpText );
-      mimeFactory->setText( pluginHelpSource, pluginHelpText );
+      mimeFactory = QMimeSourceFactory::defaultFactory();
+      mimeFactory->setText( configWindow, configHelpText );
+      mimeFactory->setText( DAQMimeSources::HTML::index, indexHelpText );
+      mimeFactory->setText( about, aboutHelpText );
+      mimeFactory->setText( record, recordHelpText );
+      mimeFactory->setText( addChannel, addChannelHelpText );
+      mimeFactory->setText( pause, pauseHelpText );
+      mimeFactory->setText( spike, spikeHelpText );
+      mimeFactory->setText( log, logHelpText );
+      mimeFactory->setText( print, printHelpText );
+      mimeFactory->setText( plugin, pluginHelpText );
       
       using namespace DAQImages;
 
-      mimeFactory->setImage( addChannelImage, plus_img );
-      mimeFactory->setImage( pauseImage, pause_img );
-      mimeFactory->setImage( playImage, play_img );
-      mimeFactory->setImage( spikePlusImage, spike_plus_img );
-      mimeFactory->setImage( spikeMinusImage, spike_minus_img );
-      mimeFactory->setImage( timeStampImage, timestamp_img );
-      mimeFactory->setImage( synchImage, synch_img );
-      initialized = true;
+      mimeFactory->setImage( DAQMimeSources::Images::addChannel, plus_img );
+      mimeFactory->setImage( DAQMimeSources::Images::pause, pause_img );
+      mimeFactory->setImage( DAQMimeSources::Images::play, play_img );
+      mimeFactory->setImage( DAQMimeSources::Images::spikePlus, spike_plus_img );
+      mimeFactory->setImage( DAQMimeSources::Images::spikeMinus, spike_minus_img );
+      mimeFactory->setImage( DAQMimeSources::Images::timeStamp, timestamp_img );
+      mimeFactory->setImage( DAQMimeSources::Images::synch, synch_img );
+
   }
+
   return mimeFactory;
 }
+
+QMimeSourceFactory * DAQMimeSources::factory() { return initFactory(); }
 

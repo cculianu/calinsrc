@@ -67,8 +67,8 @@
 #include "ecggraphcontainer.h"
 #include "daq_system.h"
 #include "common.h"
-#include "daq_help_sources.h"
-#include "help_browser.h"
+#include "daq_mime_sources.h"
+#include "daq_help_browser.h"
 #include "simple_text_editor.h"
 #include "plugin.h"
 #include "comedi_coprocess.h"
@@ -106,8 +106,6 @@ void ExperimentLog::init()
   int id = accel->insertItem(CTRL + Key_T);
   accel->connectItem( id, &daqSystem, SLOT(logTimeStamp()) );
 }
-
-
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
 		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
@@ -170,12 +168,12 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     connect(&windowMenu, SIGNAL(activated(int)), 
 	    this, SLOT(windowMenuFocusWindow(int)));
 
-    //helpMenu.insertItem("DAQ System Help", this, SLOT( daqHelp() ) );
-    helpMenu.insertItem("DAQ System Help", 0);
-    helpMenu.insertItem("Configurating DAQ System", 1);
-    helpMenu.insertItem("&About", 2);
+    helpMenu.insertItem("DAQ System Help", help1);
+    helpMenu.insertItem("Configurating DAQ System", help2);
+    helpMenu.insertItem("&About", help3);
+
     connect(&helpMenu, SIGNAL(activated(int)), 
-	    this, SLOT(daqHelp(int)));
+            this, SLOT(daqHelp(int)));
 
     _menuBar.insertItem("&File", &fileMenu);
     _menuBar.insertItem("&Log", &logMenu);
@@ -310,19 +308,19 @@ DAQSystem::addChannel (void)
   
 }
 
+/* used solely for below method */
+const QString DAQSystem::helpMenuDestinations[n_help_dests] = 
+{
+  DAQMimeSources::HTML::index,
+  DAQMimeSources::HTML::configWindow,
+  DAQMimeSources::HTML::about
+};
+
 void DAQSystem::daqHelp( int id )
 {
-  if ( id == 0 )
-    HelpBrowser::getDefaultBrowser( )->
-      openPage( DAQHelpSources::mainWindowHelpSource );
+  if ( id >= help1 && id < n_help_dests )
+    DAQHelpBrowser::getDefaultBrowser()->openPage( helpMenuDestinations[id] );
   
-  else if ( id == 1 )
-    HelpBrowser::getDefaultBrowser( )->
-      openPage( DAQHelpSources::configWindowHelpSource );
-
-  else if ( id == 2 )
-    HelpBrowser::getDefaultBrowser( )->
-      openPage( DAQHelpSources::aboutHelpSource );
 }
 
 bool

@@ -302,6 +302,8 @@ class DAQSystem : public QMainWindow
   
   PluginMenu plugin_menu;
 
+  enum HelpMenuIds { help1 = 0, help2, help3, n_help_dests };
+  static const QString helpMenuDestinations[n_help_dests];
 };
 
 #endif 
