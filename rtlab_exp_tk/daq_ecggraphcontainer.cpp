@@ -22,6 +22,7 @@
  */
 #include "daq_ecggraphcontainer.h"
 
+static const uint64 scan_index_threshhold = 25; // internal
 
 /* ugly non-class-specific static constants but this saves needing to duplicate this work in the .h file */
 static const QString 
@@ -37,10 +38,11 @@ DAQECGGraphContainer(ECGGraph *graph,
 		     QWidget *parent = 0, 
 		     const char *name = 0, 
 		     WFlags flags = 0)
-  : ECGGraphContainer(graph, parent, name, flags | WDestructiveClose)
+  : ECGGraphContainer(graph, parent, name, flags | WDestructiveClose),
+    channelId(chan), 
+    last_scan_index((uint64)-scan_index_threshhold)
 
 {
-  this->setChannelId(chan);
   if (name)  this->setCaption(name);
   /* delete the defualt range setting as it breaks daq_system */
   deleteRangeSetting(0);
@@ -77,14 +79,14 @@ DAQECGGraphContainer(ECGGraph *graph,
     statusBar->addWidget(spikeThreshHold);
     statusBar->addWidget(lastSpike);
 
-    connect(graph, SIGNAL(mouseOverVector(double, long long)),
-	    this, SLOT(setMouseVectorStatus(double, long long)));
+    connect(graph, SIGNAL(mouseOverVector(double, uint64)),
+	    this, SLOT(setMouseVectorStatus(double, uint64)));
     connect(graph, SIGNAL(spikeThreshHoldSet(double)),
 	    this, SLOT(setSpikeThreshHoldStatus(double)));      
     connect(graph, SIGNAL(spikeThreshHoldUnset()),
 	    this, SLOT(unsetSpikeThreshHoldStatus()));
-    connect(graph, SIGNAL(spikeDetected(long long, double)),
-	    this, SLOT(setLastSpikeStatus(long long, double)));
+    connect(graph, SIGNAL(spikeDetected(uint64, double)),
+	    this, SLOT(setLastSpikeStatus(uint64, double)));
   }
 }
 
@@ -102,15 +104,15 @@ void
 DAQECGGraphContainer::
 _rangeChangedWrapper(int range)
 {
-  emit rangeChanged(channelId(), range);
+  emit rangeChanged(channelId, range);
 }
 
 void
 DAQECGGraphContainer::
-newSample(const SampleStruct *sample)
+consume(const SampleStruct *sample)
 {
   graph->plot(sample->data);
-  //setCurrentIndexStatus(sample->scan_index);
+  setCurrentIndexStatus(sample->scan_index);
 }
 
 
@@ -124,16 +126,19 @@ newSample(const SampleStruct *sample)
    TODO: Rethink scan index strategy  --Calin */
 void
 DAQECGGraphContainer::
-setMouseVectorStatus(double voltage, long long index)
+setMouseVectorStatus(double voltage, uint64 index)
 {   
   mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage).arg((long int)index));
 }
 
 void
 DAQECGGraphContainer::
-setCurrentIndexStatus(long long index)
+setCurrentIndexStatus(uint64 index)
 {
-  currentIndex->setText(CURRENT_INDEX_FORMAT.arg((long int)index));
+  if (index - last_scan_index >= scan_index_threshhold) {
+    last_scan_index = index;
+    currentIndex->setText(CURRENT_INDEX_FORMAT.arg((ulong) index));
+  }
 }
 
 void
@@ -152,7 +157,7 @@ unsetSpikeThreshHoldStatus()
 
 void
 DAQECGGraphContainer::
-setLastSpikeStatus(long long index, double voltage)
+setLastSpikeStatus(uint64 index, double voltage)
 {
-  lastSpike->setText(LAST_SPIKE_FORMAT.arg(voltage).arg((long int) index));
+  lastSpike->setText(LAST_SPIKE_FORMAT.arg(voltage).arg((ulong) index));
 }

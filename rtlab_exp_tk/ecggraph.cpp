@@ -1,3 +1,24 @@
+/*
+ * This file is part of the RT-Linux Multichannel Data Acquisition System
+ *
+ * Copyright (C) 2001 Calin Culianu
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program (see COPYRIGHT file); if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA, or go to their website at
+ * http://www.gnu.org.
+ */
 #include <qwidget.h>
 #include <qevent.h>
 #include <qcolor.h>
@@ -194,7 +215,7 @@ void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
     
     pointToSampleVector (event->pos(), &amplitude, &sampleIndex);
     /* grab the cumulative sample index */
-    long long cumI = cumulateSampleIndex(sampleIndex); 
+    uint64 cumI = (uint64)cumulateSampleIndex(sampleIndex); 
 #ifdef DEBUG  
     //    cout << name() << "::mouse is at (" << x << ", " << y << ") "
     //	 << "which is sample vector (" << amplitude << ", " << cumI << ") (a,si)"  << endl;
@@ -459,7 +480,7 @@ ECGGraph::detectSpike() {
 
   register double amplitude = samples[currentSampleIndex];
   if (spikeTHoldEnabled && spikeTHold <= amplitude) {
-    emit spikeDetected(_totalSampleCount, amplitude);
+    emit spikeDetected((uint64)_totalSampleCount, amplitude);
     lastSpike.index = _totalSampleCount;
     lastSpike.amplitude = amplitude;
     emit spikeDetected(lastSpike);    

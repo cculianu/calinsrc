@@ -58,8 +58,9 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   addChannelB(&mainToolBar),
   statusBar(this),
   statusBarScanIndex(&statusBar),
-  readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
-	     settings),
+  //readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
+  //     settings),
+  readerLoop(this),
   daqSystemIsClosingMode(false), /* for now, this becomes true when
 				    daq system is closing */
   log(&ws, "Experiment Log")
@@ -182,7 +183,7 @@ DAQSystem::queryOpen(uint & chan, uint & range,
 	 i++) {
       
       if (i < (uint)subdev.n_channels 
-	  && ! readerLoop.graphListenerExists(i)) {
+	  && ! readerLoop.producers[i].findByType((DAQECGGraphContainer *)0)) {
 	/* build channel id combo box inside here */
 	id.insertItem("Channel No. " + QString().setNum(i));
 	cbox2idMap [ cboxid ] = i;
@@ -259,9 +260,11 @@ DAQSystem::openChannelWindow(uint chan, uint range,
 				 windowMenu QPopupMenu */
 
   gcont -> show(); /* will this help with window setting/geometry? */
-  readerLoop.addListener(gcont);
+  readerLoop.producers[chan].add(gcont);
+  /* see about getting rid of these signal/slots and use natural signalling
+     in producer/consumer classes.. -CC */
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
-	  this, SLOT(removeGraphContainer(const DAQECGGraphContainer *)));
+	  this, SLOT(saveGraphWindowPositions(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
 	  this, SLOT(windowMenuRemoveWindow(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(rangeChanged(uint, int)),
@@ -278,22 +281,20 @@ DAQSystem::openChannelWindow(uint chan, uint range,
     gcont->setGeometry(pos);
     gcont->move(pos.x(), pos.y());
   }
-  gcontainers [ chan ] = gcont;
+
 }
 
 /* this slot can be called from either the closeEvent of
    the DAQECGGraphContainers, or from the closeEvent of
    the DAQSystem classes. It behaves slightly differently
-   depending on who calls it. (daqSystemIsClosingMode is different). */
+   depending on who calls it. (daqSystemIsClosingMode is different). 
+   Purpose is to commit graph container window settings to settings file, 
+   or flush them from the settings file if they weren't open
+   upon application close */
 void
-DAQSystem::removeGraphContainer(const DAQECGGraphContainer * gcont)
+DAQSystem::saveGraphWindowPositions(const DAQECGGraphContainer * gcont)
 {
-  readerLoop.removeListener(gcont); /* this should really be connected to the
-			    DAQECGGraphContainer::closing() signal but
-			    stupid Qt can't convert C++ types between
-			    child and parent classes! */
-
-  uint chan = gcont->channelId(); 
+  uint chan = gcont->channelId; 
 
   if (daqSystemIsClosingMode) {
     /* save actual window settings */
@@ -307,19 +308,17 @@ DAQSystem::removeGraphContainer(const DAQECGGraphContainer * gcont)
   }
 
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, false);
-  gcontainers.erase(chan);
-  
 }
 
 void 
 DAQSystem::closeEvent (QCloseEvent * e)
 {
   daqSystemIsClosingMode = true; /* this changes the behavior of the
-				    removeGraphContainer() method */
-  map<uint, DAQECGGraphContainer *>::iterator i;
-  for (i = gcontainers.begin(); i != gcontainers.end(); i++) {    
-    removeGraphContainer(i->second); /* this saves window settings for each
-					open graph */
+				    saveGraphWindowPositions() method */
+  for (uint i = 0; i < readerLoop.producers.size(); i++) {
+    const DAQECGGraphContainer *gc;
+    if ( (gc = readerLoop.producers[i].findByType((DAQECGGraphContainer *)0)) )
+      saveGraphWindowPositions(gc);
   }
   QMainWindow::closeEvent(e);
 }
@@ -395,27 +394,32 @@ DAQSystem::setStatusBarScanIndex(scan_index_t index)
 
 ReaderLoop::
 /* very comedi-specific constructor! Must change! */
-ReaderLoop(uint n_channels, const DAQSettings & settings)
-  : pleaseStop(false), listeners(n_channels)
+ReaderLoop(DAQSystem *d) :
+  daq_system(d), 
+  pleaseStop(false), 
+  n_channels(d->currentdevice.find(ComediSubDevice::AnalogInput).n_channels),
+  producers(n_channels)
 {
-  switch (settings.getInputSource()) {
+  switch (d->settings.getInputSource()) {
   case DAQSettings::RTProcess:
     ShmMgr::check();
     source = new SampleStructRTFSource();
     source->flush();
     /* build a non-blocking sample reader */
     reader = new SampleStructReader(source, 0);
-    writer = new SampleGZWriter(settings.getDataFile().latin1());
+    writer = new SampleGZWriter(d->settings.getDataFile().latin1());
     { /* setup the writer to listen */
       uint *tmp = new uint [n_channels];
       for (uint i = 0; i < n_channels; i++) {
 	tmp[i] = i;
       }
-      writer->setChannelIds(tmp, n_channels);
+      //writer->setChannelIds(tmp, n_channels);
       delete tmp;
 
     }
-    addListener(writer);
+    // add the writer as a consumer for all channels
+    for (uint i = 0; i < n_channels; i++) producers[i].add(writer);
+
     break;
   default:
     throw UnimplementedException 
@@ -459,13 +463,11 @@ ReaderLoop::loop()
   uint chan;
 
   for (int i = 0; i < n_read; i++) {    
-    if ( (chan = sbuf[i].channel_id) < listeners.size() ) {
-      for (uint j = 0; j < listeners[chan].size(); j++) {
-	listeners[chan][j]->newSample(sbuf + i);
-      }
+    if ( (chan = sbuf[i].channel_id) < producers.size() ) {
+      producers[chan].produce(sbuf + i);
     }
   }
-
+  
   { /* emit scan index update */
     static scan_index_t saved_curr_index = 0;
     scan_index_t si = ShmMgr::scanIndex();
@@ -478,71 +480,3 @@ ReaderLoop::loop()
   QTimer::singleShot(source->suggestPollWaitTime(), 
 		     this, SLOT(loop()));
 }
-
-
-/* adds a listening graph to the channel list for channel_id list */
-void 
-ReaderLoop::
-addListener(SampleListener *listener) 
-{ 
- 
-  const uint *chans;
-  uint size;
-
-  chans = listener->channelIds(size);
-
-  for (uint i = 0; i < size; i++) {
-    uint chan = chans[i];
-    
-    if (chan >= listeners.size()) 
-      continue;
-  
-    listeners[chan].insert(listeners[chan].end(), listener);
-  }
-}
-
-void
-ReaderLoop::removeListener(const SampleListener *listener) 
-{
-  const uint *chans;
-  uint size;
-
-  chans = listener->channelIds(size);
-
-  for (uint i = 0; i < size; i++) {
-    uint chan = chans[i];
-
-    if (chan >= listeners.size()) 
-      continue;
-    for (uint j = 0; j < listeners[chan].size(); j++) {
-      if (listener == listeners[chan][j]) {
-	listeners[chan].erase(listeners[chan].begin() + j--);
-      }
-    }
-  }
-}
-
-/* removes only the listeners that concern themselves with graphing */
-void 
-ReaderLoop::removeGraphListeners (uint chan)
-{
-  
-  if (chan < listeners.size())
-    for (uint i = 0; i < listeners[chan].size(); i++)
-      if (isGraphListener(chan, i)) 
-	listeners[chan].erase(listeners[chan].begin() + i--);      
- 
-}
-
-/* true if the required channel has a graph listener  already
-   false otherwise */     
-bool 
-ReaderLoop::graphListenerExists(uint channel_id)
-{
-  if (channel_id < listeners.size())
-    for (uint i = 0; i < listeners[channel_id].size(); i++)
-      if (isGraphListener(channel_id, i)) 
-	return true;      
-  return false;
-}
-

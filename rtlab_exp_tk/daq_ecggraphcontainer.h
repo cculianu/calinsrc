@@ -26,12 +26,13 @@
 
 #include <qstatusbar.h>
 
+#include "common.h"
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
-#include "sample_listener.h"
+#include "sample_consumer.h"
 
 
-class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener 
+class DAQECGGraphContainer : public ECGGraphContainer, public SampleConsumer 
 {
   Q_OBJECT
 
@@ -45,8 +46,10 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener
 		       const char *name = 0, 
 		       WFlags flags = 0);
 
-  /* as per the SampleListener 'interface' */
-  void newSample(const SampleStruct *);
+  /* as per the SampleConsumer 'interface' */
+  void consume(const SampleStruct *);
+
+  uint channelId;
 
  signals:
   /* So that we can tell inquiring minds that want to know we are gone */
@@ -66,7 +69,7 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener
 
  /* so that the status bar can let the user know what scan index
     this channel is up to */
-  void setCurrentIndexStatus(long long index);
+  void setCurrentIndexStatus(uint64 index);
 
   /* Slot for updating the 'Mouse pos' status bar line.
      The 'index' we get here (from the ECGGraph class) is inaccurate
@@ -74,11 +77,11 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener
      the graph and the actual sample's scan index.
      In addition we may also have ab O.B.1 (Obi-Wan) error here -- I didn't 
      check since I will re-write this mechanism soon.  --Calin */
-  void setMouseVectorStatus(double voltage, long long index);
+  void setMouseVectorStatus(double voltage, uint64 index);
 
   void setSpikeThreshHoldStatus(double voltage);
   void unsetSpikeThreshHoldStatus();
-  void setLastSpikeStatus(long long index, double voltage);
+  void setLastSpikeStatus(uint64 index, double voltage);
 
  protected:
 
@@ -87,7 +90,10 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener
   /* let's try this the Qt way (no automatic storage) */
   QStatusBar *statusBar;
   QLabel *currentIndex, *mouseOverVector, *spikeThreshHold, *lastSpike;
-     
+
+ private:
+  uint64 last_scan_index;
+
 };
 
 #endif

@@ -29,9 +29,9 @@
 #include <vector>
 #include "common.h"
 #include "shared_stuff.h"
-#include "sample_listener.h"
+#include "sample_consumer.h"
 
-class SampleGZWriter: public QObject, public SampleListener
+class SampleGZWriter: public QObject, public SampleConsumer
 {
   Q_OBJECT
 
@@ -40,7 +40,7 @@ class SampleGZWriter: public QObject, public SampleListener
   SampleGZWriter(const char *filename);
   ~SampleGZWriter();
   void setFile(const char *filename);
-  void newSample(const SampleStruct *s);
+  void consume(const SampleStruct *s);
   bool & periodicFlush() { return _periodicFlush; };
 
  public slots:
