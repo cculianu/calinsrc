@@ -29,21 +29,135 @@
 #include <qevent.h>
 #include <qregexp.h>
 #include <qtooltip.h>
+#include <qfont.h>
 
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #include "ecggraphcontainer.h"
 #include "daq_images.h"
 
+struct FMT
+{
+
+  
+  static const int n_formats = 5;
+  static const int max_n_fields = 6;
+  static const FMT formats[n_formats];
+  static const FMT *find(const char *name)
+  {
+    for (int i = 0; i < n_formats; i++) 
+      if (!strcmp(formats[i].name, name)) return (formats + i);    
+    return 0;
+  }
+  static QString get(const char * name, ...);
+  static QString getEmpty(const char * name);
+
+
+  const char * name;
+  const char * format;
+  QString types;
+  int fieldWidths[max_n_fields];
+
+};
+
+const FMT FMT::formats[n_formats] = {
+  {
+    name        : "MOUSE_POS_FORMAT",
+    format      : "Mouse pos: %1 V at scan %2",
+    types       : "dU",
+    fieldWidths : { 7, 3, 14 } // 'd' each takes two fieldWidth slots
+  },
+  {
+    name        : "CURRENT_INDEX_FORMAT",
+    format      : "Scan Index: %1",
+    types       : "U",
+    fieldWidths : { 14 }
+  },
+  {
+    name        : "SPIKE_THOLD_FORMAT",
+    format      : "Spike Threshold: %1 V",
+    types       : "d",
+    fieldWidths : { 7, 3 }
+  },
+  {
+    name        : "LAST_SPIKE_FORMAT",
+    format      : "Last Spike %1 V at %2",
+    types       : "dU",
+    fieldWidths : { 7, 3, 14 }
+  },
+  {
+    name        : "SPIKE_FREQUENCY_FORMAT",
+    format      : "Spike Freq: %1 BPM (%2 hz or %3 ms/spike)",
+    types       : "ddd",
+    fieldWidths : { 7, 2, 6, 2, 8, 2 }
+  }
+};
+
+
 /* ugly non-class-specific static constants but this saves needing to 
-   duplicate this work in the .h file */
-static const QString 
-  MOUSE_POS_FORMAT("Mouse pos: %1 V at scan %2"),
-  CURRENT_INDEX_FORMAT("Scan Index: %1"),
-  SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
-  LAST_SPIKE_FORMAT("Last Spike %1 V at %2"),
-  SPIKE_FREQUENCY_FORMAT ("Spike Freq: %1 BPM (%2 hz or %3 ms/spike)");
+   duplicate this work in the .h file 
+   static const QString 
+   MOUSE_POS_FORMAT("Mouse pos: %1 V at scan %2"),
+   CURRENT_INDEX_FORMAT("Scan Index: %1"),
+   SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
+   LAST_SPIKE_FORMAT("Last Spike %1 V at %2"),
+   SPIKE_FREQUENCY_FORMAT ("Spike Freq: %1 BPM (%2 hz or %3 ms/spike)");
+*/
+
+QString FMT::getEmpty(const char *name) 
+{
+  const FMT *f = find(name);
+  if (!f) BUG();
+  
+  QString fstr(f->format);
+  for (uint i = 0, j = 0; i < f->types.length(); i++) { 
+    fstr = fstr.arg("-", f->fieldWidths[j]);
+    j++;
+    if (f->types[i] == 'd') j++; /* advance past the prec. spec for 'double' 
+                                    type */
+  }
+  return fstr;
+}
+
+#include <stdarg.h>
+
+QString FMT::get(const char *name, ...)
+{
+  va_list ap;
+  va_start (ap, name);
+  
+  const FMT *f = find(name);
+  if (!f) BUG();
+  QString fstr(f->format);
+
+  for (uint i = 0, j = 0; i < f->types.length(); i++) {
+    double  tmp_d;
+    uint64  tmp_U;
+    uint    tmp_u;
+
+    switch(f->types[i].latin1()) {
+    case 'd':
+      tmp_d = va_arg(ap, double);
+      tmp_u = j;
+      j += 2; 
+      // all doubles have precision as two members of the fieldWidths array..
+      fstr = fstr.arg(tmp_d, f->fieldWidths[tmp_u], 'f', f->fieldWidths[tmp_u + 1]);
+      break;
+    case 'U':
+      tmp_U = va_arg(ap, uint64);
+      fstr = fstr.arg(uint64_to_cstr(tmp_U), f->fieldWidths[j++]);
+      break;
+    case 'u':
+      tmp_u = va_arg(ap, uint);
+      fstr = fstr.arg(tmp_u, f->fieldWidths[j++]);
+      break;
+    }
+  }
+  va_end(ap);
+  return fstr;
+}
 
 /* used for string parsing and building in the combo box
    see also enum RangeUnit */
@@ -249,16 +363,15 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     layout->addMultiCellWidget( statusBar, 
                                 layout->numRows(), layout->numRows(),
                                 0, layout->numCols()-1 );
-    
+
   /* populate that status bar with them gosh-darned labels and signal/slot
-     connections */
-    
-    currentIndex = new QLabel(CURRENT_INDEX_FORMAT.arg("-"), statusBar);
-    mouseOverVector = new QLabel(MOUSE_POS_FORMAT.arg("-").arg("-"),statusBar);
-    spikeThreshold = new QLabel(statusBar);       
-    lastSpike = new QLabel(LAST_SPIKE_FORMAT.arg("-").arg("-"), statusBar);
-    spikeFrequency = new QLabel(SPIKE_FREQUENCY_FORMAT.arg("-").arg("-").arg("-"), 
+     connections */ 
+
+    spikeThreshold = new QLabel(FMT::getEmpty("SPIKE_THOLD_FORMAT"),statusBar);
+    lastSpike = new QLabel(FMT::getEmpty("LAST_SPIKE_FORMAT"), statusBar);
+    spikeFrequency = new QLabel(FMT::getEmpty("SPIKE_FREQUENCY_FORMAT"), 
                                 statusBar);
+
   
     if ( graph->spikeMode() ) {
       setSpikeThresholdStatus(graph->spikeThreshold());
@@ -266,14 +379,10 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
       unsetSpikeThresholdStatus();
     }
     
-    statusBar->addWidget(currentIndex);
-    statusBar->addWidget(mouseOverVector);
     statusBar->addWidget(spikeThreshold);
     statusBar->addWidget(lastSpike);
     statusBar->addWidget(spikeFrequency);
     
-    connect(graph, SIGNAL(mouseOverVector(double, uint64)),
-            this, SLOT(setMouseVectorStatus(double, uint64)));
     connect(graph, SIGNAL(spikeThresholdSet(double)),
             this, SLOT(setSpikeThresholdStatus(double)));      
     connect(graph, SIGNAL(spikeThresholdUnset()),
@@ -454,11 +563,12 @@ detectSpike(const SampleStruct *s)
     double freq_hz = 1000.0 / (s->spike_period != 0 ? s->spike_period : -1),
            bpm     = freq_hz * 60;
            
-    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm, 0, 'f', 3).arg(freq_hz, 0, 'f', 3).arg(s->spike_period, 0, 'f', 3));
+    spikeFrequency->setText(FMT::get("SPIKE_FREQUENCY_FORMAT", bpm, freq_hz, 
+                                     s->spike_period));
 
     /* update last spike label .. */
-    lastSpike->setText(LAST_SPIKE_FORMAT.arg(s->data, 0, 'f', 3)
-                       .arg(uint64_to_cstr(s->scan_index)));    
+    lastSpike->setText(FMT::get("LAST_SPIKE_FORMAT", s->data, s->scan_index));
+    
   }
 }
 
@@ -468,7 +578,6 @@ setCurrentIndexStatus(scan_index_t index)
 {
   if (index - last_scan_index >= scan_index_threshold) {
     last_scan_index = index;
-    currentIndex->setText(CURRENT_INDEX_FORMAT.arg(uint64_to_cstr(index)));
   }
 }
 
@@ -484,21 +593,21 @@ void
 ECGGraphContainer::
 setMouseVectorStatus(double voltage, scan_index_t index)
 {   
-  mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage, 0, 'f', 3).arg(uint64_to_cstr(index)));
+  (void) voltage; (void) index;
 }
 
 void
 ECGGraphContainer::
 setSpikeThresholdStatus(double voltage)
 {
-  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg(voltage, 0, 'f', 3));
+  spikeThreshold->setText(FMT::get("SPIKE_THOLD_FORMAT", voltage));
 }
 
 void
 ECGGraphContainer::
 unsetSpikeThresholdStatus()
 {
-  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg("-"));
+  spikeThreshold->setText(FMT::getEmpty("SPIKE_THOLD_FORMAT"));
 }
 
 
@@ -626,12 +735,13 @@ void ECGGraphContainer::pause()
   if (nothungry) //from pause to play
     {
       pauseBox->setPixmap( DAQImages::pause_img );
+      statusBar->clear();
       nothungry = FALSE;
     }
   else //from play to pause
     {
-      currentIndex->setText("Graph Display PAUSED");
       pauseBox->setPixmap( DAQImages::play_img );
+      statusBar->message("Graph Display PAUSED");
       nothungry = TRUE;
     }
 }

@@ -595,7 +595,8 @@ graphChangedRange(uint channel, int range)
 void
 DAQSystem::setStatusBarScanIndex(scan_index_t index)
 {
-  statusBarScanIndex.setText(QString("%1").arg((ulong)index));
+  statusBarScanIndex.
+    setText(QString("Scan Index %1").arg(uint64_to_cstr(index)));
 }
 
 void
