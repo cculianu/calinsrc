@@ -47,8 +47,8 @@ class Exception
   };
 
   Exception(const QString & briefMsg = "An Exception Ocurred",
-	    const QString & fullMsg = "There was an internal error",
-	    ErrorReportingMode m = GUI); 
+            const QString & fullMsg = "There was an internal error",
+            ErrorReportingMode m = GUI); 
 
   void showError() const;
  
