@@ -348,7 +348,8 @@ static int determine_comedi_minor(const char *file)
   int ret;
 
   if (!file || !*file) return -EINVAL;
-  if (!path_init("/", 0, &nd)) { ret = -ENOENT; goto release; }
+  if (!path_init("/", LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd)) 
+    { ret = -ENOENT; goto release; }
   if ( (ret = path_walk(file, &nd)) ) return ret;
   if (!S_ISCHR(nd.dentry->d_inode->i_mode)) { ret = -ENODEV; goto release; }
   if (MAJOR(nd.dentry->d_inode->i_rdev) != COMEDI_MAJOR) { 
