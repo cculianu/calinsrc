@@ -14,20 +14,21 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifdef DEBUGGG
+/*
+#ifdef DEBUG
 #include <string>
 #include <iostream>
 #endif
-
+*/
 #include <ieee754.h>
 
 #include <qfile.h>
 #include <qbuffer.h>
 #include <qcstring.h>
+#include <qfile.h>
 
 #include <set>
 #include <algorithm>
-
 
 #include "dsdstream.h"
 
@@ -44,8 +45,19 @@ void DSDStream::init(int mode)// throw (FileException)
 
   if (device()) {
     device()->open(mode);
-    Assert<FileException>(isOpen(),
-           "Internal Error: QIODevice error for DSDStream.", "IO Device could not be opened!");
+    QString errorMsg = "IO Device could not be opened!";
+    if ( QFile *file = dynamic_cast<QFile*>(device() ) )
+      {
+        QString fName = file->name();
+        const char *fNameChar = fName.latin1();
+        char modeChar;
+        if ( mode == IO_ReadOnly )
+          modeChar = 'r';
+        else modeChar = 'w';
+        errorMsg = (Convert)fileErrorMsg( fNameChar, modeChar );
+      }
+    Assert<FileException>(isOpen(), "Internal Error: QIODevice error for DSDStream.", errorMsg);
+                          //"Internal Error: QIODevice error for DSDStream.", "IO Device could not be opened!");
   }
 
   resetScanFlags();
