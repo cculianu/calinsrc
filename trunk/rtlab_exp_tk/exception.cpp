@@ -35,14 +35,14 @@ Exception::Exception (const QString & briefMsg, const QString & fullMsg,
 void 
 Exception::showError() const
 {
-  if (qApp != NULL || errorReportingMode() == Console) { 
+  if (qApp != NULL) { 
     __showError();
   } else {
     /* try once to create some Qt resources so __showError() can display
        a critical message box */
     int argc = 1;
-    char *args = (char *)"";
-    QApplication a(argc, &args);
+    char *args[] = {"none", 0};
+    QApplication a(argc, args);
     __showError();
   }
 }
@@ -50,11 +50,30 @@ Exception::showError() const
 void 
 Exception::__showError() const
 {
+  int llen = (78 - (static_cast<int>(briefMsg().length())+2) ) / 2, i;
+  bool add1 = llen * 2 != (78 - (static_cast<int>(briefMsg().length())+2) );
+
+  if (llen <= 0) llen = 0;
+
+  QString leftDashes = "", rightDashes = "";
+
+  for (i = 0; i < llen; i++) leftDashes += "-";
+  rightDashes = leftDashes + ( add1 ? "-" : "" );
+  
+  /* first show the error on the console... */
+  std::cerr 
+    << leftDashes.latin1() << " " << briefMsg().latin1() << " " 
+    << rightDashes.latin1() << std::endl
+    << briefMsg().latin1() << std::endl 
+    << std::endl 
+    << fullMsg().latin1() << std::endl
+    << "------------------------------------------------"
+    << "------------------------------" 
+    << std::endl;
+
+  /* now, if possible, show it graphically... */
   if (qApp != NULL && errorReportingMode() == GUI )
     QMessageBox::critical ( 0, briefMsg(), fullMsg() );
-  else 
-    /* fall back to console output */
-    cerr << briefMsg() << ": " << fullMsg() << endl;
 }
 
 UnimplementedException::UnimplementedException 

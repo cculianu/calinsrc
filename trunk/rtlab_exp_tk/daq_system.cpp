@@ -1493,7 +1493,7 @@ void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin,
 
 }
 
-bool PluginMenu::inspectPlugin(const char *filename, PluginInfo & info) const
+bool PluginMenu::inspectPlugin(const char *filename, PluginInfo & info)
 {
   void *handle = dlopen(filename, RTLD_NOW);
   const char **n, **d, **a, **r;
@@ -1522,6 +1522,21 @@ bool PluginMenu::inspectPlugin(const char *filename, PluginInfo & info) const
     info.short_filename = QStringList::split("/", info.short_filename).back();
 
     ret = true;
+  } else if (!handle) {
+    QString errorMsg = dlerror();
+    errorMsg = QString("") 
+      + "DAQSystem Plugin \n\n\t" + filename + "\n\n"
+      + "could not be inspected because of the following error:\n\n" 
+      + "\t" + errorMsg + "\n\n";
+
+    std::cerr << "------------------------------ DAQ Plugin Error "
+              << "------------------------------" << std::endl
+              << errorMsg.latin1()
+              << "------------------------------ End Plugin Error "
+              << "------------------------------" << std::endl<< std::endl;
+    // tell the user about this
+    QMessageBox::information(this, "DAQ Plugin Error", errorMsg, 
+                             QMessageBox::Ignore);
   }
 
   if (handle) dlclose(handle);

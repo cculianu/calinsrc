@@ -181,7 +181,7 @@ private:
   void loadPlugin(const char *filename, Plugin * & p, void * & handle) 
     throw (PluginException);
   void unloadPlugin(Plugin *p);
-  bool inspectPlugin(const char *filename, PluginInfo & info) const;
+  bool inspectPlugin(const char *filename, PluginInfo & info);
 
   map <Plugin *, int *> plugins_and_handles;
   QListView *plugin_box;
