@@ -136,6 +136,7 @@ public slots:
 
 private slots:
   bool queryLoadPlugin(); /* asks the user for a plugin to load       */
+  void showSelectedWindow();  /* focuses the selected plugin */
   void removeSelectedPlugin(); /* unloads and deletes the selected plugin */
 
   void pluginMenuContextReq(QListBoxItem *, const QPoint &);
@@ -145,6 +146,8 @@ private slots:
 private:
   void loadPlugin(const char *filename) throw (Exception);
   void unloadPlugin(Plugin *p);
+
+  Plugin *pluginFindByName(QString name);
 
   map <Plugin *, int *> plugins_and_handles;
   QListBox *plugin_box;
@@ -193,7 +196,7 @@ class DAQSystem : public QMainWindow
   void windowMenuRemoveWindow(int window_id);
   /* focuses a window that has menu id 'id' in the windowMenu popup menu */
   void windowMenuFocusWindow(int id); 
-
+  void windowMenuFocusWindow(QWidget *w);
   void spikePolarityChanged(SpikePolarity);
   void spikeBlankingChanged(uint);
   void spikeThresholdSet(double value);

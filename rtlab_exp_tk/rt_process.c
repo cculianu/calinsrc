@@ -36,6 +36,8 @@
 #include <rtl_fifo.h>
 #include <rtl_sched.h>
 #include <rtl_sync.h>
+#include <mbuff.h> 
+
 
 #ifdef TIME_RT_LOOP
 #  include <rtl_time.h>
@@ -72,25 +74,24 @@ EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
 EXPORT_SYMBOL_NOVERS(rtp_deactivate_function);
 EXPORT_SYMBOL_NOVERS(rtp_activate_function);
+EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
 
 int init_module(void);        /* set up RT stuff */
-void cleanup_module(void);    /* clean up RT stuff */
+void cleanup_module(void) ;    /* clean up RT stuff */
 
 /* sets up RT shared memory */
-static int init_shared_mem(int ai_minor, int ai_subdev, int ai_fifo,
-                           int ao_minor, int ao_subdev, int ao_fifo, 
-                           int spike_fifo);   
+static int init_shared_mem(int ai_subdev, int ao_subdev);   
 /* sets up the krange cache */
-static int build_krange_cache(void);
+static int build_krange_cache(void) ;
 
 static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
 /* RTP Registered functions... */
-static void grabScanOffBoard (SharedMemStruct *s,MultiSampleStruct *m);  
-static void putFullScanIntoAIFifo (SharedMemStruct *s, MultiSampleStruct *m); 
-static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m); 
+static void grabScanOffBoard (MultiSampleStruct *m);  
+static void putFullScanIntoAIFifo (MultiSampleStruct *m); 
+static void detectSpikes (MultiSampleStruct *m); 
 /* /RTP Registered */
 static int __rtp_set_f_active(rtfunction_t f, char v); /* internal */
 static int __rtp_register_function(rtfunction_t function); /* internal */
@@ -105,7 +106,6 @@ typedef enum SubDevT {
 inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t data);
 
 static pthread_t daq_task = 0;          /* main RT task */
-static SharedMemStruct *sh_mem = 0;     /* define mbuff shared memory */
 
 struct krange_cache {
   comedi_krange *ai_ranges;
@@ -117,6 +117,14 @@ struct krange_cache {
 };
 
 static struct krange_cache krange_cache = {0, 0, 0, 0, 0, 0};
+
+/* functions to be run at the end of the real-time daq loop
+   they are chained on, one after the other */
+struct rt_function_list {
+  char active_flag;
+  rtfunction_t function;
+  struct rt_function_list *next;
+};
 
 static struct rt_function_list 
              *rt_functions, /* circularly linked-list of functions to run
@@ -132,8 +140,9 @@ int ai_fifo = DEFAULT_AI_FIFO,
     ao_comedi_device = DEFAULT_COMEDI_MINOR,
     spike_fifo = DEFAULT_SPIKE_FIFO;
 
-/* Exported spike information */
-struct spike_info spike_info;
+/* Exported globals below.. */
+SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
+struct spike_info spike_info;            /* Exported spike information     */
 
 /* this task reads data from the DAQ board, then calls 
    all of the functions registered in rt_functions linked list */
@@ -173,7 +182,7 @@ static void *daq_rt_task (void *arg)
       */
       for (curr = rt_functions; curr != &__end_of_func_list; curr=curr->next) {
 	if (curr->active_flag)
-	  curr->function(sh_mem, &one_full_scan);
+	  curr->function(&one_full_scan);
       }
     }
 
@@ -187,14 +196,14 @@ static void *daq_rt_task (void *arg)
 
     avg_total_time -= 
       ((uint)(avg_total_time - looptime)) 
-      / (sh_mem->scan_index + 1);
+      / (rtp_shm->scan_index + 1);
 
 
     if ( I_SHOULD_PRINT_TIME ) {
       rtl_printf("Scan %ld: "
 		 "Main rt thread takes %ld nanoseconds to iterate once\n"
 		 "( %ld avg / %ld min / %ld max ).\n", 
-		 (long int)sh_mem->scan_index,
+		 (long int)rtp_shm->scan_index,
 		 (long int)looptime, 
 		 (long int)avg_total_time,
 		 (long int)min,
@@ -204,16 +213,16 @@ static void *daq_rt_task (void *arg)
 #endif
 
     /* increment scan_index counter */
-    ++sh_mem->scan_index; 
+    ++rtp_shm->scan_index; 
 
     nanos_to_sleep = 
-      (BILLION/sh_mem->sampling_rate_hz) - 
+      (BILLION/rtp_shm->sampling_rate_hz) - 
       (gethrtime() - loopstart);   
   } while ( ! nanosleep(hrt2ts(nanos_to_sleep), NULL) );  /* periodic loop */
   return (void *)0;
 }
 
-int init_module(void) 
+int  init_module(void) 
 {
   pthread_attr_t attr;
   int error = -EBUSY, ai_subdev = -1, ao_subdev = -1, i;
@@ -286,8 +295,7 @@ int init_module(void)
     goto init_error;
   }   
 
-  if (!init_shared_mem(ai_comedi_device, ai_subdev, ai_fifo,
-                       ao_comedi_device, ao_subdev, ao_fifo, spike_fifo))  {  
+  if (!init_shared_mem(ai_subdev, ao_subdev))  {  
     /* error initializing shared memory */
     errorMessage = "Cannot allocate mbuff shared memory.  Did you create the "
                    "device node? Are you low on memory?";
@@ -303,17 +311,20 @@ int init_module(void)
     error = -ENOMEM;
   }
   
-  if ( (error = rtf_create(sh_mem->ai_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
+  if ( (error = rtf_create(rtp_shm->ai_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
+       (error != SS_RT_QUEUE_SZ_BYTES) ) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
   }
 
-  if ( (error = rtf_create(sh_mem->ao_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
+  if ( (error = rtf_create(rtp_shm->ao_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
+       (error != SS_RT_QUEUE_SZ_BYTES) ) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
 
-  if ( (error = rtf_create(sh_mem->spike_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
+  if ( (error = rtf_create(rtp_shm->spike_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
+       (error != SS_RT_QUEUE_SZ_BYTES) ) {
     errorMessage = "Cannot create a fifo for communicating spike detection to userland!";     
     goto init_error;
   }
@@ -331,7 +342,7 @@ int init_module(void)
   }
 
   printk(RT_PROCESS_MODULE_NAME ": acquisition started at %d Hz (%s)\n", 
-         sh_mem->sampling_rate_hz, 
+         rtp_shm->sampling_rate_hz, 
          errorMessage);
   return 0;
 
@@ -345,45 +356,45 @@ int init_module(void)
 /*  Initializes the rtlinux shared memory 
     returns 1 on success, 0 on failure */
 static int 
-init_shared_mem(int im, int is, int iF, int om, int os, int oF, int sF) 
+init_shared_mem(int ai_subdev, int ao_subdev) 
 { 
   uint i;
 
   /* Open mbuff Shared Memory structure */
-  sh_mem = 
+  rtp_shm = 
     (SharedMemStruct *) mbuff_alloc (SHARED_MEM_NAME,
                                      sizeof(SharedMemStruct));
   
-  if (! sh_mem) { /* means there was some sort of error allocating mbuff */
+  if (! rtp_shm) { /* means there was some sort of error allocating mbuff */
     return 0;
   }
 
   /* initialize shared memory variables ... see rt_process.h for definitions */
-  sh_mem->struct_version = SHD_SHM_STRUCT_VERSION;
-  sh_mem->ai_minor = im;
-  sh_mem->ao_minor = om;
-  sh_mem->ai_subdev = is;
-  sh_mem->ao_subdev = os;
-  sh_mem->ai_fifo_minor = iF;
-  sh_mem->ao_fifo_minor = oF;
-  sh_mem->spike_fifo_minor = sF;
+  rtp_shm->struct_version = SHD_SHM_STRUCT_VERSION;
+  rtp_shm->ai_minor = ai_comedi_device;
+  rtp_shm->ao_minor = ao_comedi_device;
+  rtp_shm->ai_subdev = ai_subdev;
+  rtp_shm->ao_subdev = ao_subdev;
+  rtp_shm->ai_fifo_minor = ai_fifo;
+  rtp_shm->ao_fifo_minor = ao_fifo;
+  rtp_shm->spike_fifo_minor = spike_fifo;
   /* num AI channels in use */
-  sh_mem->n_ai_chans = comedi_get_n_channels(sh_mem->ai_minor, 0); 
-  sh_mem->n_ao_chans = comedi_get_n_channels(sh_mem->ao_minor, 0);
-  sh_mem->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
-  sh_mem->scan_index = 0;
+  rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_shm->ai_minor, 0); 
+  rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_shm->ao_minor, 0);
+  rtp_shm->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
+  rtp_shm->scan_index = 0;
 
   /* initialize the spike_params member */
-  init_spike_params(&sh_mem->spike_params);
+  init_spike_params(&rtp_shm->spike_params);
   
-  for (i = 0; i < sh_mem->n_ai_chans || i < sh_mem->n_ao_chans; i++) { 
+  for (i = 0; i < rtp_shm->n_ai_chans || i < rtp_shm->n_ao_chans; i++) { 
     /* set channel parameters */   
-    if (i < sh_mem->n_ai_chans) {
-      sh_mem->ai_chan[i] = CR_PACK(i,INITIAL_CHANNEL_GAIN,AREF_GROUND);
-      set_chan(i, sh_mem->ai_chans_in_use, 0);
+    if (i < rtp_shm->n_ai_chans) {
+      rtp_shm->ai_chan[i] = CR_PACK(i,INITIAL_CHANNEL_GAIN,AREF_GROUND);
+      set_chan(i, rtp_shm->ai_chans_in_use, 0);
     }
-    if (i < sh_mem->n_ao_chans) {
-      set_chan(i, sh_mem->ao_chans_in_use, 0);
+    if (i < rtp_shm->n_ao_chans) {
+      set_chan(i, rtp_shm->ao_chans_in_use, 0);
     }
   }
 
@@ -391,51 +402,51 @@ init_shared_mem(int im, int is, int iF, int om, int os, int oF, int sF)
 }
 
 static
-int build_krange_cache(void)
+int  build_krange_cache(void)
 {
   int i, j, *ai_n_ranges = 0, *ao_n_ranges = 0, ret = 0;
 
-  if (!(ai_n_ranges = kmalloc(sizeof(int) * sh_mem->n_ai_chans, GFP_KERNEL)) ||
-      !(ao_n_ranges = kmalloc(sizeof(int) * sh_mem->n_ao_chans, GFP_KERNEL)) ||
-      !(krange_cache.ai_maxdatas = kmalloc(sizeof(lsampl_t) * sh_mem->n_ai_chans, GFP_KERNEL)) ||
-      !(krange_cache.ao_maxdatas = kmalloc(sizeof(lsampl_t) * sh_mem->n_ao_chans, GFP_KERNEL)) )
+  if (!(ai_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
+      !(ao_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ao_chans, GFP_KERNEL)) ||
+      !(krange_cache.ai_maxdatas = kmalloc(sizeof(lsampl_t) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
+      !(krange_cache.ao_maxdatas = kmalloc(sizeof(lsampl_t) * rtp_shm->n_ao_chans, GFP_KERNEL)) )
     goto end;
   
   /* record the number of ranges for each channel */
-  for (i = 0; i < sh_mem->n_ai_chans; i++) {
+  for (i = 0; i < rtp_shm->n_ai_chans; i++) {
     if ( (ai_n_ranges[i] = 
-	  comedi_get_n_ranges(sh_mem->ai_minor, sh_mem->ai_subdev, i)) 
+	  comedi_get_n_ranges(rtp_shm->ai_minor, rtp_shm->ai_subdev, i)) 
 	 > krange_cache.ai_max_n_ranges )
       krange_cache.ai_max_n_ranges = ai_n_ranges[i];
     krange_cache.ai_maxdatas[i] = 
-      comedi_get_maxdata(sh_mem->ai_minor, sh_mem->ai_subdev, i);
+      comedi_get_maxdata(rtp_shm->ai_minor, rtp_shm->ai_subdev, i);
   }
-  for (i = 0; i < sh_mem->n_ao_chans; i++) {
+  for (i = 0; i < rtp_shm->n_ao_chans; i++) {
       if ( (ao_n_ranges[i] =
-	    comedi_get_n_ranges(sh_mem->ao_minor, sh_mem->ao_subdev, i))
+	    comedi_get_n_ranges(rtp_shm->ao_minor, rtp_shm->ao_subdev, i))
 	   > krange_cache.ao_max_n_ranges )
 	krange_cache.ao_max_n_ranges = ao_n_ranges[i];
       krange_cache.ao_maxdatas[i] = 
-	comedi_get_maxdata(sh_mem->ao_minor, sh_mem->ao_subdev, i);
+	comedi_get_maxdata(rtp_shm->ao_minor, rtp_shm->ao_subdev, i);
   }
 
   if (!(krange_cache.ai_ranges =
-	kmalloc(sizeof(comedi_krange) * sh_mem->n_ai_chans 
+	kmalloc(sizeof(comedi_krange) * rtp_shm->n_ai_chans 
 		* krange_cache.ai_max_n_ranges, GFP_KERNEL)) ||
       !(krange_cache.ao_ranges =
-	kmalloc	(sizeof(comedi_krange) * sh_mem->n_ao_chans 
+	kmalloc	(sizeof(comedi_krange) * rtp_shm->n_ao_chans 
 		 * krange_cache.ao_max_n_ranges, GFP_KERNEL)))
     goto end;
  
-  for (i = 0; i < sh_mem->n_ai_chans; i++) {
+  for (i = 0; i < rtp_shm->n_ai_chans; i++) {
     for (j = 0; j < ai_n_ranges[i]; j++)
-      comedi_get_krange(sh_mem->ai_minor, sh_mem->ai_subdev, i, j, 
+      comedi_get_krange(rtp_shm->ai_minor, rtp_shm->ai_subdev, i, j, 
 			krange_cache.ai_ranges + i 
 			* krange_cache.ai_max_n_ranges + j);
   }
-  for (i = 0; i < sh_mem->n_ao_chans; i++) {
+  for (i = 0; i < rtp_shm->n_ao_chans; i++) {
     for (j = 0; j < ao_n_ranges[i]; j++)
-      comedi_get_krange(sh_mem->ao_minor, sh_mem->ao_subdev, i, j, 
+      comedi_get_krange(rtp_shm->ao_minor, rtp_shm->ao_subdev, i, j, 
 			krange_cache.ao_ranges + i 
 			* krange_cache.ao_max_n_ranges + j);
   }
@@ -452,7 +463,7 @@ void cleanup_module(void)
   if (daq_task) {
     if (!pthread_delete_np(daq_task)) 
       printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles.\n",
-	      (unsigned long int)(sh_mem ? sh_mem->scan_index + 1 : 0));
+	      (unsigned long int)(rtp_shm ? rtp_shm->scan_index + 1 : 0));
     else 
       printk (RT_PROCESS_MODULE_NAME": cannot find RT task (it died?).\n");
   }
@@ -474,20 +485,20 @@ void cleanup_module(void)
   /* release memory for the krange */
   cleanup_krange_cache();
 
-  if (sh_mem) {
+  if (rtp_shm) {
     /* free up shared memory */
-    mbuff_free(SHARED_MEM_NAME,(void *)sh_mem);
+    mbuff_free(SHARED_MEM_NAME,(void *)rtp_shm);
   }
 
 }
 static void cleanup_fifos (void) 
 {
-  if (! sh_mem) return;
+  if (! rtp_shm) return;
 
   do {
-    int i, fifos[3] = {sh_mem->ai_fifo_minor, 
-                       sh_mem->ao_fifo_minor, 
-                       sh_mem->spike_fifo_minor};
+    int i, fifos[3] = {rtp_shm->ai_fifo_minor, 
+                       rtp_shm->ao_fifo_minor, 
+                       rtp_shm->spike_fifo_minor};
     
     for (i = 0; i < 3; i++)
       if (fifos[i] >= 0)
@@ -498,31 +509,31 @@ static void cleanup_fifos (void)
 
 static void cleanup_comedi_stuff (void) 
 {
-  if (! sh_mem) return;
+  if (! rtp_shm) return;
 
-  if (sh_mem->ai_subdev >= 0) {
+  if (rtp_shm->ai_subdev >= 0) {
     /*  cancel any pending ai operation */
-    comedi_cancel(sh_mem->ai_minor, sh_mem->ai_subdev);
+    comedi_cancel(rtp_shm->ai_minor, rtp_shm->ai_subdev);
 
     /* unlock subdevice so other comedi programs can use */
-    comedi_unlock(sh_mem->ai_minor, sh_mem->ai_subdev);
+    comedi_unlock(rtp_shm->ai_minor, rtp_shm->ai_subdev);
   }
 
-  if (sh_mem->ao_subdev >= 0) {
+  if (rtp_shm->ao_subdev >= 0) {
     /*  cancel any pending ai operation */
-    comedi_cancel(sh_mem->ao_minor, sh_mem->ao_subdev);
+    comedi_cancel(rtp_shm->ao_minor, rtp_shm->ao_subdev);
 
     /* unlock subdevice so other comedi programs can use */
-    comedi_unlock(sh_mem->ao_minor, sh_mem->ao_subdev);
+    comedi_unlock(rtp_shm->ao_minor, rtp_shm->ao_subdev);
   }
 
     /* close the analog input minor device */
-  if (sh_mem->ai_subdev >= 0)
-    comedi_close(sh_mem->ai_minor);
+  if (rtp_shm->ai_subdev >= 0)
+    comedi_close(rtp_shm->ai_minor);
   
     /* close the analog output minor device (if not already closed) */
-  if (sh_mem->ao_subdev >= 0 && sh_mem->ao_subdev != sh_mem->ai_subdev)
-    comedi_close(sh_mem->ao_minor);
+  if (rtp_shm->ao_subdev >= 0 && rtp_shm->ao_subdev != rtp_shm->ai_subdev)
+    comedi_close(rtp_shm->ao_minor);
 
 }
 
@@ -549,8 +560,7 @@ void cleanup_krange_cache (void)
 
 }
 
-static void grabScanOffBoard (SharedMemStruct *s,
-			      MultiSampleStruct *m)
+static void grabScanOffBoard (MultiSampleStruct *m)
 {
   register uint i, packed_param;
   lsampl_t samp;
@@ -570,16 +580,16 @@ static void grabScanOffBoard (SharedMemStruct *s,
   init_module to determine some minimum values for the comedi_cmd struct)
 ---------------------------------------------------------------------------*/
   m->acq_start = gethrtime();
-  memcpy(m->channel_mask, s->ai_chans_in_use, CHAN_MASK_SIZE);
-  for (i = 0, m->n_samples = 0; i < s->n_ai_chans; i++) {
+  memcpy(m->channel_mask, rtp_shm->ai_chans_in_use, CHAN_MASK_SIZE);
+  for (i = 0, m->n_samples = 0; i < rtp_shm->n_ai_chans; i++) {
     if (is_chan_on(i, m->channel_mask)) {
-      packed_param = s->ai_chan[i]; /* for shorter line length  below... */
-      comedi_data_read(s->ai_minor, s->ai_subdev, 
-		       CR_CHAN(packed_param),CR_RANGE(packed_param), 
-		       CR_AREF(packed_param),&samp);      
+      packed_param = rtp_shm->ai_chan[i]; /* for shorter line length  below */
+      comedi_data_read(rtp_shm->ai_minor, rtp_shm->ai_subdev, 
+                       CR_CHAN(packed_param),CR_RANGE(packed_param), 
+                       CR_AREF(packed_param),&samp);      
       m->samples[m->n_samples].data = 
         sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
-      m->samples[m->n_samples].scan_index = s->scan_index;
+      m->samples[m->n_samples].scan_index = rtp_shm->scan_index;
       m->samples[m->n_samples].channel_id = i;
       m->n_samples++;
     }
@@ -590,13 +600,12 @@ static void grabScanOffBoard (SharedMemStruct *s,
 ---------------------------------------------------------------------------*/
 }
 
-static void putFullScanIntoAIFifo (SharedMemStruct *s, 
-				   MultiSampleStruct *m) 
+static void putFullScanIntoAIFifo (MultiSampleStruct *m) 
 {
   //  static DECLARE_FIFO_DELIMITER(delim);
   register int 
     i, 
-    fifo_minor = s->ai_fifo_minor, 
+    fifo_minor = rtp_shm->ai_fifo_minor, 
     n_samples_to_write = m->n_samples;
 #ifdef TIME_RT_LOOP
   static hrtime_t put_start;
@@ -632,7 +641,7 @@ static void putFullScanIntoAIFifo (SharedMemStruct *s,
 
 }
 
-static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m)
+static void detectSpikes (MultiSampleStruct *m)
 {
   register char have_spike;
   register uint chan, i;
@@ -644,15 +653,17 @@ static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m)
     chan = m->samples[i].channel_id;
     this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
     have_spike = 0;
-    if (_test_bit(chan, s->spike_params.enabled_mask) 
+    if (_test_bit(chan, rtp_shm->spike_params.enabled_mask) 
         &&  (this_chan_time - spike_info.last_spike_time[chan]
-            >= s->spike_params.blanking[chan] * MILLION) ) {
-      switch ((SpikePolarity)_test_bit(chan, s->spike_params.polarity_mask)) {
+            >= rtp_shm->spike_params.blanking[chan] * MILLION) ) {
+      switch (_test_bit(chan, rtp_shm->spike_params.polarity_mask)) {
       case Positive: /* from enum SpikePolarity */
-        have_spike = s->spike_params.threshold[chan] <= m->samples[i].data;
+        have_spike = 
+          rtp_shm->spike_params.threshold[chan] <= m->samples[i].data;
         break;
       case Negative: 
-        have_spike = s->spike_params.threshold[chan] >= m->samples[i].data;
+        have_spike = 
+          rtp_shm->spike_params.threshold[chan] >= m->samples[i].data;
         break;
       default:
         /* this case is not reached, but defensive rtl_printf follows */
@@ -663,7 +674,7 @@ static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m)
       _set_bit(chan, spike_info.spikes_this_scan, have_spike);
       if (have_spike) {
         spike_info.last_spike_time[chan] = this_chan_time;
-        rtf_put(s->spike_fifo_minor, m->samples + i, sizeof(SampleStruct));
+        rtf_put(rtp_shm->spike_fifo_minor, m->samples + i, sizeof(SampleStruct));
       }
     }
   }

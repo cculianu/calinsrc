@@ -5,7 +5,7 @@
 #include <string>
 #include "shared_stuff.h"
 
-# define SAMPLE_SOURCE_BLOCK_SZ_BYTES RT_QUEUE_BLOCK_SZ_BYTES
+# define SAMPLE_SOURCE_BLOCK_SZ_BYTES SS_RT_QUEUE_BLOCK_SZ_BYTES
 
 class SampleStructSource {
 

@@ -23,7 +23,6 @@
 #ifndef _RT_PROCESS_H 
 # define _RT_PROCESS_H
 
-# include <mbuff.h> 
 # include <rtl_time.h>
 # include "shared_stuff.h" /* for SampleStruct type */
 
@@ -66,15 +65,7 @@ typedef struct {
   SampleStruct samples[SHD_MAX_CHANNELS];
 } MultiSampleStruct;
 
-typedef void (*rtfunction_t)(SharedMemStruct *, MultiSampleStruct *);
-
-/* functions to be run at the end of the real-time daq loop
-   they are chained on, one after the other */
-struct rt_function_list {
-  char active_flag;
-  rtfunction_t function;
-  struct rt_function_list *next;
-};
+typedef void (*rtfunction_t)(MultiSampleStruct *);
 
 struct spike_info {
   /* The last time a spike was encountered in each channel */
@@ -100,17 +91,17 @@ struct spike_info {
    Specified function won't be run (activated)
    until rtp_activate_function() is called 
    SIDE Effect: rt_process's use count is incremented */
-int rtp_register_function(rtfunction_t function);
+extern int rtp_register_function(rtfunction_t function);
 /* de-registers a function that was previously registered,
    returns 0 on success, EINVAL or EBUSY on error 
    SIDE Effect: rt_process's use count is decremented */
-int rtp_unregister_function(rtfunction_t function);
+extern int rtp_unregister_function(rtfunction_t function);
 /* de-activates a function that was previously registered,
    returns 0 on success, EINVAL on error */
-int rtp_deactivate_function(rtfunction_t function);
+extern int rtp_deactivate_function(rtfunction_t function);
 /* activates a function that was previously registered,
    returns 0 on success, EINVAL on error */
-int rtp_activate_function(rtfunction_t function);
+extern int rtp_activate_function(rtfunction_t function);
 
 
 
@@ -119,6 +110,9 @@ int rtp_activate_function(rtfunction_t function);
    EXPORTED VARIABLES:
    Other variables present in rt_process.o: 
 */
+
+/* The shared memory struct is also exported */
+extern SharedMemStruct *rtp_shm;
 
 /* Run-time spike information exported to the outside world. */
 extern struct spike_info spike_info;

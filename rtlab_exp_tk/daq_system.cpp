@@ -72,7 +72,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   readerLoop(this),
   daqSystemIsClosingMode(false), /* for now, this becomes true when
                                     daq system is closing */
-  log(&ws, "Log Window"),
+  log(0, "Log Window"),
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu")
 {
@@ -97,8 +97,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     logMenu.insertSeparator();
     logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
-    windowMenu.insertItem("&Cascade", &ws, SLOT( cascade() ) );
-    windowMenu.insertItem("&Tile", &tyler, SLOT( tyle() ) );
+    windowMenu.insertItem("&Cascade Channel Windows", &ws, SLOT( cascade() ) );
+    windowMenu.insertItem("&Tile Channel Windows", &tyler, SLOT( tyle() ) );
     windowMenu.insertSeparator(); /* after this, all open windows will be
                                      stored */
     windowMenu.insertItem("&Resynch Channel Windows", this, SLOT (resynch()));
@@ -498,13 +498,15 @@ DAQSystem::setStatusBarScanIndex(scan_index_t index)
 void
 DAQSystem::windowMenuFocusWindow(int id)
 {
-  if (menuIdToWindowMap.find(id) != menuIdToWindowMap.end()) {
-    menuIdToWindowMap[ id ]->show();     /* just in case its hidden */
-					   
+  if (menuIdToWindowMap.find(id) != menuIdToWindowMap.end()) 
+    windowMenuFocusWindow(menuIdToWindowMap[ id ]);  
+}
 
-    menuIdToWindowMap[ id ]->setFocus(); /* is this how we 
-					    activate it? */
-  }
+void DAQSystem::windowMenuFocusWindow(QWidget *w)
+{
+    w->hide();
+    w->show();     /* just in case its hidden */					   
+    w->setFocus(); /* is this how we activate it? */  
 }
 
 void DAQSystem::spikePolarityChanged(SpikePolarity p) 
@@ -813,19 +815,32 @@ Tyler::tyle()
   for (ct = 0; ct < 2; ct++, QApplication::sendPostedEvents ()) { // for some reason this needs to be done twice!! GRRR...
     QWidget * w;
     QWidgetList widgets(ws->windowList()), nonGraphs;
+    ECGGraphContainer * graph;
+    map<uint, ECGGraphContainer *> graphs; /* sorted by channelId- */
+    map<uint, ECGGraphContainer *>::iterator map_it;
+
     if (!widgets.count()) return;
     uint i, cum_height = 0, width = ws->width(), height = ws->height()/widgets.count();
 
     /* separate the wheat from the chaff */
     for (i = 0; i < widgets.count(); i++)
-      if ( dynamic_cast<ECGGraphContainer *>(w = widgets.at(i)) == 0)
+      if ( (graph = dynamic_cast<ECGGraphContainer *>(w = widgets.at(i))) == 0)
         nonGraphs.append(w);
       else
-        widget_in_workspace_resize_and_move(w, ws, width, height, cum_height); // w, ws, and rows get modified
+        graphs [ graph->channelId ] = graph; /* maps always are sorted by
+                                                key, so this ensures we
+                                                tile in channel-id order */
+    
+    /* tile the sorted map */
+    for(map_it = graphs.begin(); map_it != graphs.end(); map_it++)
+        // map_it->second, ws, and rows get modified
+        widget_in_workspace_resize_and_move(map_it->second, 
+                                            ws, width, height, cum_height); 
 
     /* now tack on the non-graphs to the end */
     for (i = 0; i < nonGraphs.count(); i++)
-      widget_in_workspace_resize_and_move(nonGraphs.at(i), ws, width, height, cum_height);
+      widget_in_workspace_resize_and_move(nonGraphs.at(i), 
+                                          ws, width, height, cum_height);
   }
 }
 
@@ -836,6 +851,7 @@ PluginMenu::PluginMenu(DAQSystem * ds,
 
 {
   plugin_cmenu = new QPopupMenu(0, QString(name) + " - Plugin Menu Context");
+  plugin_cmenu->insertItem("Show Window", this, SLOT(showSelectedWindow()));
   plugin_cmenu->insertItem("Unload", this, SLOT(removeSelectedPlugin()));
   plugin_cmenu->insertSeparator();
   plugin_cmenu->insertItem("Unload All", this, SLOT(unloadAll()));
@@ -892,23 +908,30 @@ bool PluginMenu::queryLoadPlugin()
   return ret;
 }
 
+void PluginMenu::showSelectedWindow()
+{
+  Plugin *p = pluginFindByName(plugin_box->currentText());
+  QWidget *w = ( p ? dynamic_cast<QWidget *>(p) : 0);
+
+  if (w) daqSystem->windowMenuFocusWindow(w);
+}
 void PluginMenu::removeSelectedPlugin()
 {    
-  QString name(plugin_box->currentText());
-
-  map<Plugin *, int *>::iterator i;
-  for (i = plugins_and_handles.begin(); i != plugins_and_handles.end(); i++) 
-    if (name == i->first->name()) 
-      unloadPlugin(i->first); /* all plugins call unloadPlugin internally */
-
+  Plugin *p = pluginFindByName(plugin_box->currentText());
+  
+  if (p) unloadPlugin(p);     
 }
 
 void PluginMenu::pluginMenuContextReq(QListBoxItem *item, const QPoint & point)
 {  
-  (void)item;
-  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(0), 
-                               plugin_box->currentItem() != -1 );
-  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(2),
+  Plugin *p = (item ? pluginFindByName(item->text()) : 0 );
+  QWidget *w = (p ? dynamic_cast<QWidget *>(p) : 0);
+
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(0), /* show window */
+                               w && plugin_box->currentItem() != -1 );
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(1), /* unload */
+                               p);
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(3), /* unload all */
                                plugin_box->count());
   plugin_cmenu->popup(point);
 }
@@ -984,4 +1007,13 @@ void PluginMenu::unloadAll()
 { 
   while (plugins_and_handles.begin() != plugins_and_handles.end()) 
     unloadPlugin( plugins_and_handles.begin()->first );  
+}
+
+Plugin * PluginMenu::pluginFindByName(QString name)
+{
+  map<Plugin *, int *>::iterator i;
+  for (i = plugins_and_handles.begin(); i != plugins_and_handles.end(); i++) 
+    if (name == i->first->name()) 
+      return i->first;; /* all plugins call unloadPlugin internally */ 
+  return 0;
 }
