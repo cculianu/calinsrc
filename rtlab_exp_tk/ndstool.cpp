@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <qstring.h>
 #include <qfile.h>
+#include <qtextstream.h>
 #include "dsdstream.h"
 #include "dsd_repair.h"
 #include "common.h"
@@ -222,33 +223,41 @@ SplitOp::SplitOp()
 {
     name = "split"; 
     description = 
-      "Extract a portion of an NDS file and save it to another file.";
+      "Extract a portion of an NDS file and save it to another file.  "
+      "Optionally,\nif the 'of=' parameter is a file ending in .bin, the "
+      "output is a 'Binary Old\nDAQ Format' file.  A file ending in .txt or "
+      ".dat, produces output as ASCII\ntext.\n";
     op_state = new SplitOpState; 
     buildAllArgs(); 
 }
 
-class BinNDSSimple {
+class TxtOrBinOrNDSWriter {
 public:
-  BinNDSSimple(const QString & file, uint rate, DSDStream::FileDataType t);
-  ~BinNDSSimple();
+  TxtOrBinOrNDSWriter(const QString & file, uint rate, DSDStream::FileDataType t);
+  ~TxtOrBinOrNDSWriter();
 
   void writeSample(const SampleStruct *);
   void writeSample(const SampleStruct &s) { writeSample(&s); };
 private:
+  enum Mode { NDS, BIN = 1, Ascii = 2  };
+  Mode m;
   uint rate;
   DSDOStream *dout;
   FILE       *fout, *tmp;
+
   map<uint,float> chans;
 
   void writeScan(scan_index_t index);
+  void writeScanText(scan_index_t index, QTextStream &);
 };
 
-BinNDSSimple::BinNDSSimple(const QString & file, 
+TxtOrBinOrNDSWriter::TxtOrBinOrNDSWriter(const QString & file, 
                            uint rate, 
                            DSDStream::FileDataType t)
   : rate(rate), dout(0), fout(0), tmp(0)
 {
-  if (file.endsWith(".bin")) {
+  if (((m = BIN) && file.endsWith(".bin")) 
+      || ((m = Ascii) && (file.endsWith(".txt") || file.endsWith(".dat")))) {
     tmp = tmpfile();
     fout = fopen(file.latin1(), "w");
     if (!tmp) {
@@ -261,35 +270,67 @@ BinNDSSimple::BinNDSSimple(const QString & file,
     }
   } else {
     dout = new DSDOStream(file, rate, t);
+    m = NDS;
   }
 }
 
-BinNDSSimple::~BinNDSSimple()
+TxtOrBinOrNDSWriter::~TxtOrBinOrNDSWriter()
 {
-  if (dout) { dout->end(); delete dout; dout = 0; }
-  else if (tmp) { 
-    SampleStruct s;
-    scan_index_t index = 0;
-    int n_chans = chans.size();
-    uint i = 0;
-    fseek(tmp, 0, SEEK_SET);
-    fwrite(&n_chans, sizeof(int), 1, fout);
-    while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
-      if (s.scan_index > index) { // new scan        
-        index = s.scan_index;
-        if (i) writeScan(s.scan_index);
+  switch(m) {
+  case NDS:
+    dout->end(); 
+    delete dout; 
+    dout = 0; 
+  break;
+  case BIN:
+    {
+      SampleStruct s;
+      scan_index_t index = 0;
+      int n_chans = chans.size();
+      uint i = 0;
+      fseek(tmp, 0, SEEK_SET);
+      fwrite(&n_chans, sizeof(int), 1, fout);
+      while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
+        if (s.scan_index > index) { // new scan        
+          index = s.scan_index;
+          if (i) writeScan(s.scan_index);
+        }
+        chans[s.channel_id] = s.data;
+        i++;
       }
-      chans[s.channel_id] = s.data;
-      i++;
+      writeScan(s.scan_index);
+      fclose(tmp); 
+      fclose(fout);
+      tmp = fout = 0;
     }
-    writeScan(s.scan_index);
-    fclose(tmp); 
-    fclose(fout);
-    tmp = fout = 0;
+  break;
+  case Ascii:
+    {
+      SampleStruct s;
+      scan_index_t index = 0;
+      int n_chans = chans.size();
+      uint i = 0;
+      fseek(tmp, 0, SEEK_SET);
+      QTextStream *t = new QTextStream(fout, IO_WriteOnly | IO_Truncate);
+      while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
+        if (s.scan_index > index) { // new scan        
+          index = s.scan_index;
+          if (i) writeScanText(s.scan_index, *t);
+        }
+        chans[s.channel_id] = s.data;
+        i++;
+      }
+      writeScanText(s.scan_index, *t);
+      delete t;
+      fclose(tmp); 
+      fclose(fout);
+      tmp = fout = 0;
+    }
+  break;
   }
 }
 
-void BinNDSSimple::writeScan(scan_index_t index)
+void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
 {
   map<uint,float>::iterator it, end;
   float data = static_cast<double>(index) / static_cast<double>(rate);
@@ -300,9 +341,19 @@ void BinNDSSimple::writeScan(scan_index_t index)
   } 
 }
 
-void BinNDSSimple::writeSample(const SampleStruct *s)
+void TxtOrBinOrNDSWriter::writeScanText(scan_index_t index, QTextStream & t)
 {
-  if (dout) { 
+  QString istr(uint64_to_cstr(index));
+  t << istr;
+  map<uint,float>::iterator it, end;
+  for (it = chans.begin(), end = chans.end(); it != end; it++) 
+    t <<  " " << it->second;  
+  t << "\n";    
+}
+
+void TxtOrBinOrNDSWriter::writeSample(const SampleStruct *s)
+{
+  if (m == NDS) { 
     dout->writeSample(s); 
   } else {
     fwrite(s, sizeof(const SampleStruct), 1, tmp);
@@ -326,7 +377,7 @@ int SplitOp::doIt()
       { cerr << "No scans in input file!" << endl;  return EINVAL; }
   
    
-    BinNDSSimple out(state()->outfile, in.rateAt(state()->start), in.dataType());
+    TxtOrBinOrNDSWriter out(state()->outfile, in.rateAt(state()->start), in.dataType());
 
     scan_index_t 
       i = 0, 
@@ -363,7 +414,7 @@ void SplitOp::buildAllArgs()
                    (ArgCallback_t)&SplitOp::infileArg);
 
   allArgs[QString("of")] =
-    ArgsMapValue_t(QString("Output file -- .nds file to write to (required)"),
+    ArgsMapValue_t(QString("Output file -- nds/bin/dat/txt file to write to (required)"),
                    (ArgCallback_t)&SplitOp::outfileArg);
 
   allArgs[QString("start")] =
