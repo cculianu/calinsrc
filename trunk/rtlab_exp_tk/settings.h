@@ -25,11 +25,9 @@
 #include <iterator>
 #include <set>
 #include <map>
-#include <qfile.h>
+#include <qiodevice.h>
 #include <qstring.h>
-#include <qrect.h>
 #include <qregexp.h>
-#include "comedi_device.h"
 
 /* 
    todo: figure out a nice way to use hashsets on  all this so
@@ -39,178 +37,80 @@
          ConfigurationWindow so that it can automatically update itself??
 */
 
-#  define DAQ_SYSTEM_USER_DIR QString(getenv("HOME")) + "/." + DAQ_DIRNAME
 
 class Settings
 {
  public:
+  typedef map<QString, QString> Section;
+  typedef map<QString, set<QString> > DirtyMap;
+  typedef map<QString, Section> SettingsMap;
 
   Settings();
-  virtual ~Settings(){};
+  Settings(QIODevice * device);
 
-  virtual void parseConfig();
+  virtual ~Settings();
+
+  virtual void parseSettings(); // NB: this clobbers the existing settings in this class!
   virtual void saveSettings();
-  virtual QString getConfigFileName() const;
+  virtual QString getConfigFileName() const; // automatically creates a QFile
   virtual void setConfigFileName(const QString & name); /*  after setting this,
-							    typically you need 
-							    to call 
-							    parseConfig() */
-  virtual QString get(const QString & key) const 
-    { return settingsMap.find(key)->second; };
+                                                            typically you need
+                                                            to call
+                                                            parseConfig() */
+
+  // alternate usage, pass in a QIODevice
+  virtual void setConfigDevice(QIODevice * device);
+  virtual QIODevice * getConfigDevice() const;
+
+  virtual QIODevice::Offset length() const;
+
+  virtual QString currentSection() const { return _currentSection; };
+  virtual void setSection(const QString & section) { _currentSection = section; };
+
+  virtual QString get(const QString & key) const;
+  virtual void put(const QString &key, const QString &value);
+
+  virtual QString get(const QString & section, const QString & key) const;
+  virtual void put(const QString & section, const QString &key, const QString &value);
+
+  virtual void putSection(const QString & section_name, const Section & section);
+  virtual Section getSection(const QString & section_name) const;
 
  protected:
 
-  set<QString> dirtySettings; 
+  QString _currentSection;
 
-  map<QString, QString> settingsMap;
+  DirtyMap dirtySettings;
 
-  /* a derived class NEEDS to set masterSettings hopefully in constructor! */
-  const map<QString, QString> *masterSettings;
+  SettingsMap settingsMap;
+
+  /* a derived class may optionally set masterSettings -- without it all settings in the file are read and acknowledged */
+  const SettingsMap *masterSettings;
 
   /* Derived classes may need to override these in their constructors! */
-  const QRegExp valueRE, lineRE;
+  const QRegExp lineRE, sectionRE;
 
-/* searches config file for key and  returns it's value or a null QString */
-  virtual QString findValue(const QString & key); 
+/* reads all the name/value pairs in the settings file and throws them in a map and returns that */
+  virtual SettingsMap readAll();
 
   /* parses a VALID settings line and populates key and value */
   virtual void parseMatchedLine(const QString & matchedline, 
-				QString & key, QString & value) const; 
+                                QString & key, QString & value) const;
 
   /* returns a matched substring from line if line matches the lineRE, 
      or otherwise a null QString */
   virtual QString testLine(const QString & line) const;
+  /* returns a matched substring from line if line matches the sectionRE,
+     or otherwise a null QString */
+  virtual QString testSectionLine(const QString & line) const;
 
-  QFile configFile;
+  virtual void maybeDeleteConfigFile(); // kind of awkward but necessary
 
-};
-
-
-class DAQSettings: public Settings
-{
- public:
-
-  DAQSettings(const char *filename = 0);
-  
-  enum InputSource {
-    invalid_source_low = -1,
-    Comedi,
-    RTProcess,
-    File,
-    invalid_source_high    
-  };
-
-  enum DataFileFormat {
-    invalid_format_low = -1,
-    Binary,
-    Ascii,
-    invalid_format_high    
-  };
-
-
-  /* Class used to encapsulate default settings for the daq system. 
-     Instances of this class should be assigned to Settings::masterSettings,
-     as they contain the master list of settings to read from the config file*/
-  class DaqMasterDefaults: public map<QString, QString>
-  {
-  public:
-    DaqMasterDefaults();  /* constructs a map with daq_system specific 
-			     default settings */
-  };
-
-  /* Configurable Settings Methods
-     -----------------------------
-     When adding configurable settings, it is important to update this class 
-     with methods below, as well as associated members  */
-  const QString & getDevice() const;
-  void setDevice(const QString & dev);
-  
-  const QString & getTemplateFileName() const;
-  void setTemplateFileName(const QString &fileName);
-
-  const QString & getFileSourceFileName() const;
-  void setFileSourceFileName(const QString & fileName);
-
-  InputSource getInputSource() const;
-  void setInputSource(InputSource source);
-
-  bool getShowConfigOnStartup() const;
-  void setShowConfigOnStartup(bool yesorno);
-
-  const QString & getDataFile() const;
-  void setDataFile(const QString & fileName);
-
-  DataFileFormat getDataFileFormat() const;
-  void setDataFileFormat(DataFileFormat format);
-
-  /* returns a null QRect (isNull() == true) if specified channel
-     has no settings */
-  const QRect & getWindowSetting(uint channel_number) const;
-  /* to disable a window, pass a null QRect */
-  void setWindowSetting(uint channel_number, const QRect & rect);
-
-  /* returns a set of channel-id's that are all channels
-     that have window settings.  This is intended to be used in daq system
-     as a master list of channels to re-open for the user as a convenience
-     on startup. All the windowSettings in this set will return a valid
-     QRect in getWindowSettings() */
-  set<uint> windowSettingChannels() const;
-
-  /* Struct used by daq system to communicate with the settings class */
-  struct ChannelParams {
-    uint n_secs;
-    uint range;
-    bool spike_on;
-    double spike_thold;
-    bool spike_polarity;
-    uint spike_blanking;
-
-    void setNull(bool n) { isnull = n; };
-    bool isNull() const { return isnull; };
-    ChannelParams() { setNull(true); };
-   private:
-    bool isnull; // means this channel params struct is ignoreable
-  };
-
-  void setChannelParameters(uint channel_number, const ChannelParams & cp);
-  const ChannelParams & getChannelParameters(uint channel_number) const;
+  QIODevice *configFile;
+  bool need_to_delete_configFile;
 
  private:
-
-  map<uint, QRect> windowSettings;
-
-  map<uint, ChannelParams> channelParams;
-
-  /* parses the windosettings string and sets up the windowSettings map */
-  void parseWindowSettings();
-  
-  /* generates the windowsettings string to be saved to config file */
-  void generateWindowSettingsString();
-
-  /* parses the channel parameters string and sets up the channelParams map */
-  void parseChannelParameters();
-
-  /* generates the channel params string to be saved to config file */
-  void generateChannelParametersString();
-
-  /* master list of all settings we like to worry about in daq system */
-  static const DaqMasterDefaults daqMasterSettings; 
-
-  static const QString defaultConfigFileName;
-
-  static const char 
-    * const KEY_TEMPLATE_FILE_NAME = "templateFileName",
-    * const KEY_DEVICE = "device",
-    * const KEY_FILE_SOURCE_FILE_NAME = "fileSourceFileName",
-    * const KEY_DEFAULT_INPUT_SOURCE = "defaultInputSource",
-    * const KEY_SHOW_CONFIG_ON_STARTUP = "showConfigOnStartup",
-    * const KEY_DATA_FILE = "dataFile",
-    * const KEY_DATA_FORMAT = "dataFileDefaultFormat",
-    * const KEY_CHAN_WIN_SETTINGS = "channelWindowSettings",
-
-
-    * const KEY_CHANNEL_PARAMS = "channelParameters";
-
+  void init();
 };
 
 

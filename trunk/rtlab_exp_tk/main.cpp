@@ -37,7 +37,7 @@ extern "C" {
 #include "common.h"
 #include "exception.h"
 #include "probe.h"
-#include "settings.h"
+#include "daq_settings.h"
 #include "configuration.h"
 #include "daq_system.h"
 

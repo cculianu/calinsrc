@@ -39,7 +39,7 @@
 #include <comedi.h>
 
 #include "configuration.h"
-#include "settings.h"
+#include "daq_settings.h"
 #include "probe.h"
 #include "comedi_device.h"
 
