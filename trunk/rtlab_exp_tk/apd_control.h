@@ -107,7 +107,9 @@ struct MCShared {
 
   volatile double g_val[NumAOchannels];  /* the ui can change this and it affects control */
   volatile float delta_g[NumAOchannels]; /* the amount we modify g each time we do control */
-
+  unsigned int rt_monitoring_frequency; /* This is the frequency that the 
+                                           realtime side is running at, 
+                                           in Hz */
   unsigned int magic;   /* should always equal MC_SHM_MAGIC */
   int reserved[4]; /* just so i can look like i know what i am doing... */
 };

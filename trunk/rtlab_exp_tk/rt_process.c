@@ -81,6 +81,8 @@ MODULE_PARM(settling_time, "i");
 MODULE_PARM_DESC(settling_time, "The time in nanoseconds it takes the board's AI multiplexer to settle.  See your board's specifications for an appropriate settling time.  The default value is " STR(DEFAULT_SETTLING_TIME_ns) " nanoseconds.");
 MODULE_PARM(fifo_secs, "i");
 MODULE_PARM_DESC(fifo_secs, "This parameter determines the amount of time (and thus size) that the AI and AO RT-FIFO can queue up.  This time parameter should be sufficient as to avoid buffer overflows which could lead to dropped samples in userland.  The time/size is specified in terms of 'seconds' which translates to the number of seconds of scans the RT-FIFO can queue up before you get dropped samples.  This means that userland can be suspended for this long, if all channels were turned on, and there would still not be a problem with dropped scans.  The default value is " STR(DEFAULT_FIFO_SECS) " seconds.");
+MODULE_PARM(max_fifo, "i");
+MODULE_PARM_DESC(max_fifo, "This parameter determines the maximum amount of kernel memory each AI and AO fifo can take up.  The default value is " STR(DEFAULT_MAX_FIFO) " bytes.");
 
 #undef STR
 #undef STR1
@@ -98,7 +100,6 @@ EXPORT_SYMBOL_NOVERS(spike_info);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ao_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtlab_proc_root);
-EXPORT_SYMBOL_NOVERS(float2string);
 EXPORT_SYMBOL_NOVERS(voltage_at);
 EXPORT_SYMBOL_NOVERS(rtlab_lsampl_to_volts);
 EXPORT_SYMBOL_NOVERS(rtlab_volts_to_lsampl);
@@ -214,6 +215,7 @@ char *ai_device = DEFAULT_COMEDI_DEVICE,
 int  sampling_rate = INITIAL_SAMPLING_RATE_HZ;
 int  settling_time = DEFAULT_SETTLING_TIME_ns;
 int  fifo_secs    = DEFAULT_FIFO_SECS;
+int  max_fifo     = DEFAULT_MAX_FIFO;
 
 /* exported handles to be used with comedi functions.  This abstraction of
    comedi types is needed due to different treatments of the first parameter
@@ -232,7 +234,7 @@ struct spike_info spike_info;            /* Exported spike information     */
 
 /* some vars to keep track of the rt task period/rate */
 static long task_period = 0; 
-static struct timespec next_task_period;
+static struct timespec next_task_wakeup;
 static volatile atomic_t stop_daq_task = ATOMIC_INIT(0);
 
 static volatile sampling_rate_t last_sampling_rate = 0;
@@ -257,9 +259,10 @@ static void *daq_rt_task (void *arg)
 {
   /* below is used to put upper limit on the array in one_full_scan */
   struct rt_function_list *curr;
-  register hrtime_t loopstart = 0,     /* used to calibrate timing on
-                                          sampling rate changes            */
-                    lastloopstart = 0;
+  rtos_time_t   loopstart = 0,     /* used to calibrate timing on
+                                      sampling rate changes            */
+                lastloopstart = 0,
+                last_task_period = 0;
 
   register int  jitter_diff = 0;
 
@@ -278,24 +281,20 @@ static void *daq_rt_task (void *arg)
     
   }
 
-  clock_gettime(CLOCK_REALTIME, &next_task_period);
+  clock_gettime(CLOCK_REALTIME, &next_task_wakeup);
 
-  //  while (1) {
+  /*  while (1) { */
   while(!atomic_read(&stop_daq_task)) {
-
+        
     loopstart = rtos_get_time();
 
-    if (rtp_shm->scan_index > 1LL) {
+    if (last_task_period) {
     /* compute jitter */
-      jitter_diff = (lastloopstart + task_period) - loopstart;
+      jitter_diff = (loopstart - lastloopstart) - last_task_period;
       if (jitter_diff < 0) jitter_diff = -jitter_diff;
       if (((uint)jitter_diff) > rtp_shm->jitter_ns) 
         rtp_shm->jitter_ns = jitter_diff;     
     }
-
-    /* set next_task_period wakeup time to be a multiple of task_period, 
-       also recomputes task_period in case sampling_rate changed */
-    readjust_rt_task_wakeup();
 
     update_wall_clock_times(loopstart); /* update rtp_shm->time_ms */
 
@@ -354,12 +353,17 @@ static void *daq_rt_task (void *arg)
     /* increment scan_index counter */
     ++rtp_shm->scan_index; 
 
-    lastloopstart = loopstart;
-
     /* reads the control FIFO and possibly modifies rtp_shm */
     do_user_commands(rtp_shm); 
 
-    clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_task_period, 0);
+    /* set next_task_wakeup wakeup time to be a multiple of task_period, 
+       also recomputes task_period in case sampling_rate changed */
+    readjust_rt_task_wakeup();
+
+    last_task_period = task_period;
+    lastloopstart = loopstart;
+
+    clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_task_wakeup, 0);
   }
 
   return (void *)0;
@@ -431,12 +435,16 @@ int init_module(void)
     goto init_error;
   }
 
-  if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, rtp_shm->ai_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, 
+                                 rtp_shm->ai_fifo_sz_blocks 
+                                 * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
   }
 
-  if ((error = rtp_find_free_rtf(&rtp_shm->ao_fifo_minor, rtp_shm->ao_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ao_fifo_minor, 
+                                 rtp_shm->ao_fifo_sz_blocks 
+                                 * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
@@ -540,7 +548,7 @@ static void *calibrate_jitter(void *arg)
   
   for (i = 0; i < iterations; i++) {
     now = gethrtime();
-    timespec_add_ns(&next_time, period);
+    timespec_add_ns(&next_time, (long)period);
     if (last_iter > 0LL) {
       curr_jitter = now - (last_iter + (hrtime_t)period);
       if (curr_jitter < 0) curr_jitter = -curr_jitter;
@@ -739,12 +747,29 @@ init_shared_mem(void)
   rtp_shm->sampling_rate_hz = normalizeSamplingRate(sampling_rate);
   rtp_shm->scan_index = 0;
   rtp_shm->attached_pid = 0;
+  /* normalize max_fifo */
+  max_fifo = ( max_fifo > 0 ? max_fifo : 1);
   /* normalize fifo_secs */
-  fifo_secs = ( fifo_secs ? fifo_secs : 1);
+  fifo_secs = ( fifo_secs > 0 ? fifo_secs : 1);
+
+  /* Determine fifo sizes.. */
   rtp_shm->ai_fifo_sz_blocks = 
     fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ai_chans;
   rtp_shm->ao_fifo_sz_blocks = 
     fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ao_chans;
+
+  /* normalize fifo sizes... */
+  while (rtp_shm->ai_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES > max_fifo) 
+    rtp_shm->ai_fifo_sz_blocks--;
+  
+  if(!rtp_shm->ai_fifo_sz_blocks) rtp_shm->ai_fifo_sz_blocks = 1;
+
+
+  while (rtp_shm->ao_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES > max_fifo) 
+    rtp_shm->ao_fifo_sz_blocks--;
+  
+  if(!rtp_shm->ao_fifo_sz_blocks) rtp_shm->ao_fifo_sz_blocks = 1;
+
 
   /* initialize our time_ms variable */
   rtp_shm->time_ms = 0;
@@ -877,10 +902,10 @@ void cleanup_module(void)
     else if ( pthread_join(daq_task, 0) )
       printk (RT_PROCESS_MODULE_NAME": cannot join to RT thread! Argh!\n");    
     else 
-      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles, "
-              "max jitter was %lu ns.\n",
-              (unsigned long int)(rtp_shm ? rtp_shm->scan_index : 0),
-              (unsigned long int)(rtp_shm ? rtp_shm->jitter_ns  : 0));    
+      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %s cycles, "
+              "max jitter was %u ns.\n",
+              ui64str((rtp_shm ? rtp_shm->scan_index : 0)),
+              (rtp_shm ? rtp_shm->jitter_ns  : 0));    
     
   }
 
@@ -1411,8 +1436,16 @@ inline lsampl_t volts_to_sampl(SubDevT t, uint chan, uint range, double data)
 static int rtlab_proc_read (char *page, char **start, off_t off, int count, 
                             int *eof,  void *data)
 {
-  char pidbuf[24];
+  char pidbuf[24], 
+       si_buf[UINT64_BUFSZ], 
+       ms_buf[UINT64_BUFSZ], 
+       ns_buf[UINT64_BUFSZ];
+
   PROC_PRINT_VARS;
+
+  uint64_to_cstr(rtp_shm->scan_index, si_buf);
+  uint64_to_cstr(rtp_shm->time_ms, ms_buf);
+  uint64_to_cstr(rtp_shm->nanos_per_scan, ns_buf);
 
   switch ( (enum RTLabProcFiles)data ) {
   case RTLAB_PROC_FILE_RTLAB:
@@ -1424,9 +1457,9 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
     PROC_PRINT("RTLab is attached to PID: %s\n"
                "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
-               "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
-               "Relative Time: %u ms    "
-               "Nanos Per Scan: %u ns\n"
+               "Sampling Rate: %u Hz    Scan Index: %s\n"
+               "Relative Time: %s ms    "
+               "Nanos Per Scan: %s ns\n"
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
@@ -1437,9 +1470,9 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "(unimplmented)",
                "(unimplemented)",
                (uint)rtp_shm->sampling_rate_hz,
-               (uint)rtp_shm->scan_index,
-               (uint)rtp_shm->time_ms,
-               (uint)rtp_shm->nanos_per_scan,
+               si_buf,
+               ms_buf,
+               ns_buf,
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
@@ -1488,62 +1521,12 @@ inline void readjust_rt_task_wakeup(void)
 
   /* now re-tune the period, note that this is dangerous if set too
      fast, as the user task may never get to run! */
-  timespec_add_ns(&next_task_period, (long)task_period);    
+  timespec_add_ns(&next_task_wakeup, (long)task_period);    
 }
 
 /*-----------------------------------------------------------------------------
   UTILITY FUNCTIONS
 -----------------------------------------------------------------------------*/
-
-/* 
-   float2string
-   
-   Takes a float, f, and writes its decimal character string representation 
-   to the memory pointed to by the first param.
-   
-   num_decs is the number of decimal places to the right of the decimal
-   point required (trailing zeroes will be added).
-
-   n is the size of the destination string buffer.  
-
-   Note that if the string ends up being exactly n characters long, 
-   the trailing \0 is not written to the destination buffer 
-   (as per strncpy).
-
-   Note that a float as a decimal string can never exceed 23 characters, 
-   including trailing \0.
-
-   The number of characters actually printed is returned, not including
-   the trailing \0.
- */
-int float2string(char *out, int n, float f, int num_decs)
-{
-        static const int sz = 23;
-        char buf[sz]; /* temporary buffer - no string can be longer than 23
-                         because ints are 32 bit, ergo 10 places for ordinal
-                         and 10 places for mantissa = 20
-                         plus the period and \0 = 22
-                         plus one place for the optional minus '-' sign = 23 */
-        unsigned int mantissa, multiple = 0;
-        int ordinal, ret;
- 
-        if (n <= 0) return -EINVAL;
- 
-        if ((num_decs < 0) || (num_decs > 9)) return -EINVAL;
- 
- 
-        ordinal = f;
- 
-        while(num_decs--) multiple = (multiple ? multiple * 10 : 10);
-        mantissa = ( (f - (float)ordinal) * (float)multiple );
- 
-        ret = sprintf(buf, "%d.%u", ordinal, mantissa);
- 
-        buf[sz-1] = 0;
- 
-        strncpy(out, buf, n);
-        return (ret < n ? ret : n);
-}
 
 /** For a given channel id and MultiSampleStruct, gives you the voltage
     for that channel.  If the channel is not on, returns 0. */
@@ -1759,8 +1742,8 @@ static inline void update_wall_clock_times(rtos_time_t now)
 {
   
   static int64         first_call = 0; /* always relative to first_call. */
-  static const int32   nanos_per_micro = 1000L,
-                       micros_per_milli= 1000L;
+  static const int32   nanos_per_micro = 1000,
+                       micros_per_milli= 1000;
   uint64               quotient;
   uint32               remainder;
 

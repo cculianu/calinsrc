@@ -571,8 +571,8 @@ static int avn_stim_proc_read (char *page, char **start, off_t off, int count,
   char g_val[23], delta_g[23], g_adj;
   PROC_PRINT_VARS;
 
-  float2string(g_val, 23, G_VAL_CURR, 5);
-  float2string(delta_g, 23, DG_CURR, 5);
+  float2string(G_VAL_CURR, g_val, 23, 5);
+  float2string(DG_CURR, delta_g, 23, 5);
   g_adj = G_ADJ_CURR;
 
   PROC_PRINT("AVN Stimulation Experiment Realtime Kernel Module Statistics\n"

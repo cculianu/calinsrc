@@ -528,6 +528,7 @@ static int init_shared_mem(void)
   shm->apd_xx=(1.0 - (0.01*INIT_APD_XX));      //shm initialization you might want to change
   shm->ao0_ao1_cond_time=5;
   shm->link_to_ao0=0;
+  shm->rt_monitoring_frequency = APD_CONTROL_MONITOR_FREQUENCY;
 
   if ( (shm->ao_chan = 
         find_free_chan(rtp_shm->ao_chans_in_use, rtp_shm->n_ao_chans)) < 0) 
