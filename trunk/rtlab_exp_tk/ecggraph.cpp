@@ -572,12 +572,6 @@ ECGGraph::reset(uint64 new_outside_concept_of_a_sample_index)
   remakeAllPoints();
 }
 
-uint
-ECGGraph::currentPosition() const
-{
-  return currentSampleIndex;
-}
-
 void 
 ECGGraph::ffwd(unsigned int amt)
 {

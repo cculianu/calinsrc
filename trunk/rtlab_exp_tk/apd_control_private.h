@@ -104,6 +104,8 @@ class APDMonitor : public QObject
   uint beatNumber() const { return beat_num; }
   void setBeatNumber(uint b) { beat_num = b; }
   const QColor & currentColor() const { return colorState; }
+  const QColor & lastColor() const { return (colorState == color1 
+                                             ? color2 : color2); }
   const QColor & evenColor() const { return color1; }
   const QColor & oddColor() const { return color2; }
 
@@ -132,10 +134,10 @@ class APDMonitor : public QObject
   typedef map<uint, uint> Order;
   Order order, master_order;
 
-  uint beat_num;
+  uint beat_num; // default 0
   int first, last; // first and last chanids
-  const QColor &color1, &color2;
-  QColor colorState;
+  const QColor &color1, &color2; // odd, even colors
+  QColor colorState; // starts off even
 };
 
 /* 
@@ -160,6 +162,7 @@ class APDGrapher: public QObject {
    ECGGraph **graphs; // from APDcontrol class
    const APDMonitor *monitor;
    int apds[NumAPDGraphs]; // negative means no APD
+   QColor colors[NumAPDGraphs];
 };
 
 class APDcontrol: public QObject, public Plugin

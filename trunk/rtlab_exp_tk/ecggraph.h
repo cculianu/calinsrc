@@ -58,7 +58,7 @@ class ECGGraph : public QWidget {
             const char *name = 0,    /* " */
             WFlags f = 0);           /* " */
   
-  virtual ~ECGGraph();
+  ~ECGGraph();
 
   enum PlotMode {
     Lines,  /* Plots points as connected line segments */
@@ -71,83 +71,88 @@ class ECGGraph : public QWidget {
     Property Methods 
   */
 
-  virtual PlotMode plotMode() const { return pMode; }
-  virtual void setPlotMode(PlotMode m) { pMode = m; }
+  PlotMode plotMode() const { return pMode; }
+  void setPlotMode(PlotMode m) { pMode = m; }
 
   /* The width of circles, rects, and points... */
-  virtual uint pointSize() const { return _pointSize; }
-  virtual void setPointSize(uint s) { _pointSize = s; }
+  uint pointSize() const { return _pointSize; }
+  void setPointSize(uint s) { _pointSize = s; }
   /* The width of the little blip */
-  virtual uint blipSize() const { return _blipSize; }
-  virtual void setBlipSize(uint s) { _blipSize = s; }
+  uint blipSize() const { return _blipSize; }
+  void setBlipSize(uint s) { _blipSize = s; }
   
 
   /** Use this to change the way the pen looks.  Default is a yellowish
       width=1 pen */
-  virtual QPen & plotPen ();  
+  QPen & plotPen ();  
   
   /** Use this to change the way the spike line pen looks.  
       Default is a reddish dashed-line  width=1 pen */
-  virtual QPen & spikeLinePen ();
+  QPen & spikeLinePen ();
 
   /** Use this to change the way the blip pen looks.  
       Note that it will always be filled though
       Default is a  yellowish width=0 pen */
-  virtual QPen & blipPen ();  
-
+  QPen & blipPen ();  
+  
   /** Change the backgroundColor with this method */
-  virtual QColor & backgroundColor ();
-
+  QColor & backgroundColor ();
+  
   /** Changing gridcolor won't take effect immediately, only after the next
       time the grid needs to be recalculated (usually due to a resize) */
-  virtual QColor & gridColor ();
-
+  QColor & gridColor ();
+  
   /** Returns the maximum amplitude this graph can represent */
-  virtual double rangeMax() const;
-
+  double rangeMax() const;
+  
   /** Returns the minimum amplitude this graph can represent */
-  virtual double rangeMin() const;
+  double rangeMin() const;
 
   /** The x-axis property: namely number of seconds visible */
-  virtual int secondsVisible() const;
-
+  int secondsVisible() const;
+  
   /** The sampling rate this graph thinks we are at */
-  virtual int sampleRateHz() const { return _sampleRateHz; };
-
+  int sampleRateHz() const { return _sampleRateHz; };
+  
   /** True if we have spike detection turned on */
-  virtual bool spikeMode() const;
-
+  bool spikeMode() const;
+  
   /** Returns our spike threshhold.  If spikeMode() is false, this has 
       undefined behavior. */
-  virtual double spikeThreshold() const;
-
+  double spikeThreshold() const;
+  
   /*
     Method methods
   */
-
+  
   /* slides everything over and redraws the screen...*/
-  virtual void push_back(double amplitude);
-
+  void push_back(double amplitude);
+  
   /** plots the sample at the next position (keep calling this in a loop).
       X - value for this sample is determined by the current sample pos.
       Y - value is determined by amplitude.  
       FYI is just an arbitrary index that this class can use when
       emitting spikeDetected() */
-  virtual void plot (double amplitude, uint64 fyi);
-  virtual void plot (double amplitude);
-
-  virtual void paintEvent (QPaintEvent *);
-
-/* Renders the entire graph, sans spike line and background color, to
-   a pixmap.  The pixmap should already have a width and a height defined.
-   
-   This method is suitable for printing the graph, as the pixmap
-   can be easily printed afterwards. */    
-  virtual void renderToPixmap(QPixmap &) const;
-
+  void plot (double amplitude, uint64 fyi);
+  void plot (double amplitude);
+  
+  void paintEvent (QPaintEvent *);
+  
+  /* Renders the entire graph, sans spike line and background color, to
+     a pixmap.  The pixmap should already have a width and a height defined.
+     
+     This method is suitable for printing the graph, as the pixmap
+     can be easily printed afterwards. */    
+  void renderToPixmap(QPixmap &) const;
+  
   uint blockFactor() const { return block_factor; }
   uint setBlockFactor(uint p) { return block_factor = p; }
 
+  /* returns the current sample position from start.  The minimum
+     is 0 (after a reset() or on a new graph) and the max is
+     samplingRateHz() * secondsVisible() - 1 */
+  uint currentPosition() const { return currentSampleIndex; }
+  
 signals:
   // to do: move these out of here in favor of
   //        keeping this class generic?
@@ -160,7 +165,7 @@ signals:
       If you want to get this signal whenever the mouse
       pointer is over this graph, see QWidget::setMouseTracking() */
   void mouseOverAmplitude(double amplitude);
-
+  
   /** emits the cunulative sample index that the mouse is over */
   void mouseOverSampleIndex(uint64 cumSampleIndex);
 
@@ -180,53 +185,48 @@ signals:
   void gridlineMeaningChanged(const vector<uint64> &); 
 
  public slots:
+    
+  void setRange(double newRangeMin, double newRangeMax);
  
-  virtual void setRange(double newRangeMin, double newRangeMax);
-
   /* sets the spike threshhold to value 'amplitude'. */
-  virtual void setSpikeThreshold (double amplitude);
-
+  void setSpikeThreshold (double amplitude);
+ 
   /* clears the spike threshhold */
-  virtual void unsetSpikeThreshold ();
+  void unsetSpikeThreshold ();
 
   /* redraws the graph and resizes its internal data structures to fit
      a new number of seconds setting */
-  virtual void setSecondsVisible(int seconds);
+  void setSecondsVisible(int seconds);
   
   /* resets this graph to start plotting at the leftmost position */
-  virtual void reset(uint64 new_outside_ref_sample_index = 0); 
-
+  void reset(uint64 new_outside_ref_sample_index = 0); 
+  
   /* Fast forward the graph's plotting by amt sample indices */
-  virtual void ffwd(unsigned int amt); 
-
-  /* returns the current sample position from start.  The minimum
-     is 0 (after a reset() or on a new graph) and the max is
-     samplingRateHz() * secondsVisible() - 1 */
-  virtual uint currentPosition() const;
-
+  void ffwd(unsigned int amt); 
+   
  protected:
-
+  
   /** creates real (points array) and virtual (samples array) points,
       for a given amplitude at a given index  
       if clear = true, then sets the real point to null and the virtual
       point to a ridiculous value (-10000000) 
   */
-  virtual void makePoint (double amplitude, int sampleIndex = -1);
+   void makePoint (double amplitude, int sampleIndex = -1);
 
  protected:
 
-  virtual void plotPoints (int firstIndex, 
+   void plotPoints (int firstIndex, 
                            int lastIndex);
 
   void resizeEvent (QResizeEvent *event);
 
   /** used to trap mouse movement and send the mouseOverAmplitude()
       signal in this class */
-  virtual void mouseMoveEvent (QMouseEvent *event);
+   void mouseMoveEvent (QMouseEvent *event);
   
-  virtual void mousePressEvent (QMouseEvent *event);
+   void mousePressEvent (QMouseEvent *event);
 
-  virtual void mouseReleaseEvent (QMouseEvent *event);
+   void mouseReleaseEvent (QMouseEvent *event);
 
   unsigned int block_factor; /* actually commit to screen every 
                                 block_factor-th sample -- defaults to 10 */
@@ -269,18 +269,18 @@ signals:
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
-  virtual void plotPoints (int firstIndex, int lastIndex, QPaintDevice & device,
+   void plotPoints (int firstIndex, int lastIndex, QPaintDevice & device,
                            QPainter & painter, const QPen & pen, 
                            const QPointArray  & points) const;
 
-  virtual void deletePlotsBetween (int firstIndex, int secondIndex);
+   void deletePlotsBetween (int firstIndex, int secondIndex);
 
 
   // initializes/resets _buffer, _background.  Also creates the grid.
-  virtual void initBuffer ();
+   void initBuffer ();
 
 
-  virtual void initGrid (QPaintDevice & dev, int width = -1, int height = -1,
+   void initGrid (QPaintDevice & dev, int width = -1, int height = -1,
                          int columns = 10, int rows = 4) const;
 
 
@@ -288,27 +288,27 @@ signals:
       plots the result on to _buffer
       Usually called from resizeEvent() in order to scale the image to the
       new size before a repaint. */
-  virtual void remakeAllPoints ();
+   void remakeAllPoints ();
 
   /** The basic formula to translate a sample's vector to 
       physical x and y coordinates relative to the graph.  */
-  virtual QPoint sampleVectorToPoint (double amplitude, int sampleIndex,
-                                      int n_indices = -1,
-                                      int width = -1, int height = -1) const;
+   QPoint sampleVectorToPoint (double amplitude, int sampleIndex,
+                               int n_indices = -1,
+                               int width = -1, int height = -1) const;
 
   /** The inverse of sampleVectorToPoint() */
-  virtual void pointToSampleVector (const QPoint & point, 
+  void pointToSampleVector (const QPoint & point, 
                                     double *amplitude, int *sampleIndex); 
 
   /** Converts a local sample index to a cumulative sample index */
-  virtual long long cumulateSampleIndex(int localSampleIndex);
+  long long cumulateSampleIndex(int localSampleIndex);
 
-  virtual void paintSpikeTHoldLine();
-  virtual void clearSpikeTHoldLine();
-  virtual void computeSpikeTHoldPoints();
+  void paintSpikeTHoldLine();
+  void clearSpikeTHoldLine();
+  void computeSpikeTHoldPoints();
 
   /** draws that little blip artifact at the current position */
-  virtual void drawLittleBlip (int index = -1);
+  void drawLittleBlip (int index = -1);
 
   void computeCurrentSampleIndex(bool reset = false);
 

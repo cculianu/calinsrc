@@ -1164,15 +1164,17 @@ void APDInterleaver::gotAPD(const MCSnapShot &m)
     return;
   
   APDPair & p = it->second;
-  
-  p.apd[p.ct % 2] = m.apd;
-  p.color[p.ct % 2] = (p.ct % 2 ? monitor->oddColor() : monitor->evenColor());
+
+  if (p.ct >= 2) return;
+
+  p.apd[p.ct] = m.apd;
+  p.color[p.ct] = monitor->currentColor();
   p.ct++;
 }
 
 void APDInterleaver::newBeat(uint b)
 {
-  if (b-lastBeatGraphed > 2) {
+  if (b - lastBeatGraphed > 2) {
     graphAPDs();
     reset();
   }
@@ -1199,7 +1201,7 @@ void APDInterleaver::graphAPDs()
   for (; oit != oend; oit++) {
     if ( (it = channelAPDs.find(*oit)) == end) continue;
     APDPair & p = it->second;
-    if (p.ct >= 2) { // should actually always EQUAL 2!
+    if (p.ct == 2) { // should actually always EQUAL 2!
       /* plot even here ..*/
       graph->blipPen().setColor(p.color[0]);
       graph->plotPen().setColor(p.color[0]);
@@ -1223,7 +1225,7 @@ void APDInterleaver::graphAPDs()
 APDMonitor::APDMonitor(const QColor & c1, const QColor & c2, 
                        QObject *parent, DAQSystem *_ds) 
   : QObject(parent), beat_num(0), first(0), last(0),
-    color1(c1), color2(c2), colorState(c1) 
+    color1(c1), color2(c2), colorState(c2) 
 { 
   ds = _ds;
 
@@ -1305,9 +1307,9 @@ void APDMonitor::rebuildOrder()
 void APDMonitor::gotAPD(const MCSnapShot &m)
 {
   if(orderFirst() == m.apd_channel) {
-    if (colorState == color1) colorState = color2;
-    else colorState = color1;
-    emit beatNumberChanged(++beat_num);
+    beat_num++;
+    colorState = ( beat_num % 2 ? color1 : color2 );
+    emit beatNumberChanged(beat_num);
   }
 }
 
@@ -1400,6 +1402,7 @@ APDGrapher::gotAPD(const MCSnapShot &snapshot)
 {
   uint electrode_id = monitor->orderOf(snapshot.apd_channel);
   apds[electrode_id] = snapshot.apd;
+  colors[electrode_id] = monitor->currentColor();
 }
 
 void
@@ -1410,8 +1413,8 @@ APDGrapher::graphAll()
 
   for (electrode = 0; electrode < NumAPDGraphs; electrode++) {
     if (apds[electrode] >= 0) {
-      graphs[electrode]->plotPen().setColor(monitor->currentColor());
-      graphs[electrode]->blipPen().setColor(monitor->currentColor());
+      graphs[electrode]->plotPen().setColor(colors[electrode]);
+      graphs[electrode]->blipPen().setColor(colors[electrode]);
       graphs[electrode]->plot(static_cast<double>(apds[electrode]));
       had_at_least_one = true;
     } else {
@@ -1426,6 +1429,8 @@ APDGrapher::resetAPDs()
 {
   int i;
 
-  for(i = 0; i < NumAPDGraphs; i++)
+  for(i = 0; i < NumAPDGraphs; i++) {
     apds[i] = -1; // no APD
+    colors[i] = monitor->evenColor();
+  }
 }
