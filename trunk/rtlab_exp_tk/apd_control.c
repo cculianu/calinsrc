@@ -78,7 +78,7 @@ static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
 ---------------------------------------------------------------------*/
 static const  int STIM_PULSE_WIDTH = 2;      /* in milliseconds              */
 static const float STIM_VOLTAGE       = 5.0;   /* Preferred stim voltage       */
-static const float INITIAL_DELTA_G     = 0.01; /* for MCShared init.           */
+static const float INITIAL_DELTA_G    = 0.01; /* for MCShared init.           */
 static const float INITIAL_G_VAL          = 0.5;   /* "   "         "           */
 static const int MS_AFTER_THRESH_TO_LOOK_FOR_PEAK = 25; // time (ms) to look for AP peak after threshold crossing
 static const int INIT_APD_XX=90;
@@ -273,6 +273,12 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
 	// (which is given by state.pacing_interval_counter ... which at the current scan should be equal
 	//   to nominal_pi - apd), plus the perturbation (which is negative).
 	state.control_interval_counter = state.pacing_interval_counter+state.delta_pi;
+
+	//make pacing_interval_counter > control_interval_counter if this is a positive perturbation
+	//so that the natural pacing doesn't precede the control (unless we're continue_underlying)
+	if ( (state.delta_pi>=1) && (!(shm->continue_underlying)) )
+	  state.pacing_interval_counter = state.control_interval_counter + 1;
+
 	state.previous_perturbation_signs[3]=0;
       }
       else  state.previous_perturbation_signs[3]=1;
@@ -353,6 +359,7 @@ static void out_to_fifo(void) {
   working_snapshot.nominal_pi = shm->nominal_pi;
   working_snapshot.pi = state.previous_apd+state.di;
   working_snapshot.delta_pi = state.delta_pi;
+  working_snapshot.apd_channel = shm->apd_channel;
   working_snapshot.apd_xx = (int)(100*(1.0 - shm->apd_xx));
   working_snapshot.ap_ti = state.ap_ti;
   working_snapshot.ap_tf = state.ap_tf;  
