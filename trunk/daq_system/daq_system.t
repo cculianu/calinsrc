@@ -109,6 +109,9 @@ Cannot open ./Makefile.rtl_dir for writing
   close OFH;
   undef $rtl_dir; undef $rtlinux_dir;
 
+  if ( $project{'DAQ_HW'} ) {
+	$project{'DEFINES'} .= " HW=" . $project{'DAQ_HW'};
+  }
 #$}
 
 #!
