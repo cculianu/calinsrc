@@ -118,7 +118,9 @@ void OutputFileW::resuffixIze()
 {
   QString desired_suffix ( DAQSettings::fileFormatExts[fileFormat()] );
   
-  outputFile->setText(forceFilenameExt(outputFile->text(), desired_suffix));
+  /* hack to make a rare exception for /dev/null */
+  if ( outputFile->text() != "/dev/null" )
+    outputFile->setText(forceFilenameExt(outputFile->text(), desired_suffix));
 }
 
 void OutputFileW::toSettings()
