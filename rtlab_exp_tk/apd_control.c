@@ -40,13 +40,8 @@ MODULE_LICENSE("GPL");
 
 #define MODULE_NAME "MC Stim"
 
-<<<<<<< apd_control.c
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
-=======
-MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu");
-MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
->>>>>>> 1.9
 
 int apd_control_init(void); 
 void apd_control_cleanup(void);
@@ -166,15 +161,7 @@ struct StimState stim_state[NumAOchannels],
 /****************************************************************************************/
 static void do_apd_control_stuff (MultiSampleStruct * m)
 {
-<<<<<<< apd_control.c
   int which_ai_chan;
-=======
-  int which_ai_chan;
-
-  /* we're still on the same millisecond - this module should really run 
-     once every milliseond */
-  if (rtp_shm->time_ms == last_time_ms) return; 
->>>>>>> 1.9
 
   /* Note that do_pacing assumes that rt_process.o is running at precisely 1000 hz! */
   setup_analog_output();

@@ -122,19 +122,11 @@ static int rtlab_proc_register(void);
 struct calib_parms { int iterations; long period; };
 static void *calibrate_jitter(void *arg);
 
-<<<<<<< rt_process.c
 /* Since we can potentially be running at variable sampling rates, we need 
    to keep track of actual real wall clock time in ms.  This function is called
    early from inside the realtime loop. */
 static inline void update_wall_clock_times(rtos_time_t current_time);
 
-=======
-/* Since we can potentially be running at variable sampling rates, we need 
-   to keep track of actual real wall clock time in ms.  This function is called
-   early from inside the realtime loop. */
-static inline void update_time_ms(rtos_time_t current_time);
-
->>>>>>> 1.40
 /* Cleans up the sampling_rate parameter that comes in as a mod param,
    so that it is a multiple of 1000, or an even factor of 1000 */
 static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate);
@@ -305,13 +297,8 @@ static void *daq_rt_task (void *arg)
        also recomputes task_period in case sampling_rate changed */
     readjust_rt_task_wakeup();
 
-<<<<<<< rt_process.c
     update_wall_clock_times(loopstart); /* update rtp_shm->time_ms */
 
-=======
-    update_time_ms(loopstart); /* update rtp_shm->time_ms */
-
->>>>>>> 1.40
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
       rtl_printf("Just scanning the channels took %ld nanoseconds\n",(long int)(one_full_scan.acq_end - one_full_scan.acq_start));
@@ -1438,12 +1425,8 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
                "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
-<<<<<<< rt_process.c
                "Relative Time: %u ms    "
                "Nanos Per Scan: %u ns\n"
-=======
-	       "Relative Time: %u milliseconds\n"
->>>>>>> 1.40
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
@@ -1455,12 +1438,8 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "(unimplemented)",
                (uint)rtp_shm->sampling_rate_hz,
                (uint)rtp_shm->scan_index,
-<<<<<<< rt_process.c
                (uint)rtp_shm->time_ms,
                (uint)rtp_shm->nanos_per_scan,
-=======
-	       (uint)rtp_shm->time_ms,
->>>>>>> 1.40
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
@@ -1768,7 +1747,6 @@ static int internal_data_read_delayed( COMEDI_T dev, uint subdev, uint chan,
 	return comedi_do_insn (dev, &insn);
 }
 
-<<<<<<< rt_process.c
 /* Since we can potentially be running at variable sampling rates, we need 
    to keep track of actual real wall clock time in ms.  This function is called
    early from the realtime loop. */
@@ -1819,31 +1797,6 @@ static inline void possibly_call_cb(struct rt_function_list *it,
   }
 }
 
-=======
-/* Since we can potentially be running at variable sampling rates, we need 
-   to keep track of actual real wall clock time in ms.  This function is called
-   early from the realtime loop. */
-static inline void update_time_ms(rtos_time_t now)
-{
-  
-  static int64         first_call = -1; /* always relative to first_call. */
-  static const int32   nanos_per_milli = 1000000L;
-  uint64               quotient;
-  uint32               remainder;
-
-  /* TODO FIX THIS TO SOMEHOW USE NATIVE LONG LONG DIVISION!!
-     NOTE: do_div() is in asm/div64.h and is supposedly 64-bit-safe! */
-
-  if (first_call == -1) first_call = now; 
-
-  quotient = now - first_call;
-  remainder = do_div(quotient, nanos_per_milli);
-  if (remainder >= (nanos_per_milli / 2)) quotient++;
-  rtp_shm->time_ms = quotient;
-}
-
-
->>>>>>> 1.40
 #undef __I_AM_BUSY
 
 #ifdef TIME_RT_LOOP
