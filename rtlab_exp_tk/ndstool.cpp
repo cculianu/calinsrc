@@ -231,6 +231,9 @@ SplitOp::SplitOp()
     buildAllArgs(); 
 }
 
+/* An internal class to deal with writing to .txt, .nds, or .bin format files.
+   Auto-senses the file type based on the extention and saves the file
+   appropriately. */
 class TxtOrBinOrNDSWriter {
 public:
   TxtOrBinOrNDSWriter(const QString & file, uint rate, DSDStream::FileDataType t);
@@ -252,8 +255,8 @@ private:
 };
 
 TxtOrBinOrNDSWriter::TxtOrBinOrNDSWriter(const QString & file, 
-                           uint rate, 
-                           DSDStream::FileDataType t)
+                                         uint rate, 
+                                         DSDStream::FileDataType t)
   : rate(rate), dout(0), fout(0), tmp(0)
 {
   if (((m = BIN) && file.endsWith(".bin")) 
@@ -333,7 +336,7 @@ TxtOrBinOrNDSWriter::~TxtOrBinOrNDSWriter()
 void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
 {
   map<uint,float>::iterator it, end;
-  float data = static_cast<double>(index) / static_cast<double>(rate);
+  float data = index / static_cast<double>(rate);
   fwrite(&data, sizeof(float), 1, fout); // time
   for (it = chans.begin(), end = chans.end(); it != end; it++) {
     data = it->second;
@@ -343,8 +346,8 @@ void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
 
 void TxtOrBinOrNDSWriter::writeScanText(scan_index_t index, QTextStream & t)
 {
-  QString istr(uint64_to_cstr(index));
-  t << istr;
+  double time = index / static_cast<double>(rate);
+  t << time;
   map<uint,float>::iterator it, end;
   for (it = chans.begin(), end = chans.end(); it != end; it++) 
     t <<  " " << it->second;  
