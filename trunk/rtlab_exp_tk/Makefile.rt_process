@@ -18,9 +18,9 @@ include ./Makefile.rtl_dir
 COMEDI_DEVEL_HEADERS = /usr/src/comedi/include
 COMEDI_MODBUILD_DIR  = ${COMEDI_DEVEL_HEADERS}/modbuild
 
-all: rt_process.o avn_stim.o
+all: rt_process.o rtos_middleman.o rtlab.o avn_stim.o
 
-rt_process.o: rt_process.c rt_process.h shared_stuff.h
+rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h proc_macros.h
 # Some checks are on the next line
 	@( [ -d "${COMEDI_DEVEL_HEADERS}" ] && [ -r "${COMEDI_DEVEL_HEADERS}/linux/comedilib.h" ] || ( \
 	echo "***************************************************************************"; \
@@ -35,7 +35,13 @@ rt_process.o: rt_process.c rt_process.h shared_stuff.h
 	@echo "***************************************************************************"
 	$(CC) ${INCLUDE} ${CFLAGS} -I ${COMEDI_DEVEL_HEADERS} -I ${COMEDI_MODBUILD_DIR} -c -o rt_process.o rt_process.c
 
-avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h
+rtos_middleman.o: rtos_middleman.c shared_stuff.h rtos_middleman.h
+	$(CC) ${INCLUDE} ${CFLAGS} -c -o rtos_middleman.o rtos_middleman.c
+
+rtlab.o: rt_process.o rtos_middleman.o
+	$(LD) -r -o rtlab.o rt_process.o rtos_middleman.o
+
+avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h rtos_middleman.h proc_macros.h
 	@( [ -d "${COMEDI_DEVEL_HEADERS}" ] && [ -r "${COMEDI_DEVEL_HEADERS}/linux/comedilib.h" ] || ( \
 	echo "***************************************************************************"; \
 	echo "ERROR: Cannot find the comedi kernel headers. "; \

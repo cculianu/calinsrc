@@ -30,17 +30,14 @@
 #include <linux/bitops.h>
 #include <asm/semaphore.h> /* for synchronizing the exported functions */
 #include <asm/bitops.h>    /* for set/clear bit                        */
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/string.h> /* some memory copyage */
 #include <linux/fs.h> /* for the determine_minor() functionality */
+#include <linux/proc_fs.h>
 
-#include <rtl.h>
-#include <rtl_fifo.h>
-#include <rtl_sched.h>
-#include <mbuff.h>
+#include "rtos_middleman.h"
 
 #ifdef TIME_RT_LOOP
-#  include <rtl_time.h>
 #  define I_SHOULD_PRINT_TIME \
          (!( ((uint)rtp_shm->scan_index) % 10000))
 #endif
@@ -50,11 +47,15 @@
 				 in this system */
 #include "rt_process.h"       /* header file specific to this program */
 
+
+#include "proc_macros.h"
+
+
 #define __I_AM_BUSY (__this_module.flags & (MOD_DELETED | MOD_INITIALIZING | MOD_JUST_FREED | MOD_UNINITIALIZED))
 
 #define MODULE_NAME RT_PROCESS_MODULE_NAME
 
-#if LINUX_VERSION_CODE >= 132114
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL"); 
 #endif
 
@@ -75,6 +76,8 @@ EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ao_dev_handle);
+EXPORT_SYMBOL_NOVERS(rtlab_proc_root);
+EXPORT_SYMBOL_NOVERS(float2string);
 
 int init_module(void);        /* set up RT stuff */
 void cleanup_module(void) ;    /* clean up RT stuff */
@@ -84,15 +87,19 @@ static int init_comedi(void);
 /* sets up RT shared memory */
 static int init_shared_mem(void);   
 /* sets up the krange cache */
-static int build_krange_cache(void) ;
+static int build_krange_cache(void);
+
+/* sets up our proc dir entry */
+static int rtlab_proc_register(void);
 
 /* thread to calibrate RT jitter... */
-struct calib_parms { int iterations; hrtime_t period; };
+struct calib_parms { int iterations; long period; };
 static void *calibrate_jitter(void *arg);
 
 static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
+static void rtlab_proc_cleanup(void);
 /* RTP Registered functions... */
 static void grabScanOffBoard (MultiSampleStruct *m);  
 static void putFullScanIntoAIFifo (MultiSampleStruct *m); 
@@ -105,6 +112,16 @@ typedef enum SubDevT {
   AI = 0,
   AO
 } SubDevT;
+
+
+enum RTLabProcFiles {
+  RTLAB_PROC_FILE_RTLAB = 0, /* /proc/rtlab/rtlab */
+  RTLAB_PROC_FILE_UNKNOWN
+};
+
+/* called whenever a file in our /proc/rtlab/ proc directory is read 
+   void *data is given a value from the RTLabProcFiles enum above. */
+static int rtlab_proc_read (char *, char **, off_t, int, int *, void *data);
 
 /* operates on krange_cache below to determine the voltage for a sample */
 inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t data);
@@ -158,16 +175,21 @@ SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
 struct spike_info spike_info;            /* Exported spike information     */
 
 /* some vars to keep track of the rt task period/rate */
-static hrtime_t task_period = 0; 
+static long task_period = 0; 
+static struct timespec next_task_period;
+static volatile atomic_t stop_daq_task = ATOMIC_INIT(0);
 
 static volatile sampling_rate_t last_sampling_rate = 0;
 /* readjusts the period of pthread_t daq_task based on changes in 
    rtp_shm->sampling_rate_hz, changes: task_period and last_sampling_rate */
-inline int readjust_rt_task_period(void);
+inline void readjust_rt_task_wakeup(void);
 
 static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
                                            modules -- not exported so as
                                            to keep the interface clean...*/
+
+/* Our proc fs dir entry -- should be exported? */
+struct proc_dir_entry *rtlab_proc_root = 0;
 
 /* Used in init_module so that subroutines can report errors... */
 static int error;
@@ -200,22 +222,24 @@ static void *daq_rt_task (void *arg)
     
   }
 
+  clock_gettime(CLOCK_REALTIME, &next_task_period);
 
-  while (1) {
+  //  while (1) {
+  while(!atomic_read(&stop_daq_task)) {
+
     loopstart = gethrtime();
 
-    if (lastloopstart > 0LL) {
+    if (rtp_shm->scan_index > 1LL) {
     /* compute jitter */
       jitter_diff = (lastloopstart + task_period) - loopstart;
       if (jitter_diff < 0) jitter_diff = -jitter_diff;
       if (((uint)jitter_diff) > rtp_shm->jitter_ns) 
-        rtp_shm->jitter_ns = jitter_diff;
-      
+        rtp_shm->jitter_ns = jitter_diff;     
     }
 
-    /* recomputer period in case sampling_rate changed */
-    readjust_rt_task_period();
-
+    /* set next_task_period wakeup time to be a multiple of task_period, 
+       also recomputes task_period in case sampling_rate changed */
+    readjust_rt_task_wakeup();
 
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
@@ -269,7 +293,8 @@ static void *daq_rt_task (void *arg)
     ++rtp_shm->scan_index; 
 
     lastloopstart = loopstart;
-    pthread_wait_np();
+
+    clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_task_period, 0);
   }
 
   return (void *)0;
@@ -342,7 +367,7 @@ int init_module(void)
     pthread_attr_t attr;
     pthread_t calibration_thread;
     struct sched_param sched_param;
-    struct calib_parms calib_parms = { iterations:5000, period: 200000LL };
+    struct calib_parms calib_parms = { iterations:1000, period: 1000000L };
 
     /* create the calibration thread */
     pthread_attr_init(&attr);
@@ -381,11 +406,15 @@ int init_module(void)
     }
   }
 
-  /* assumption for readjust_rt_task_period () is rtp_shm is initialized.. */
-  if ( ( error = readjust_rt_task_period() ) ) {
+#if 0
+  /* assumption for readjust_rt_task_wakeup () is rtp_shm is initialized.. */
+  if ( ( error = readjust_rt_task_wakeup() ) ) {
     errorMessage = "Cannot make DAQ RT Task periodic";
     goto init_error;
   }
+#endif
+  
+  rtlab_proc_register(); /* it doesn't matter if this fails, we still go on */
 
   printk(RT_PROCESS_MODULE_NAME ": acquisition started at %d Hz (%s)\n", 
          rtp_shm->sampling_rate_hz, 
@@ -403,18 +432,22 @@ static void *calibrate_jitter(void *arg)
 {
   const int iterations = ((struct calib_parms *)arg)->iterations;
   const hrtime_t period = ((struct calib_parms *)arg)->period;
-  hrtime_t last_iter = 0, max_jitter = 0, curr_jitter = 0;
+  hrtime_t now, last_iter = 0, max_jitter = 0, curr_jitter = 0;
   int i; 
+  struct timespec next_time;
 
-  pthread_make_periodic_np(pthread_self(), gethrtime() + period, period);
-
-  for (i = 0; i < iterations; i++, pthread_wait_np()) {
-    curr_jitter = gethrtime() - (last_iter + period);
+  clock_gettime(CLOCK_REALTIME, &next_time);
+  
+  for (i = 0; i < iterations; i++) {
+    now = gethrtime();
+    timespec_add_ns(&next_time, period);
     if (last_iter > 0LL) {
+      curr_jitter = now - (last_iter + (hrtime_t)period);
       if (curr_jitter < 0) curr_jitter = -curr_jitter;
       if (curr_jitter > max_jitter) max_jitter = curr_jitter;
     }
-    last_iter = gethrtime();
+    last_iter = now;
+    clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_time, NULL);
   }
   
   rtp_shm->jitter_ns = max_jitter;
@@ -584,8 +617,8 @@ init_shared_mem(void)
 
   /* Open mbuff Shared Memory structure */
   rtp_shm = 
-    (SharedMemStruct *) mbuff_alloc (SHARED_MEM_NAME,
-                                     sizeof(SharedMemStruct));
+    (SharedMemStruct *) rtos_shm_attach (SHARED_MEM_NAME,
+                                         sizeof(SharedMemStruct));
   
   if (! rtp_shm) { /* means there was some sort of error allocating mbuff */
     return -ENOMEM;
@@ -678,17 +711,58 @@ int  build_krange_cache(void)
   return ret;
 }
 
+static int rtlab_proc_register(void)
+{
+  struct proc_dir_entry *ent;
+ 
+  rtlab_proc_root = create_proc_entry("rtlab", S_IFDIR, 0);
+  if (!rtlab_proc_root) {
+    printk("Unable to initialize /proc/rtlab\n");
+    return(-1);
+  }
+
+  rtlab_proc_root->owner = THIS_MODULE;
+  ent = create_proc_entry("rtlab", S_IFREG|S_IRUGO, rtlab_proc_root);
+  if (!ent) {
+    printk("Unable to initialize /proc/rtlab/rtlab\n");
+    return(-1);
+  }
+  ent->read_proc = rtlab_proc_read;
+  ent->data = (void *)RTLAB_PROC_FILE_RTLAB;
+  return(0);
+}
+
+static void rtlab_proc_cleanup(void)
+{
+  if (rtlab_proc_root) {
+    remove_proc_entry("rtlab", rtlab_proc_root);
+    remove_proc_entry("rtlab", 0);
+  }
+}
+
 void cleanup_module(void) 
 { 
+
+  rtlab_proc_cleanup(); /* get this out of the way first to avoid race 
+                           conditions with processes reading from proc
+                           after things like rtp_shm have been deleted. */
+
   /* delete daq_task */
   if (daq_task) {
+
+    atomic_set(&stop_daq_task, 1); /* since pthread_cancel() isn't
+                                      always implemented properly in RTAI */
+
     if ( pthread_cancel(daq_task) ) 
       printk (RT_PROCESS_MODULE_NAME": cannot cancel RT task (it died?).\n");
     else if ( pthread_join(daq_task, 0) )
-      printk (RT_PROCESS_MODULE_NAME": cannot join to RT thread! Argh!\n");
+      printk (RT_PROCESS_MODULE_NAME": cannot join to RT thread! Argh!\n");    
     else 
-      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles.\n",
-              (unsigned long int)(rtp_shm ? rtp_shm->scan_index : 0));    
+      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles, "
+              "max jitter was %lu ns.\n",
+              (unsigned long int)(rtp_shm ? rtp_shm->scan_index : 0),
+              (unsigned long int)(rtp_shm ? rtp_shm->jitter_ns  : 0));    
+    
   }
 
   /* delete the daq_task's stack */
@@ -716,8 +790,7 @@ void cleanup_module(void)
 
   if (rtp_shm) 
     /* free up shared memory */
-    mbuff_free(SHARED_MEM_NAME,(void *)rtp_shm);
-  
+    rtos_shm_detach((void *)rtp_shm);
 }
 
 static void cleanup_fifos (void) 
@@ -1111,20 +1184,107 @@ inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
   return ret;
 }
 
-
-inline int readjust_rt_task_period(void)
+/* called whenever a file in our /proc/rtlab/ proc directory is read 
+   void *data is given a value from the RTLabProcFiles enum above. */
+static int rtlab_proc_read (char *page, char **start, off_t off, int count, 
+                            int *eof,  void *data)
 {
-  static const hrtime_t undersleep = 0LL;
+  PROC_PRINT_VARS;
+
+  switch ( (enum RTLabProcFiles)data ) {
+  case RTLAB_PROC_FILE_RTLAB:
+    PROC_PRINT("AI Channels:\n%s\n"
+               "AO Channels:\n%s\n"
+               "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
+               "AI Minor Device: %d    AI Sub-Device ID: %d     "
+               "AO Minor Device: %d    AO Sub-Device ID: %d\n"
+               "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
+               "Realtime Loop Jitter (in nanos): %u\n",
+               "(unimplmented)",
+               "(unimplemented)",
+               (uint)rtp_shm->sampling_rate_hz,
+               (uint)rtp_shm->scan_index,
+               rtp_shm->ai_minor, rtp_shm->ai_subdev, 
+               rtp_shm->ao_minor, rtp_shm->ao_subdev,
+               rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
+               rtp_shm->jitter_ns);
+    
+    break;
+  default:
+    PROC_PRINT_RETURN;
+    break;
+    
+  }
+
+  PROC_PRINT_DONE;
+}
+
+
+inline void readjust_rt_task_wakeup(void)
+{
   if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
     /* user changed sampling rate -- DANGEROUS if set too high!!! */
     last_sampling_rate = rtp_shm->sampling_rate_hz;
     task_period = ((1000.0 / (double)last_sampling_rate) * MILLION);
-    /* now re-tune the period, note that this is dangerous if set too
-       fast, as the user task may never get to run! */
-    return pthread_make_periodic_np (daq_task, gethrtime() + task_period  - undersleep, 
-                                     task_period  - undersleep);
   }
-  return 0;
+
+  /* now re-tune the period, note that this is dangerous if set too
+     fast, as the user task may never get to run! */
+  timespec_add_ns(&next_task_period, (long)task_period);    
+}
+
+/*-----------------------------------------------------------------------------
+  UTILITY FUNCTIONS
+-----------------------------------------------------------------------------*/
+
+/* 
+   float2string
+   
+   Takes a float, f, and writes its decimal character string representation 
+   to the memory pointed to by the first param.
+   
+   num_decs is the number of decimal places to the right of the decimal
+   point required (trailing zeroes will be added).
+
+   n is the size of the destination string buffer.  
+
+   Note that if the string ends up being exactly n characters long, 
+   the trailing \0 is not written to the destination buffer 
+   (as per strncpy).
+
+   Note that a float as a decimal string can never exceed 23 characters, 
+   including trailing \0.
+
+   The number of characters actually printed is returned, not including
+   the trailing \0.
+ */
+int float2string(char *out, int n, float f, int num_decs)
+{
+        static const int sz = 23;
+        char buf[sz]; /* temporary buffer - no string can be longer than 23
+                         because ints are 32 bit, ergo 10 places for ordinal
+                         and 10 places for mantissa = 20
+                         plus the period and \0 = 22
+                         plus one place for the optional minus '-' sign = 23 */
+        unsigned int mantissa, multiple = 0;
+        int ordinal, ret;
+ 
+        if (n <= 0) return -EINVAL;
+ 
+        if ((num_decs < 0) || (num_decs > 9)) return -EINVAL;
+ 
+ 
+        ordinal = f;
+ 
+        while(num_decs--) multiple = (multiple ? multiple * 10 : 10);
+        mantissa = ( (f - (float)ordinal) * (float)multiple );
+ 
+        ret = sprintf(buf, "%d.%u", ordinal, mantissa);
+ 
+        buf[sz-1] = 0;
+ 
+        strncpy(out, buf, n);
+        return (ret < n ? ret : n);
 }
 #undef __I_AM_BUSY
 

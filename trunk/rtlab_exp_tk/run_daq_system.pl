@@ -30,17 +30,17 @@ sub mod_is_loaded($) {
 
 if ( ($pid = fork()) == 0 ) {
 	my $dir = &grab_pwd;
-	if ( (-e "${dir}/rt_process.o") && (-e "${dir}/daq_system") && (-e "${dir}/avn_stim.o" ) ) {
+	if ( (-e "${dir}/rtlab.o") && (-e "${dir}/daq_system") && (-e "${dir}/avn_stim.o" ) ) {
 		system("/sbin/rmmod avn_stim") if mod_is_loaded("avn_stim");
-		system("/sbin/rmmod rt_process") if mod_is_loaded("rt_process");
-		system("/sbin/insmod ${dir}/rt_process.o");
+		system("/sbin/rmmod rtlab") if mod_is_loaded("rtlab");
+		system("/sbin/insmod ${dir}/rtlab.o");
 		system("/sbin/insmod ${dir}/avn_stim.o");
-		die "rt_process module could not load\n" unless (mod_is_loaded("rt_process") && mod_is_loaded("avn_stim"));
+		die "rtlab module could not load\n" unless (mod_is_loaded("rtlab") && mod_is_loaded("avn_stim"));
 		($<,$>) = ($>,$<); # swap real and effective uid
 		$0 = "daq_system" && exec("${dir}/daq_system");
         } else {
 	    my $msg;
-	    $msg = "rt_process.o not found." if (! -e "${dir}/rt_process.o");
+	    $msg = "rtlab.o not found." if (! -e "${dir}/rtlab.o");
 	    $msg = "avn_stim.o not found." if (! -e "${dir}/avn_stim.o");
 	    $msg ||= "daq_system binary not found.";
 	    die   "$msg Compile it and rerun this script!\n";
@@ -48,6 +48,6 @@ if ( ($pid = fork()) == 0 ) {
 } else {
 	waitpid($pid, 0);
 	system("/sbin/rmmod avn_stim")   if mod_is_loaded("avn_stim");
-	system("/sbin/rmmod rt_process") if mod_is_loaded("rt_process");
+	system("/sbin/rmmod rtlab") if mod_is_loaded("rtlab");
 }
 

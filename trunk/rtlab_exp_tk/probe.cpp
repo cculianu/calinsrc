@@ -225,19 +225,28 @@ Probe::validate() const
 void
 Probe::attach_to_shm_and_stuff()
 {
-  // temporary hack
-  //  try {
+  // temporary hack -- UGLY!
+  try {
     have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
-    //  } catch (ShmException & e) {
-    //    have_rt_process = false;
-    //    shm = 0;
-    //  }
+    misc = static_cast<int>(ShmController::MBuff);
+
+  } catch (ShmException & e) {
+    try { 
+      have_rt_process = 
+        ((shm = ShmController::attach(ShmController::RTAI_Shm)) != 0);
+      misc = static_cast<int>(ShmController::RTAI_Shm);
+    } catch (ShmException & e) {
+      have_rt_process = false;
+      shm = 0;
+    }
+  }
 }
 
 void
 Probe::kill_shm() /* Only to be called if instance initialization is done! */
 {
-  if (shm) ShmController::detach(shm, ShmController::MBuff);
+  if (shm) 
+    ShmController::detach(shm, static_cast<ShmController::ShmType>(misc));
 }
 
 /* static */

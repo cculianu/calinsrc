@@ -22,6 +22,11 @@
 #if !defined(MBUFF_VERSION) && !defined(_TWEAKED_MBUFF_H)
 #define MBUFF_VERSION "0.7.2"
 #define _TWEAKED_MBUFF_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*---------------------------- MBUFF STUFF ----------------------------------
   We are using out own custom mbuff functions here because the rtl versions
   of these produced compiler warnings.  Hopefully they won't change too 
@@ -30,7 +35,7 @@
 
 /* max length of the name of the shared memory area */
 #define MBUFF_NAME_LEN 32
-
+#define MBUFF_MAX_MMAPS 16  
 #ifndef MBUFF_DEV_NAME
 #define MBUFF_DEV_NAME "/dev/mbuff"
 #endif
@@ -140,4 +145,158 @@ static void mbuff_detach(const char *name, void * mbuf) {
 	return;
 }
 /*-------------------------- END MBUFF STUFF --------------------------------*/
+
+static inline unsigned long nam2num(const char *name)
+{
+        unsigned long retval;
+        int c, i;
+ 
+        if (!(c = name[0])) {
+           return 0xFFFFFFFF;
+        }
+        i = retval = 0;
+        do {
+                if (c >= 'a' && c <= 'z') {
+                        c +=  (11 - 'a');
+                } else if (c >= 'A' && c <= 'Z') {
+                        c += (11 - 'A');
+                } else if (c >= '0' && c <= '9') {
+                        c -= ('0' - 1);
+                } else {
+                        c = c == '_' ? 37 : 38;
+                }
+                retval = retval*39 + c;
+        } while (i < 5 && (c = name[++i]));
+        return retval;
+}
+ 
+static inline void num2nam(unsigned long num, char *name)
+{
+        int c, i, k, q;
+        if (num == 0xFFFFFFFF) {
+                name[0] = 0;
+                return;
+        }
+        i = 5;
+        while (num && i >= 0) {
+                q = num/39;
+                c = num - q*39;
+                num = q;
+                if ( c < 37) {
+                        name[i--] = c > 10 ? c + 'A' - 11 : c + '0' - 1;
+                } else {
+                        name[i--] = c == 37 ? '_' : '$';
+                }
+        }
+        for (k = 0; i < 5; k++) {
+                name[k] = name[++i];
+        }
+        name[k] = 0;
+}
+
+
+#define RTAI_SHM_DEV "/dev/rtai_shm"
+#define RTAI_IOCTL_CMD_ATTACH 1
+#define RTAI_IOCTL_CMD_GET_SZ 2
+#define RTAI_IOCTL_CMD_FREE   3
+
+static inline int rtai_shmrq(int srq, unsigned int whatever)
+{
+        int fd;
+        int ret;
+ 
+        fd = open(RTAI_SHM_DEV,O_RDWR);
+        if ( fd < 0 ) return fd;
+ 
+        ret = ioctl(fd, srq, whatever);
+ 
+        close(fd);
+        return ret;
+}
+
+
+static void *rtai_malloc(unsigned long name, int size)
+{
+        void *adr = 0;
+        int hook;
+        struct { unsigned long name, size; } arg;
+ 
+        if (size <= 0) {
+                return 0;
+        }
+ 
+        if ((hook = open(RTAI_SHM_DEV, O_RDWR)) < 0) {
+                return 0;
+        }
+        arg.name = name;
+        arg.size = size;
+ 
+        if (!(size = rtai_shmrq(RTAI_IOCTL_CMD_ATTACH, 
+                                (unsigned long)(&arg)))) 
+          goto out;
+
+        adr = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_SHARED|MAP_FILE, hook,
+0);
+ 
+out:
+        close(hook);
+ 
+        return adr;
+}
+
+static inline void *rtai_malloc_adr(void *start_address, unsigned long name, 
+                                    int size)
+{
+        void *adr = 0;
+        int hook;
+        struct { unsigned long name, size; } arg;
+ 
+        if (size <= 0) {
+                return 0;
+        }
+        if ((hook = open(RTAI_SHM_DEV, O_RDWR)) < 0) goto out;
+ 
+        arg.name = name;
+        arg.size = size;
+        if (!(size = ioctl(hook, RTAI_IOCTL_CMD_ATTACH, 
+                           (unsigned long)(&arg)))) goto out;
+ 
+        adr = mmap(start_address, size, PROT_WRITE|PROT_READ,
+                MAP_FIXED|MAP_SHARED|MAP_FILE, hook, 0);
+ 
+out:
+        close(hook);
+        return adr;
+}
+
+static inline void rtai_free(int name, void *adr)
+{  
+        int size;
+
+        if ((size = rtai_shmrq(RTAI_IOCTL_CMD_GET_SZ, name))) {
+          munmap(adr, size);
+          rtai_shmrq(RTAI_IOCTL_CMD_FREE, name);
+        }
+}
+
+/* same interface as mbuff_attach */
+static void *rtai_shm_attach(const char *name,  int size)
+{
+  unsigned long name_as_num = nam2num(name);
+
+  return rtai_malloc(name_as_num, size);
+}
+
+/* same interface as mbuff_detach */
+static void rtai_shm_detach(const char *name, void * mbuf) 
+{
+  unsigned long name_as_num = nam2num(name);
+  
+  rtai_free(name_as_num, mbuf);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif 
