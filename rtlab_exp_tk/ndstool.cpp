@@ -242,11 +242,11 @@ int SplitOp::doIt()
    
     DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
 
-    scan_index_t real_start = in.scanIndex();
+    scan_index_t real_start = ( v.size() ? v[0].scan_index : in.scanIndex() );
 
     in.setInFile(state()->infile); // reopen it now that we know the real start
 
-    in.seek(state()->start);
+    in.jumpToScanIndex(real_start + state()->start);
 
     cerr << "Splicing out "  << Convert(state()->count).sStr() << " scans" 
          << endl
