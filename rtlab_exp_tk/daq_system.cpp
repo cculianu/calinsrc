@@ -1497,7 +1497,7 @@ void PluginMenu::pluginMenuContextReq(QListViewItem *item,
 void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin, 
                             void * & handle) throw (PluginException)
 {
-  handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
+  handle = dlopen(filename, RTLD_NOW);
   plugin = NULL;
   plugin_entry_fn_t entry = NULL;
   const char *name = NULL, **name_ptr = NULL;
