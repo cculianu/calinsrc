@@ -107,6 +107,9 @@ class ShmController
   virtual void setSpikeThreshold(uint chan, double threshold) = 0;  
   virtual void setSpikeBlanking(uint chan, uint milliseconds) = 0;
 
+  /* Dangerous if misused in realtime version of RTLab... */
+  virtual uint setSamplingRateHz(uint) = 0;
+
 
  protected:
  
@@ -165,6 +168,9 @@ class ShmControllerWithFifo : public ShmController
   void setSpikeEnabled(uint chan, bool onoroff);
   void setSpikeThreshold(uint chan, double threshold);  
   void setSpikeBlanking(uint chan, uint milliseconds);
+
+  // try and set the rate to new_rate and return the new rate 
+  uint setSamplingRateHz(uint new_rate);
 
  private:
 

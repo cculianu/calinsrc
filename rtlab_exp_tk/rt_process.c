@@ -350,22 +350,6 @@ static void *daq_rt_task (void *arg)
   return (void *)0;
 }
 
-/* This enforces sampling rates to be 'millisecond friendly' numbers  --
-   numbers that are factors of 1000 or are multiples of 1000 */
-static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate)
-{  
-  sampling_rate_t ret = INITIAL_SAMPLING_RATE_HZ;
-  int multiple = 0;
-
-  if (rate > 1000 && (multiple = round(rate / 1000.0))) { /* rate > 1000 */
-    ret = multiple * 1000;
-  } else if (rate && (multiple = round(1000.0 / rate)) ) { /* rate < 1000 */
-    ret = 1000 / multiple;
-  }
-
-  return ret;
-}
-
 int init_module(void) 
 {
   int i;

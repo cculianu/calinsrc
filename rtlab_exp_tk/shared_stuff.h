@@ -28,6 +28,9 @@
 #ifndef _SHARED_MEMORY_DOT_H
 # define _SHARED_MEMORY_DOT_H
 
+/** Some global defaults and constants */
+#include "rtlab_defaults.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,7 +61,6 @@ typedef unsigned int sampling_rate_t;
 */
 #include "spike_polarity.h"
 
-#define DEFAULT_SPIKE_BLANKING ((unsigned int)100) /* In milliseconds        */
 
 struct SpikeParams {
   volatile char enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
@@ -204,6 +206,30 @@ init_spike_params (SpikeParams *p)
     p->threshold[i] = 0.0;
   }
 }
+
+/* For round, et al */
+#include "kmath.h"
+
+/** This enforces sampling rates to be 'millisecond friendly' numbers  --
+    numbers that are factors of 1000 or are multiples of 1000 */
+static inline sampling_rate_t normalizeSamplingRate(sampling_rate_t rate)
+{ 
+  sampling_rate_t ret = INITIAL_SAMPLING_RATE_HZ;
+  int multiple = 0;
+
+  /** Make sure it's within bounds... */
+  if (rate > MAX_SAMPLING_RATE_HZ ) ret = MAX_SAMPLING_RATE_HZ;
+  else if (rate < MIN_SAMPLING_RATE_HZ ) ret = MIN_SAMPLING_RATE_HZ;
+
+  if (rate > 1000 && (multiple = round(rate / 1000.0))) { /* rate > 1000 */
+    ret = multiple * 1000;
+  } else if (rate && (multiple = round(1000.0 / rate)) ) { /* rate < 1000 */
+    ret = 1000 / multiple;
+  }
+
+  return ret;
+}
+
 
 /* 
    The SampleStruct structure

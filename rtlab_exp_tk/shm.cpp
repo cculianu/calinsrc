@@ -369,3 +369,8 @@ void ShmControllerWithFifo::setSpikeBlanking(uint chan, uint msec)
   rtlab->setSpikeBlanking(chan, msec);
 }
 
+
+uint ShmControllerWithFifo::setSamplingRateHz(uint rate)
+{
+  return rtlab->setSamplingRate(rate);
+}

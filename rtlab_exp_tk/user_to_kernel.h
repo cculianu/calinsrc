@@ -85,20 +85,21 @@ struct rtfifo_cmd {
   rtfifo_cmd() { RTFIFO_CMD_CLR(this); }
 #endif
   int cmd_begin;
-  int struct_version; /* Always equals SHD_SHM_STRUCT_VERSION */
+  int struct_version; /**< Always equals SHD_SHM_STRUCT_VERSION */
 
   rtlab_user_cmd command;
-  unsigned int chan; /* Not used for every command */
+  unsigned int chan; /**< Not used for every command */
   union {
-    unsigned int gain; /* for RTLAB_SET_GAIN* */
-    unsigned int aref; /* for RTLAB_SET_AREF* */
-    SpikePolarity polarity; /* for RTLAB_SET_SPIKE_POLARITY */
-    char enabled;  /* for RTLAB_SET_CHAN and RTLAB_SET_SPIKE */
-    unsigned int blanking; /* for RTLAB_SET_SPIKE_BLANKING */
-    double threshold; /* for RTLAB_SET_SPIKE_THRESHOLD */
-    sampling_rate_t sampling_rate_hz; /* for RTLAB_SET_SAMPLING_RATE */
-    scan_index_t    scan_index; /* for RTLAB_SET_SCAN_INDEX */
-    int pid; /* for RTLAB_SET_ATTACHED_PID */
+    unsigned int gain; /**< for RTLAB_SET_GAIN* */
+    unsigned int aref; /**< for RTLAB_SET_AREF* */
+    SpikePolarity polarity; /**< for RTLAB_SET_SPIKE_POLARITY */
+    char enabled;  /**< for RTLAB_SET_CHAN and RTLAB_SET_SPIKE */
+    unsigned int blanking; /**< for RTLAB_SET_SPIKE_BLANKING */
+    double threshold; /**< for RTLAB_SET_SPIKE_THRESHOLD */
+    scan_index_t    scan_index; /**< for RTLAB_SET_SCAN_INDEX */
+    int pid; /**< for RTLAB_SET_ATTACHED_PID */
+    sampling_rate_t sampling_rate_hz; /**< for RTLAB_SET_SAMPLING_RATE */
+
   } u;
   int cmd_end;
 };
