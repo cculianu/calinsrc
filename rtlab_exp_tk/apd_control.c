@@ -110,7 +110,7 @@ struct StimState {    //look in apd_control.h and apd_control.cpp for comments o
   double v_baseline_n_minus_1;   //v_baseline for the previous AP
   double v_baseline_n_minus_2;   //v_baseline for the (n-2) AP
   double v_apa;                              //action potential amplitude
-  double v90;
+  double v_xx;
   scan_index_t ap_ti;
   scan_index_t ap_tf;
   int apd;
@@ -134,7 +134,7 @@ struct StimState state = {scan_index:0,
 			  v_baseline_n_minus_1:RESET_V_BASELINE,
 			  v_baseline_n_minus_2:RESET_V_BASELINE,
 			  v_apa:RESET_V_APA,
-			  v90:0, 
+			  v_xx:0, 
 			  ap_ti:0, 
 			  ap_tf:0, 
 			  apd:0, 
@@ -236,7 +236,7 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
       // ******* currently baseline is set at the larger of the 2 previous baselines.
       if (state.v_baseline_n_minus_2 > which_baseline_to_use) 
 	which_baseline_to_use = state.v_baseline_n_minus_2;
-      state.v90 = (shm->apd_xx)*(state.v_apa - which_baseline_to_use) + which_baseline_to_use;
+      state.v_xx = (shm->apd_xx)*(state.v_apa - which_baseline_to_use) + which_baseline_to_use;
 
     }
   }
@@ -244,7 +244,7 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
   // is this scan the first time we cross back below apd90 ... if so, determine apd and do other
   // stuff, including compute control perturbation
   // obviously, this process can only occur after the peak voltage was found in the previous section
-  if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && (this_voltage<state.v90)) {
+  if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && (this_voltage<state.v_xx)) {
     state.find_peak=0;
     //set previous_apd and previous_di before we make changes to new di and new apd
     state.previous_apd = state.apd;
