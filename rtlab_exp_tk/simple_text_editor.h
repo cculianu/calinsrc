@@ -25,32 +25,34 @@
 #  define _LOG_H
 
 
-#include <qmultilineedit.h>
 #include <qstring.h>
 #include <qlayout.h>
+#include <qmenubar.h>
+#include <qpopupmenu.h>
+#include <qmultilineedit.h>
 #include <qlabel.h>
 
 #include "common.h"
 
-class ExperimentLog: public QWidget
+class SimpleTextEditor: public QWidget
 {
   Q_OBJECT 
 
  public:
-  /* constructs an ExperimentLog with no open outfiles.. use
+  /* constructs an SimpleTextEditor with no open outfiles.. use
      the property methods to set a template and outfile */
-  ExperimentLog (QWidget * parent = 0, const char * name = 0);
+  SimpleTextEditor (QWidget * parent = 0, const char * name = 0);
   
-  /* constructs an ExperimentLog with file as the output file and log_template
+  /* constructs an SimpleTextEditor with file as the output file and log_template
      as the log template file.  Attempts to open and/or read both files, and 
      may prompt the user to specify another file if it can't access
      one of the files passed in.  */
-  ExperimentLog (const QString & file, 
+  SimpleTextEditor (const QString & file, 
                  const QString & log_template = QString::null, 
                  QWidget * parent = 0, 
                  const char * name = 0);
 
-  ~ExperimentLog();
+  ~SimpleTextEditor();
     
   /* returns the save file name -- null means not set */
   const QString & outFile() const { return _outFile; }
@@ -82,19 +84,28 @@ class ExperimentLog: public QWidget
 
   void setUnsavedStatus(bool status) 
    { 
-     if ((status && !_unsaved_changes) || (!status && _unsaved_changes)) 
+     if ((status && !_unsaved_changes) || (!status && _unsaved_changes)) {
        changedLabel.setEnabled(status);    
+       fileMenu.setItemEnabled(revertMenuItemId, !outFile().isNull() && status);
+     }
      _unsaved_changes = status; 
    }
 
  private slots:
 
   void changed() { setUnsavedStatus(true); }
+  void copyAvail(bool avail) 
+    { 
+      editMenu.setItemEnabled(copyMenuItemId, avail);
+      editMenu.setItemEnabled(cutMenuItemId, avail);
+    }
+  void undoAvail(bool avail) { editMenu.setItemEnabled(undoMenuItemId, avail);}
+  void redoAvail(bool avail) { editMenu.setItemEnabled(redoMenuItemId, avail);}
 
- public:
+ protected:
 
- QMultiLineEdit & embeddedMultiLineEditorWidget() { return mle; }
- const QMultiLineEdit & embeddedMultiLineEditorWidget() const { return mle; }
+  QMultiLineEdit & embeddedMultiLineEditorWidget() { return mle; }
+  const QMultiLineEdit & embeddedMultiLineEditorWidget() const { return mle; }
 
  private:
   void init();
@@ -111,8 +122,14 @@ class ExperimentLog: public QWidget
   bool _unsaved_changes;
 
   QGridLayout layout; /* this manages this widget's layout */
+  QMenuBar menuBar; /* the menubar for this widget.. */
+
+  QPopupMenu fileMenu, editMenu;
+
   QMultiLineEdit mle; /* the actual editable text */
   QLabel fileNameLabel, changedLabel;
+  int saveMenuItemId, revertMenuItemId, undoMenuItemId, redoMenuItemId,
+      copyMenuItemId, cutMenuItemId;
 };
 
 #endif
