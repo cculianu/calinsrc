@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ ! -e "$LINUXDIR/.config" ]; then
+	cat <<EOF
+  *** You need to configure the kernel in ${LINUXDIR}
+  *** (${LINUXDIR}/.config not found!)
+EOF
+	exit 1
+fi
+
+
+if grep -q "CONFIG_RTLINUX=" ${LINUXDIR}/.config; then
+	RTOS=RTLINUX
+elif grep -q "CONFIG_RTHAL=" ${LINUXDIR}/.config; then
+	RTOS=RTAI
+else
+	RTOS=""
+	cat <<EOF
+  *** Your kernel needs to be compiled and patched with either RTAI or
+  *** RTLinux 3.1+ support!
+EOF
+	exit 1
+fi
+
+
+

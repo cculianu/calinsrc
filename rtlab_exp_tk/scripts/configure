@@ -1,0 +1,46 @@
+#!/bin/bash
+
+
+# ============================================================================
+# FUNCTIONS
+# ============================================================================
+function save () {
+	(rm $1; touch $1) || (echo "Could not save to '$1'" && exit 1)
+	echo "LINUXDIR=${LINUXDIR}" >> $1
+	echo "RTOSDIR=${RTOSDIR}" >> $1
+	echo "RTOS=${RTOS}" >> $1
+	echo "CFLAGS=${CFLAGS}" >> $1
+	echo "CPPFLAGS=${CPPFLAGS}" >> $1
+	echo "CC=${CC}" >> $1
+	echo "LD=${LD}" >> $1
+	echo "INCLUDE=${INCLUDE}" >> $1
+	echo "OTHERCRAP=${OTHERCRAP}" >> $1 # etc...
+}
+
+# ============================================================================
+# MAIN PROGRAM
+# ============================================================================
+if [ -z "${DEVEL}" ]; then
+	cat <<EOF
+  *** The configure script is not working yet!
+EOF
+	exit 1
+fi
+
+
+if [ -e ".config" ]; then
+	. .config
+fi
+
+
+read -p "Please enter the location of your linux source directory [${LINUXDIR}]: "
+if [ -n "${REPLY}" ]; then
+	LINUXDIR="$REPLY"
+fi
+
+. scripts/check_kernel
+
+. scripts/check_rtos # populates RTOS variable
+
+
+save .config
