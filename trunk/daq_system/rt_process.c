@@ -105,7 +105,7 @@ static void *daq(void *arg) { /* this task reads and writes data to a DAQ board 
 #else
     /* cheap hack to get this working with new comedi.. 
        this may be SLOW and may break timing! */
-    for (i = 0; i < NUM_AD_CHANNELS_TO_USE; i++) {
+    for (i = 0; i < sh_mem->num_ai_chan_in_use; i++) {
       packed_param = sh_mem->ai_chan[i]; /* for shorter line length below... */
       comedi_data_read(AI_DEV, AI_SUBDEV, CR_CHAN(packed_param), CR_RANGE(packed_param), CR_AREF(packed_param), ai_fifo_struct.data + i ); 
     }
@@ -201,7 +201,6 @@ int init_module(void) {
   /* create the realtime task */
   pthread_attr_init(&attr);
   sched_param.sched_priority = SCHED_RR; // realtime scheduling
-  sched_param.sched_priority = SCHED_OTHER; // debug without realtime 
 
   pthread_attr_setschedparam(&attr, &sched_param);
   if ( (error = pthread_create(&daq_task, &attr, daq, (void *)0) ) ) {
@@ -217,14 +216,14 @@ int init_module(void) {
     goto init_error;
   }
 
-  rtl_printf(RT_PROCESS_ID ": acquisition started at %d Hz (%s)\n", 
+  rtl_printf(RT_PROCESS_SHM_NAME ": acquisition started at %d Hz (%s)\n", 
 	     RT_HZ, 
 	     errorMessage);
   return 0;
 
  init_error:
   cleanup_module(); 
-  rtl_printf (RT_PROCESS_ID ": Failure -- can't initalize RT task (%s)\n", 
+  rtl_printf (RT_PROCESS_SHM_NAME ": Failure -- can't initalize RT task (%s)\n", 
 	      errorMessage);
   return error;
 }
@@ -236,7 +235,7 @@ static int init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
 
   /* Open mbuff Shared Memory structure */
   sh_mem = 
-    (volatile SharedMemStruct*) mbuff_alloc (RT_PROCESS_ID,
+    (volatile SharedMemStruct*) mbuff_alloc (RT_PROCESS_SHM_NAME,
 					     sizeof(SharedMemStruct));
   
   if (! sh_mem) { /* means there was some sort of error allocating mbuff */
@@ -248,6 +247,7 @@ static int init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
   sh_mem->num_ai_chan_in_use = NUM_AD_CHANNELS_TO_USE; /* num AI channels in use */
 
   for (i=0; i < sh_mem->num_ai_chan_in_use ; i++) { /* set channel parameters */
+    sh_mem->signal_params[i].channel_gain = INITIAL_CHANNEL_GAIN;
     sh_mem->signal_params[i].spike_blanking = InitSpikeBlanking;
     sh_mem->signal_params[i].spike_threshold = SCAN_UNITS;
     sh_mem->signal_params[i].spike_index = 0;
@@ -273,14 +273,14 @@ void cleanup_module(void) {
   /* delete daq_task */
   if (daq_task) {
     pthread_delete_np(daq_task);
-    rtl_printf(RT_PROCESS_ID ": deleted RT task after %d cycles (~%d seconds).\n",
+    rtl_printf(RT_PROCESS_SHM_NAME ": deleted RT task after %d cycles (~%d seconds).\n",
 	       (sh_mem ? sh_mem->scan_index : 0), 
 	       (sh_mem ? sh_mem->scan_index/RT_HZ: 0));
   }
 
   if (sh_mem) {
     /* free up shared memory */
-    mbuff_free(RT_PROCESS_ID,(void *)sh_mem);
+    mbuff_free(RT_PROCESS_SHM_NAME,(void *)sh_mem);
   }
 
 }

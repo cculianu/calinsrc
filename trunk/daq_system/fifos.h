@@ -49,9 +49,11 @@
        whould be of pre-allocated size writeOnlyArrSize
 
        This auto-dies with a message on error.
+  RETURNS
+    0 on success, an errno value on error.
 ----------------------------------------------------------------------------*/
 extern
-void 
+int
 openFifos
 (
  const unsigned int readOnlyDevNumbers[],

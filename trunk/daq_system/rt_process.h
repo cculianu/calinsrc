@@ -34,7 +34,7 @@
 //#define NUM_AD_CHANNELS_TO_USE NUM_AD_CHANNELS    //# analog input channels 
 #define NUM_AD_CHANNELS_TO_USE 8  //# analog input channels 
                                                   //to scan from DAQ board
-
+#define RT_PROCESS_MODULE_NAME "rt_process"
 /* Used in SharedMemStruct and SignalParams                                  */
 typedef unsigned long int scan_index_t; 
 
@@ -61,7 +61,7 @@ typedef struct {
 
 #define RT_HZ 1000             //rt_process loop frequency
 #define RT_QUEUE_SIZE (1000*sizeof(FIFO_struct))//size of RT queue
-#define RT_PROCESS_ID "RT-Linux DAQ system"     //text ID for this process
+#define RT_PROCESS_SHM_NAME "RT-Linux DAQ system"  //text ID for this process
 #define INITIAL_CHANNEL_GAIN 3  //initial channel gain (COMEDI)
 #define INITIAL_V_CHANNEL 0     //initial channel for V signal
 #define INITIAL_A_CHANNEL 1     //initial channel for A signal
@@ -72,7 +72,7 @@ typedef struct {
   of these  structures.
 */
 typedef struct {
-  int channel_gain;        /* DAQ channel gain for AI analog input           */
+  int channel_gain;
   scan_index_t spike_blanking;      
                            /* since_last_spike must be > spike_blanking      */
   int spike_threshold;     /* spike detect. threshold                        */

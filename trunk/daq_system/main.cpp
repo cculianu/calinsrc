@@ -197,27 +197,35 @@ int main( int argc, char **argv )
   const unsigned int readFifos[NUM_GET_FIFOS] = GET_FIFOS; 
   const unsigned int putFifos[NUM_PUT_FIFOS] = PUT_FIFOS;
 
-  /* open the fifos (dies on error) 
+  /* open the fifos (returns nonzero on error, prints errors via perror) 
      currently we only use ONE read-only fifo, /dev/rtf0,
    */
-  openFifos (readFifos, 
-	     NUM_GET_FIFOS, 
-	     putFifos, 
-	     NUM_PUT_FIFOS, 
-	     &ad_fifo_filedes, 
-	     NULL);
+  if (openFifos (readFifos, 
+		 NUM_GET_FIFOS, 
+		 putFifos, 
+		 NUM_PUT_FIFOS, 
+		 &ad_fifo_filedes, 
+		 NULL)
+      != 0) {
+    fprintf (stderr,
+	     "It is possible that %s%s is not loaded or did "
+	     "not load correctly.\n", RT_PROCESS_MODULE_NAME, ".o");
+    exit(1);
+  }
+
+  
 
   /* Shared Memory communicates with RT process -- use mbuff_attach()
      in userspace, and mbuff_alloc in kernel space */   
   SharedMemStruct *sh_mem =
-    (SharedMemStruct *)mbuff_attach(RT_PROCESS_ID, 
+    (SharedMemStruct *)mbuff_attach(RT_PROCESS_SHM_NAME, 
 				    sizeof(SharedMemStruct));
   if (!sh_mem) {
     fprintf(stderr, 
 	    "Failure: Cannot attach to shared memory segment '%s'. "
 	    "Make sure that you have permission to access /dev/mbuff and "
-	    "that mbuff.o is loaded.\n", 
-	    RT_PROCESS_ID);
+	    "that mbuff.o and %s%s are loaded.\n", 
+	    RT_PROCESS_SHM_NAME, RT_PROCESS_MODULE_NAME, ".o");
     exit(1);
   }
 
@@ -231,7 +239,7 @@ int main( int argc, char **argv )
   int ret = a.exec();
 
   // detach from shared memory
-  mbuff_detach(RT_PROCESS_ID,sh_mem);
+  mbuff_detach(RT_PROCESS_SHM_NAME,sh_mem);
 
   // close our 1 fifo
   close(ad_fifo_filedes);
