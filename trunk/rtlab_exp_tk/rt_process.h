@@ -80,11 +80,19 @@ typedef void (*rtfunction_t)(MultiSampleStruct *);
 
 struct spike_info {
   /* The last time a spike was encountered in each channel */
-  hrtime_t last_spike_time[SHD_MAX_CHANNELS];
+  hrtime_t last_spike_time[SHD_MAX_CHANNELS]; /* when spike began */
+  hrtime_t last_spike_ended_time[SHD_MAX_CHANNELS]; /* when spike ended */
   /* Same as SampleStruct.spike_period  */
   double period[SHD_MAX_CHANNELS]; /* in mlliseconds */
-  /* the set of channels that have spikes */
+  /* the set of channels that have spikes - for THIS scan */
   char spikes_this_scan[CHAN_MASK_SIZE];
+
+  char in_spike[CHAN_MASK_SIZE];       /* stateful bitmask indicating if
+                                          we are in the middle of a spike */
+  char saved_polarity[CHAN_MASK_SIZE]; /* if we are in_spike, this is relevant
+                                          (and true means positive polarity) */
+  double saved_thold[CHAN_MASK_SIZE];  /* if we are in_spike, this is relevant
+                                          to detect state change! */
 };
 
 /* 
