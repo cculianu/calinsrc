@@ -419,9 +419,9 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 
   for (uint i = 0; i < ranges.size(); i++) {
     c->addRangeSetting(ranges[i].min, ranges[i].max,
-		       ( ranges[i].unit == UNIT_volt 
-			 ? ECGGraphContainer::Volts
-			 : ECGGraphContainer::MilliVolts ));
+                       ( ranges[i].unit == UNIT_volt 
+                         ? ECGGraphContainer::Volts
+                         : ECGGraphContainer::MilliVolts ));
   }
 
 }
