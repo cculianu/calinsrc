@@ -916,8 +916,8 @@ static void detectSpikes (MultiSampleStruct *m)
   const uint avg_chan_time =
     ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
   hrtime_t this_chan_time;   
-  int polarity;
-  double thold;
+  int polarity, saved_polarity;
+  double thold, saved_thold;
 
   /* clear our spikes_this_scan mask.. */
   memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
@@ -927,21 +927,18 @@ static void detectSpikes (MultiSampleStruct *m)
     this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
     elapsed = (uint)(this_chan_time - spike_info.last_spike_ended_time[chan]);
     polarity = test_bit(chan, rtp_shm->spike_params.polarity_mask);
+    saved_polarity = test_bit(chan, spike_info.saved_polarity);
     thold = rtp_shm->spike_params.threshold[chan];
+    saved_thold = spike_info.saved_thold[chan];
 
     /* things are a bit different if we are inside a spike */
     if (test_bit(chan, spike_info.in_spike)) {
       /* IN SPIKE.. */
 
-      if ( 
-           /* if they swapped the spike polarity on us, we abort this spike! */
-           (polarity != test_bit(chan, spike_info.saved_polarity) )
-           /* OR if they modified the threshold, we abort this spike! */
-           || thold != spike_info.saved_thold[chan]
-           /* OR chan is positive polarity and sample dipped above thold */
-           || (polarity && m->samples[i].data <= thold) 
-           /* OR chan is negative polarity and sample dipped below thold */
-           || (!polarity && m->samples[i].data >= thold) 
+      if ( /* chan is positive polarity and sample dipped below thold */
+          (saved_polarity && m->samples[i].data <= saved_thold) 
+          /* OR chan is negative polarity and sample dipped above thold */
+          || (!saved_polarity && m->samples[i].data >= saved_thold) 
          )  {
         /* THEN end the spike by unsetting spike_info.in_spike
                 and also recording when the spike ended */
@@ -956,12 +953,12 @@ static void detectSpikes (MultiSampleStruct *m)
          actually test for the presence of a spike.. */         
         switch (polarity) {
         case Positive: /* from enum SpikePolarity */
-          if ( (m->samples[i].spike = thold <= m->samples[i].data) )
+          if ( (m->samples[i].spike = (thold <= m->samples[i].data) ) )
             /* we have a spike, so save the polarity */
             set_bit(chan, spike_info.saved_polarity); /* save the polarity */
           break;
         case Negative: 
-          if ( (m->samples[i].spike = thold >= m->samples[i].data) )
+          if ( (m->samples[i].spike = (thold >= m->samples[i].data) ) )
             /* we have a spike, so save the polarity */
             clear_bit(chan, spike_info.saved_polarity); /* save polarity */
           break;
