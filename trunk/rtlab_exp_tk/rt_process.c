@@ -59,9 +59,9 @@ MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time Sampling Task for use with kcomedilib and the daq_system user program");
 
 MODULE_PARM(ai_device,"s");
-MODULE_PARM_DESC(ai_device, "The comedi device file to use for analog input. Defaults to minor number " DEFAULT_COMEDI_DEVICE ".");
+MODULE_PARM_DESC(ai_device, "The comedi device file to use for analog input. Defaults to device file " DEFAULT_COMEDI_DEVICE ".");
 MODULE_PARM(ao_device, "s");
-MODULE_PARM_DESC(ao_device, "The comedi device file to use for analog output. Defaults to minor number " DEFAULT_COMEDI_DEVICE ".");
+MODULE_PARM_DESC(ao_device, "The comedi device file to use for analog output. Defaults to device file " DEFAULT_COMEDI_DEVICE ".");
 
 EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
@@ -728,7 +728,8 @@ static void cleanup_fifos (void)
 
 static void cleanup_comedi_stuff (void) 
 {
-  if (((int)rtp_comedi_ai_dev_handle) >= 0 && ai_subdev >= 0) {
+  if (((int)rtp_comedi_ai_dev_handle) != -1 && ai_subdev >= 0) {
+    printk( __FILE__":%d\n", __LINE__);
     /*  cancel any pending ai operation */
     comedi_cancel(rtp_comedi_ai_dev_handle, ai_subdev);
 
@@ -736,7 +737,8 @@ static void cleanup_comedi_stuff (void)
     comedi_unlock(rtp_comedi_ai_dev_handle, ai_subdev);
   }
 
-  if (((int)rtp_comedi_ao_dev_handle) >= 0 && ao_subdev >= 0) {
+  if (((int)rtp_comedi_ao_dev_handle) != -1 && ao_subdev >= 0) {
+    printk( __FILE__":%d\n", __LINE__);
     /*  cancel any pending ai operation */
     comedi_cancel(rtp_comedi_ao_dev_handle, ao_subdev);
 
@@ -745,12 +747,16 @@ static void cleanup_comedi_stuff (void)
   }
 
     /* close the analog input minor device */
-  if (((int)rtp_comedi_ai_dev_handle) >= 0)
+  if (((int)rtp_comedi_ai_dev_handle) != -1) {
+    printk( __FILE__":%d\n", __LINE__);
+
     comedi_close(rtp_comedi_ai_dev_handle);
-  
+  }  
     /* close the analog output minor device (if not already closed) */
-  if (((int)rtp_comedi_ao_dev_handle) >= 0 && ao_minor != ai_minor)
+  if (((int)rtp_comedi_ao_dev_handle) != ((int)rtp_comedi_ai_dev_handle) ) {
+    printk( __FILE__":%d\n", __LINE__);
     comedi_close(rtp_comedi_ao_dev_handle);
+  }
 }
 
 static 
