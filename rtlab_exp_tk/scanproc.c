@@ -31,6 +31,7 @@
 static int have_proc_fs(void);
 static int select_numeric_dir(const struct dirent *);
 static int countlist(void **);
+static int find_in_list(void **list, void *val);
 
 static int HAVEPROC_ = -1;
 #define HAVEPROC (HAVEPROC_ > -1 ? HAVEPROC_ : (HAVEPROC_ = have_proc_fs()))
@@ -62,12 +63,11 @@ static int select_numeric_dir(const struct dirent *d)
   return 1;
 }
 
-/* returns NULL on major error, or a malloc'd pointer to a zero-terminated
-   pid_t array (which may itself be of length 0) on success */
-pid_t *pids_of_my_exe(void)
+static char *get_my_exe(void)
 {
   char buf[PATH_MAX+1], myexe[PATH_MAX+1];
-  int ret;
+  char *ret = 0;
+  int count = 0;
 
   CHKPROC;
 
@@ -76,14 +76,31 @@ pid_t *pids_of_my_exe(void)
   /* build the /proc/self/exe string */
   snprintf(buf, PATH_MAX, "%s/%s/%s", PROCPATH, "self", "exe");
   
-  ret = readlink(buf, myexe, PATH_MAX);
+  count = readlink(buf, myexe, PATH_MAX);
 
   /* this should never happen.. */
-  if (ret < 0) { perror("readlink"); return 0; }
+  if (count < 0) { perror("readlink"); return 0; }
 
-  myexe[ret] = 0;
+  myexe[count] = 0;
+  ret = (char *)calloc(count+1, sizeof(const char *));
+  if (!ret) { perror("calloc"); return 0; }
+  strncpy(ret, myexe, count);
+  return ret;
+}
+
+/* returns NULL on major error, or a malloc'd pointer to a zero-terminated
+   pid_t array (which may itself be of length 0) on success */
+pid_t *pids_of_my_exe(void)
+{
+  char *myexe = get_my_exe();
+  pid_t *ret;
   
-  return pids_of_exe(myexe);
+  if (myexe) {
+    ret = pids_of_exe(myexe);
+    free(myexe);
+  }
+
+  return ret;
 }
 
 /* returns NULL on major error, or a malloc'd pointer to a zero-terminated
@@ -168,6 +185,18 @@ int num_procs_of_my_exe(void)
   return ret; 
 }
 
+int num_procs_of_my_exe_no_children(void)
+{
+  char *myexe = get_my_exe();
+  int ret = -1;
+  
+  if (myexe) {
+    ret = num_procs_of_exe_no_children(myexe);
+    free(myexe);
+  }
+  return ret;
+}
+
 int num_procs_of_exe(const char *exe)
 {
   pid_t *pids = pids_of_exe(exe);
@@ -178,6 +207,29 @@ int num_procs_of_exe(const char *exe)
 
   return ret; 
 }
+
+int num_procs_of_exe_no_children(const char *exe)
+{
+  pid_t *pids = pids_of_exe(exe);
+  int ret;
+
+  ret = countlist((void **)pids);
+  if (ret > 1) {
+    pid_t *cur, ppid;
+    int pos;
+    for (cur = pids; *cur; cur++) {
+      ppid = grab_parent_of_pid(*cur);
+      pos = find_in_list((void **)pids, (void *)ppid);
+      if (pos >= 0 && *cur != ppid) ret--; /* ppid is one of out pids, 
+                                              so dis-count *cur */
+    }
+  }
+
+  if (pids) free(pids);
+
+  return ret; 
+}
+
 
 char * grab_full_cmd_name_of_pid(pid_t pid, int *sz)
 {
@@ -234,6 +286,25 @@ char * grab_my_stripped_cmd_name(int *sz)
   return grab_stripped_cmd_name_of_pid(getpid(), sz);
 }
 
+pid_t grab_parent_of_pid(pid_t pid) 
+{
+  char statusfile[PATH_MAX+1];
+  FILE *f;
+  int ret = 0, s;
+  
+  snprintf(statusfile, PATH_MAX, "%s/%d/status", PROCPATH, pid);  
+  statusfile[PATH_MAX] = 0;         
+  f = fopen(statusfile, "r");
+  if (!f) { /* silently ignore dead procs.. */ return ret; }
+  
+  s = fscanf(f, "%*s %*s %*s %*s %*s %*s %*s PPid: %d", &ret);
+  if ( s != 1 ) ret = 0;
+
+  fclose(f);
+
+  return (pid_t)ret;
+}
+
 
 static int countlist(void **list)
 {
@@ -242,4 +313,16 @@ static int countlist(void **list)
   while (list && *(list++)) ret++;
   
   return ret;
+}
+
+
+static int find_in_list(void **list, void *val)
+{
+  int ret = 0;
+
+  while (list && *(list)) { 
+    if (((int)*list) == ((int)val)) return ret;
+    ret++; list++;
+  }
+  return -1;
 }
