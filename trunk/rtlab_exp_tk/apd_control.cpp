@@ -104,12 +104,6 @@ extern "C" {
 /* default values for the graphs */
 static const int beats_per_gridline = 100;
 static const int num_gridlines = 5;
-static const double apd_min   = 75.0,   //for graph axis
-                    apd_max   = 200.0,  //for graph axis
-                    delta_pi_min = -50,  //for graph axis
-                    delta_pi_max = 50,  //for graph axis
-                    g_min    = 0.0,  //for graph axis
-                    g_max    = 5.0;  //for graph axis
 
 /* the following struct and the static arrays of that struct are used
    to populate the graph axes controls.  These correspond to 
@@ -124,7 +118,7 @@ static const double apd_min   = 75.0,   //for graph axis
 const int APDcontrol::n_apd_ranges = 5;
 const APDcontrol::GraphRangeSettings APDcontrol::apd_ranges[n_apd_ranges] =
   { 
-    { min: 75, max: 200 }, { min: 0, max: 200 }, { min: 0, max: 400 },
+    { min: 50, max: 180 }, { min: 0, max: 200 }, { min: 0, max: 400 },
     { min: -10, max: 600 }, { min: 0,  max: 1000 } 
   };
 
@@ -138,8 +132,8 @@ const APDcontrol::GraphRangeSettings APDcontrol::delta_pi_ranges[n_delta_pi_rang
 const int APDcontrol::n_g_ranges = 4;
 const APDcontrol::GraphRangeSettings APDcontrol::g_ranges[n_g_ranges] = 
   {
-    { min: 0, max: 5 }, { min: 0, max: 10 }, { min: 0, max: 20},
-    { min: 0, max: 40 }
+    { min: 0, max: 1 }, { min: 0, max: 5 }, { min: 0, max: 10},
+    { min: 0, max: 20 }
   };
 
 /********************************************************************/
