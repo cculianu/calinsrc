@@ -83,7 +83,7 @@ main(int argc, char *argv[], char *envp[])
 class AdvancedOptionsWindow : public QDialog
 { 
     typedef class ConfigurationWindow PARENTCLASS;
-    friend PARENTCLASS;
+    friend class PARENTCLASS;
     AdvancedOptionsWindow (PARENTCLASS *parent);
      
     QSpinBox *samplingRateSpinner;    
