@@ -153,7 +153,11 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
                              g_min, g_max,
                              graphs, QString(name()) + " - G Values");
 
-  g_graph->setPlotFactor(stim_graph->setPlotFactor(rr_graph->setPlotFactor(2)));
+  g_graph->setBlockFactor(stim_graph->setBlockFactor(rr_graph->setBlockFactor(0)));
+  g_graph->setPlotMode(ECGGraph::Points);
+  stim_graph->setPlotMode(ECGGraph::Points);
+  rr_graph->setPlotMode(ECGGraph::Points);
+
   graphlayout->addWidget(rr_graph, 1, 1); graphlayout->setRowStretch(1, 3);
   graphlayout->addWidget(stim_graph, 3, 1); graphlayout->setRowStretch(3, 3);
   graphlayout->addWidget(g_graph, 5, 1); graphlayout->setRowStretch(5, 3);

@@ -50,7 +50,7 @@ ECGGraph::ECGGraph (int sampleRateHz,
                     const char *name, 
                     WFlags f) : 
   QWidget (parent, name, f | WRepaintNoErase | WResizeNoErase), 
-  plot_factor(10),
+  block_factor(10),
   numSamples(sampleRateHz * secsVisible),
   _sampleRateHz(sampleRateHz), 
   secsVisible(secsVisible),
@@ -76,6 +76,9 @@ ECGGraph::ECGGraph (int sampleRateHz,
   _blipPen.setCapStyle(RoundCap);
   _blipPen.setColor("#ff0000");
 
+  _pointSize = 1;
+  _blipSize = 4;
+
   initBuffer(); // initialize the pixmap buffer
 
   computeCurrentSampleIndex(true); /* resets the current sample index */
@@ -100,7 +103,7 @@ QPen & ECGGraph::spikeLinePen () {
 
 /** Use this to change the way the blip pen looks.  
     Note that it will always be filled though
-    Default is a  yellowish width=0 pen */
+    Default is a  yellowish width=4 pen */
 QPen & 
 ECGGraph::blipPen () {
   return _blipPen;
@@ -158,9 +161,9 @@ void ECGGraph::setRange(double newRangeMin, double newRangeMax) {
 
 void ECGGraph::push_back(double amplitude)
 {
-  static const int plot_factor = 125; /* actually draw to screen every 
-                                       plotFactor()-th sample */
-  bool update_to_screen_flg = !(_totalSampleCount  % plot_factor);
+  static const int block_factor = 125; /* actually draw to screen every 
+                                       blockFactor()-th sample */
+  bool update_to_screen_flg = !(_totalSampleCount  % block_factor);
   int i;
 
   if (update_to_screen_flg) deletePlotsBetween (0, currentSampleIndex);
@@ -196,20 +199,20 @@ void ECGGraph::plot (double amplitude, uint64 sample_index) {
 
 void ECGGraph::plot (double amplitude) {
 
-  if ((!plotFactor()) ||
+  if ((!blockFactor()) ||
       (currentSampleIndex && currentSampleIndex != _totalSampleCount
-      && !(currentSampleIndex  % plotFactor()))) {
-    deletePlotsBetween (currentSampleIndex - (plotFactor() ? plotFactor() : 1),
+      && !(currentSampleIndex  % blockFactor()))) {
+    deletePlotsBetween (currentSampleIndex - (blockFactor() ? blockFactor() : 1),
                         currentSampleIndex);
   }
 
   makePoint(amplitude, -1);
 
-  if ((!plotFactor()) 
-      || currentSampleIndex && !(currentSampleIndex % plotFactor()) ) {
+  if ((!blockFactor()) 
+      || currentSampleIndex && !(currentSampleIndex % blockFactor()) ) {
 
     /* plot the lines */
-    plotPoints (currentSampleIndex - plotFactor(), currentSampleIndex);  
+    plotPoints (currentSampleIndex - blockFactor(), currentSampleIndex);  
 
     /* now draw the little blip */
     drawLittleBlip();
@@ -335,11 +338,23 @@ void ECGGraph::plotPoints (int firstIndex, int lastIndex,
                            const QPen & pen,
                            const QPointArray & points) const
 {
+  uint w = _pointSize, sz = points.size();
+  int i;
   painter.begin (&device);
   painter.setPen(pen);
   switch (pMode) {
   case Points:
     painter.drawPoints(points, firstIndex, lastIndex-firstIndex+1);
+    break;
+  case Circles:
+    painter.setBrush(QBrush(pen.color()));
+    for (i = firstIndex; i < ((int)sz) && i <= lastIndex; i++)
+      painter.drawEllipse(points[i].x()-(w/2), points[i].y()-(w/2), w, w );
+    break;
+  case Rectangles:
+    painter.setBrush(QBrush(pen.color()));
+    for (i = firstIndex; i < ((int)sz) && i <= lastIndex; i++)
+      painter.drawRect(points[i].x()-(w/2), points[i].y()-(w/2), w, w );
     break;
   default:
     painter.drawPolyline(points, firstIndex, lastIndex-firstIndex+1);
@@ -558,19 +573,17 @@ ECGGraph::ffwd(unsigned int amt)
 }
 
 void ECGGraph::drawLittleBlip (int index) {
-  static const int blipsize = 4; /* in pixels */
-
   if (index < 0) index = currentSampleIndex;
 
   QPoint here (points->at(index));
-  here.setY(here.y()-blipsize/2); // center  
-  here.setX(here.x()-blipsize/2); //        it
+  here.setY(here.y()-_blipSize/2); // center  
+  here.setX(here.x()-_blipSize/2); //        it
   
   
 
   if (!lastBlip.isNull()) {
     /* erase old blip */
-    bitBlt(this, lastBlip.x(), lastBlip.y(), &_buffer, lastBlip.x(), lastBlip.y(), blipsize, blipsize, CopyROP, TRUE);      
+    bitBlt(this, lastBlip.x(), lastBlip.y(), &_buffer, lastBlip.x(), lastBlip.y(), _blipSize, _blipSize, CopyROP, TRUE);      
     /* todo: fix this so the spike threshhold line doesn't get clobbered */
 
   }
@@ -580,7 +593,7 @@ void ECGGraph::drawLittleBlip (int index) {
   devicePainter.setBrush(SolidPattern);
   devicePainter.setBrush(_blipPen.color());
   devicePainter.setPen(_blipPen);
-  devicePainter.drawEllipse(here.x(), here.y(), blipsize, blipsize);
+  devicePainter.drawEllipse(here.x(), here.y(), _blipSize, _blipSize);
   devicePainter.setBrush(oldBrushColor);
   devicePainter.setBrush(oldBrush);
   devicePainter.end();

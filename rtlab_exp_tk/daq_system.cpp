@@ -352,13 +352,12 @@ DAQSystem::isValidDAQSettings(const DAQSettings & s)
 set<uint> DAQSystem::channelsWithSpikeThresholds() const
 {
   set<uint> ret;
-  vector<const ECGGraphContainer *> gcs = graphContainers();
-  vector<const ECGGraphContainer *>::iterator it, end;
+  vector<uint> cs = channelsOn();
+  vector<uint>::iterator it, end;
 
-
-  for (it = gcs.begin(), end = gcs.end(); it != end; it++)
-    if ( shmCtl.spikeEnabled((*it)->channelId) )
-      ret.insert((*it)->channelId);
+  for (it = cs.begin(), end = cs.end(); it != end; it++)
+    if ( shmCtl.spikeEnabled(*it) )
+      ret.insert((*it));
   
   return ret;
 }
@@ -469,7 +468,7 @@ void DAQSystem::changeAREF(ComediChannel::AnalogRef aref)
   /* make this semi-transactional */
   allChannelsOffSaveState(chanstate);
   shmCtl.setAREFAll(ComediSubDevice::AnalogInput, ComediChannel::ar2int(aref));
-  channelsOn(chanstate);
+  setChannelsOn(chanstate);
 }
 
 /* used solely for below method */
@@ -655,6 +654,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
 
   /* ladies and gentlemen, start your samplings!! */
   shmCtl.setChannel(ComediSubDevice::AnalogInput, chan, true);
+  shmCtl.setSpikeEnabled(chan, false);
   emit channelOpened(chan);
 
 }
@@ -847,6 +847,8 @@ void
 DAQSystem::graphOff(const ECGGraphContainer * gcont)
 {
   shmCtl.setChannel(ComediSubDevice::AnalogInput, gcont->channelId, false);
+  shmCtl.setSpikeEnabled(gcont->channelId, false);
+
   /* this is necessary so as to inform sample writer in some cases.. */
   readerLoop.turnOffChannel(gcont->channelId); 
   emit channelClosed(gcont->channelId);
@@ -1043,20 +1045,28 @@ void DAQSystem::print(vector<const ECGGraphContainer *> & gcs)
   painter.end();
 }
 
+vector<uint> DAQSystem::channelsOn() const
+{
+  uint i;
+  vector<uint> ret;
+  for (i = 0; i < shmCtl.numChannels(ComediSubDevice::AnalogInput); i++) {
+    if (shmCtl.isChanOn(ComediSubDevice::AnalogInput, i)) 
+      ret.push_back(i);
+  }
+  return ret;
+}
+
 void DAQSystem::allChannelsOffSaveState (vector<uint> & v)
 {
   uint i;
 
-  v.clear();
+  v = channelsOn();
   
-  for (i = 0; i < shmCtl.numChannels(ComediSubDevice::AnalogInput); i++) {
-    if (shmCtl.isChanOn(ComediSubDevice::AnalogInput, i)) 
-      v.push_back(i);
-    shmCtl.setChannel(ComediSubDevice::AnalogInput, i, false);
-  }
+  for (i = 0; i < v.size(); i++) 
+    shmCtl.setChannel(ComediSubDevice::AnalogInput, v[i], false);  
 }
 
-void DAQSystem::channelsOn (const vector<uint> & chanspec)
+void DAQSystem::setChannelsOn (const vector<uint> & chanspec) 
 {
   uint i;
 
