@@ -36,6 +36,9 @@ class QLineEdit;
 class QPushButton;
 
 
+/* A Widget used in the configuration screen and (maybe) other places
+   to specify an output file and format */
+
 class OutputFileW : public QWidget
 {
   Q_OBJECT

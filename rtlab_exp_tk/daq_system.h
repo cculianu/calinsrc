@@ -38,10 +38,8 @@
 #include <map>
 #include <vector>
 #include <string.h>
+#include "exception.h"
 #include "configuration.h"
-#include "sample_source.h"
-#include "sample_reader.h"
-#include "sample_writer.h"
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
 #include "simple_text_editor.h"
@@ -52,6 +50,12 @@
 
 class DAQSystem;
 class Plugin;
+
+class  SampleStructSource;
+class  SampleStructReader;
+class  SampleWriter;
+class  ShmController;
+class  ShmBase;
 
 /* A tiling class whose slot, tyle(), can be used to replace the somewhat
    undesirably-implemented tile() in QWorkspace */
@@ -102,6 +106,9 @@ class ReaderLoop: public QObject
  protected:
 
   DAQSystem *daq_system;
+
+  ShmBase *shm;   
+  ShmController * shmCtl; /* daq_system accesses this */
 
   bool graphListenerExists(uint channel_id);
 
@@ -195,6 +202,8 @@ class DAQSystem : public QMainWindow
 
   static bool isValidDAQSettings(const DAQSettings & s);
 
+  const ShmController & shmController() const { return shmCtl; }
+
  signals:
   void channelOpened(uint chan);
   void channelClosed(uint chan);
@@ -280,6 +289,7 @@ class DAQSystem : public QMainWindow
   QStatusBar statusBar;
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
+  ShmController & shmCtl; /* this comes directly from readerLoop */
 
   bool daqSystemIsClosingMode;
 
@@ -287,6 +297,7 @@ class DAQSystem : public QMainWindow
   Tyler tyler;
   
   PluginMenu plugin_menu;
+
 };
 
 

@@ -71,10 +71,10 @@ typedef unsigned int sampling_rate_t;
 #define DEFAULT_SPIKE_BLANKING ((unsigned int)100) /* In milliseconds        */
 
 struct SpikeParams {
-  char enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
-  char polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive          */
-  unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds               */
-  double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be dangerous!   */
+  volatile char enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
+  volatile char polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive          */
+  volatile unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds               */
+  volatile double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be dangerous!   */
 };
 
 #ifndef __cplusplus
@@ -88,9 +88,9 @@ typedef struct SpikeParams SpikeParams;
   for configuration-related communication from the non-real-time
   process to the real-time task.
 */
-# define SHARED_MEM_NAME "RT-Linux DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 056      /* test this against the below 
-                                            struct_version member            */
+# define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
+# define SHD_SHM_STRUCT_VERSION 58      /* test this against the below 
+                                           struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
   /* prevent compiler errors due to consts below */
@@ -105,17 +105,17 @@ struct SharedMemStruct {
                                             define                           */
 
   /* read/write struct memebers for kernel and userland                      */
-  unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
-                                             analog channel parameters, use
-                                             CR_PACK et al to modify this    */
-  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
+  volatile unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
+                                                      analog channel parameters, use
+                                                      CR_PACK et al to modify this    */
+  volatile unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
                            
-  char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
+  volatile char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
                                            process which channels to ignore. 
                                            Use inline funcs set_chan() and 
                                            is_chan_on() to set this           */
-  char ao_chans_in_use[CHAN_MASK_SIZE];  
-  sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
+  volatile char ao_chans_in_use[CHAN_MASK_SIZE];  
+  volatile sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
                                        loop (dangerous!).  Initialized to 1000  */
   
   volatile scan_index_t scan_index; /* index of current analog input scan --   
@@ -135,6 +135,8 @@ struct SharedMemStruct {
   dconst int ao_fifo_minor;              /* (currently unused)               */
   dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
   dconst unsigned int n_ao_chans;        /* ditto                            */
+  volatile dconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
+  volatile int reserved[4];              /* misc data                        */
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;
@@ -142,7 +144,7 @@ typedef struct SharedMemStruct SharedMemStruct;
 
 inline 
 int
-_test_bit (unsigned int bit, const char *bits)
+_test_bit (unsigned int bit, volatile const char *bits)
 {
   unsigned int elem_index = bit / 8, bitpos = bit % 8;
   char mask = 1;
@@ -154,7 +156,7 @@ _test_bit (unsigned int bit, const char *bits)
 
 inline
 void
-_set_bit (unsigned int bit, char *bits, int onoroff)
+_set_bit (unsigned int bit, volatile char *bits, int onoroff)
 {
   unsigned int elem_index = bit / 8, bitpos = bit % 8;
   char mask = 1;
@@ -169,12 +171,12 @@ _set_bit (unsigned int bit, char *bits, int onoroff)
 
 inline 
 int
-is_chan_on (unsigned int chan, const char array[CHAN_MASK_SIZE])
+is_chan_on (unsigned int chan, volatile const char array[CHAN_MASK_SIZE])
 { return (chan > SHD_MAX_CHANNELS ? 0 : _test_bit(chan, array) ); }
 
 inline
 void
-set_chan (unsigned int chan, char array[CHAN_MASK_SIZE], int onoroff)
+set_chan (unsigned int chan, volatile char array[CHAN_MASK_SIZE], int onoroff)
 { if (chan < SHD_MAX_CHANNELS) _set_bit(chan, array, onoroff); }
 
 inline

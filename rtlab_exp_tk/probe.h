@@ -30,6 +30,9 @@
 #include "exception.h"
 #include "comedi_device.h"
 
+
+class RTPShm;
+
 /* PROBE
    A pretty basic class to probe our environment. 
    Figures out what boards we have, whether rt_process is loaded, etc. 
@@ -45,8 +48,8 @@ class Probe
   /* Warning: this constructor may fail and throw a NoComediDeviceException
      if probe finds no candidate comedi devices! */
   Probe(bool allowBusyDevices = false, 
-	const QString & prefix = "/dev/comedi"); 
-
+        const QString & prefix = "/dev/comedi"); 
+  
   bool have_rt_process;
   vector<ComediDevice> probed_devices;
 
@@ -66,6 +69,8 @@ class Probe
   void attach_to_shm_and_stuff(); /* called from init. */
   void kill_shm(); /* tries to detach shm if attached */
   bool allowBusyDevices;
+
+  RTPShm *rtpshm;
 };
 
 

@@ -53,7 +53,7 @@
 
 #include "common.h"
 #include "daq_system.h"
-#include "shm_mgr.h"
+#include "shm.h"
 #include "ecggraph.h"
 #include "plugin.h"
 #include "exception.h"
@@ -144,6 +144,8 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
   : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
 {
+  daq_shmCtl = &daqSystem_parent->shmController();
+
   spooler = new TempSpooler<AVNLiebnitz>("avnstim", true);
 
   moduleAttach(); /* can throw exception here */
@@ -209,29 +211,31 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
     QWidget *tmpw = new QWidget(stats);
 
-    QGridLayout *tmplo = new QGridLayout(tmpw, 10, 2);
+    QGridLayout *tmplo = new QGridLayout(tmpw, 11, 2);
 
     tmplo->addWidget(new QLabel("Number of Stims: ", tmpw), 0, 0);
-    tmplo->addWidget(new QLabel("RR Interval (ms): ", tmpw), 1, 0);
-    tmplo->addWidget(new QLabel("RR Target (ms): ", tmpw), 2, 0);
-    tmplo->addWidget(new QLabel("RR Average (ms): ", tmpw), 3, 0);
-    tmplo->addWidget(new QLabel("No. of beats in RR Avg.: ", tmpw), 4, 0);
-    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 5, 0);
-    tmplo->addWidget(new QLabel("g-Too-Small-Count: ", tmpw), 6, 0);
-    tmplo->addWidget(new QLabel("g-Too-Big-Count: ", tmpw), 7, 0);
-    tmplo->addWidget(new QLabel("Delta g: ", tmpw), 8, 0);
-    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 9, 0);
+    tmplo->addWidget(new QLabel("Nominal Number of Stims: ", tmpw), 1, 0);
+    tmplo->addWidget(new QLabel("RR Interval (ms): ", tmpw), 2, 0);
+    tmplo->addWidget(new QLabel("RR Target (ms): ", tmpw), 3, 0);
+    tmplo->addWidget(new QLabel("RR Average (ms): ", tmpw), 4, 0);
+    tmplo->addWidget(new QLabel("No. of beats in RR Avg.: ", tmpw), 5, 0);
+    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 6, 0);
+    tmplo->addWidget(new QLabel("g-Too-Small-Count: ", tmpw), 7, 0);
+    tmplo->addWidget(new QLabel("g-Too-Big-Count: ", tmpw), 8, 0);
+    tmplo->addWidget(new QLabel("Delta g: ", tmpw), 9, 0);
+    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 10, 0);
     
     tmplo->addWidget(current_stim = new QLabel(tmpw), 0, 1);
-    tmplo->addWidget(current_rri = new QLabel(tmpw), 1, 1); 
-    tmplo->addWidget(current_rrt = new QLabel(tmpw), 2, 1); 
-    tmplo->addWidget(current_rr_avg = new QLabel(tmpw), 3, 1);
-    tmplo->addWidget(current_num_rr_avg = new QLabel(tmpw), 4, 1);    
-    tmplo->addWidget(current_g   = new QLabel(tmpw), 5, 1);
-    tmplo->addWidget(current_g2small = new QLabel(tmpw), 6, 1);
-    tmplo->addWidget(current_g2big = new QLabel(tmpw), 7, 1);
-    tmplo->addWidget(current_delta_g = new QLabel(tmpw), 8, 1);
-    tmplo->addWidget(last_beat_index = new QLabel(tmpw), 9, 1);
+    tmplo->addWidget(current_nom_stim = new QLabel(tmpw), 1, 1);
+    tmplo->addWidget(current_rri = new QLabel(tmpw), 2, 1); 
+    tmplo->addWidget(current_rrt = new QLabel(tmpw), 3, 1); 
+    tmplo->addWidget(current_rr_avg = new QLabel(tmpw), 4, 1);
+    tmplo->addWidget(current_num_rr_avg = new QLabel(tmpw), 5, 1);    
+    tmplo->addWidget(current_g   = new QLabel(tmpw), 6, 1);
+    tmplo->addWidget(current_g2small = new QLabel(tmpw), 7, 1);
+    tmplo->addWidget(current_g2big = new QLabel(tmpw), 8, 1);
+    tmplo->addWidget(current_delta_g = new QLabel(tmpw), 9, 1);
+    tmplo->addWidget(last_beat_index = new QLabel(tmpw), 10, 1);
 
   }
   
@@ -260,6 +264,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
     /* the analog output-related controls */
     tmphb = new QHBox(tmpvb);        
+    tmphb->setSpacing(6);
     
     
     (void) new QLabel("AO Stim Channel:", tmphb);
@@ -270,6 +275,11 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
     synchAOChan();
     connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
        
+    (void) new QLabel("Nominal Num. Stims:", tmphb);
+    QSpinBox *nomStimsSpinBox = new  QSpinBox (AVN_MIN_NUM_STIMS, AVN_MAX_NUM_STIMS, 1, tmphb);
+    nomStimsSpinBox->setValue(shm->nom_num_stims);
+
+    connect(nomStimsSpinBox, SIGNAL(valueChanged(int)), this, SLOT(changeNomNumStims(int)));
 
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(6);
@@ -317,17 +327,17 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
     (void) new QLabel("  No. RR Avg:", tmphb);
 
     num_rr_avg_bar_value = new QLabel(QString::number(shm->num_rr_avg), tmphb);
-    num_rr_avg_bar = new QScrollBar 
+    num_rr_avg_bar = new QScrollBar
       ( AVN_NUM_RR_AVG_MIN, AVN_NUM_RR_AVG_MAX, 1, 
         (AVN_NUM_RR_AVG_MAX - AVN_NUM_RR_AVG_MIN) / 10, shm->num_rr_avg,
         Qt::Horizontal, tmphb );  
 
     tmphb->setStretchFactor(num_rr_avg_bar, 1);
+   
 
     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
     connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));
     connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), num_rr_avg_bar_value, SLOT(setNum(int)));
-    
   }
   
   controlslayout->addMultiCellWidget // footnote at the bottom
@@ -510,6 +520,7 @@ void AVNStim::readInFifo()
   current_rri->setText(QString::number(last.rr_interval));
   current_rrt->setText(QString::number(last.rr_target));
   current_stim->setText(QString::number(last.stimuli));
+  current_nom_stim->setText(QString::number(last.nom_num_stims));
   current_g->setText(QString::number(last.g_val));
   if (!g_adj_manual_only->isChecked()) 
     gval->setText(QString::number(last.g_val));
@@ -552,8 +563,8 @@ void AVNStim::populateAOComboBox()
 
   ao_channels->clear();
 
-  for (i = 0; i < ShmMgr::numChannels(ComediSubDevice::AnalogOutput); i++)
-    if (!ShmMgr::isChanOn(ComediSubDevice::AnalogOutput, i) || i == shm->ao_chan)
+  for (i = 0; i < daq_shmCtl->numChannels(ComediSubDevice::AnalogOutput); i++)
+    if (!daq_shmCtl->isChanOn(ComediSubDevice::AnalogOutput, i) || i == shm->ao_chan)
       ao_channels->insertItem(QString::number(i));
   
 }
@@ -608,8 +619,8 @@ void AVNStim::synchAIChan()
 
  ai_channels->clear();
   ai_channels->insertItem("Off");
-  for (i = 0; i < ShmMgr::numChannels(ComediSubDevice::AnalogInput); i++)
-    if (ShmMgr::isChanOn(ComediSubDevice::AnalogInput, i))
+  for (i = 0; i < daq_shmCtl->numChannels(ComediSubDevice::AnalogInput); i++)
+    if (daq_shmCtl->isChanOn(ComediSubDevice::AnalogInput, i))
       ai_channels->insertItem(QString().setNum(i));
   
   sel = ai_channels->findItem(QString().setNum(shm->spike_channel), CaseSensitive | ExactMatch);
@@ -676,6 +687,10 @@ void AVNStim::changeDG(int new_dg_sliderval)
   delta_g_bar_value->setNum(avn_delta_g_fromint(new_dg_sliderval));
 }
 
+void AVNStim::changeNomNumStims(int n)
+{
+  shm->nom_num_stims = n;
+}
 
 const char * AVNStim::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"

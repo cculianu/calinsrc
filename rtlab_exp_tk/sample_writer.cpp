@@ -26,8 +26,23 @@
 #include <string.h>
 #include <errno.h>
 #include "sample_writer.h"
-#include "shm_mgr.h"
+#include "shm.h"
 
+SampleWriter::SampleWriter(uint sampling_rate_hz) 
+  : sampling_rate_hz(sampling_rate_hz), scan_index(0)
+{ 
+  _periodicFlush = flushPending = false; 
+}
+
+void SampleWriter::scanIndexChanged(scan_index_t newIndex)
+{
+  scan_index = newIndex;
+}
+
+void SampleWriter::samplingRateChanged(uint new_rate_hz)
+{ 
+  sampling_rate_hz = new_rate_hz; 
+}
 
 void SampleWriter::schedulePeriodicFlush()
 {
@@ -38,16 +53,13 @@ void SampleWriter::schedulePeriodicFlush()
   }
 }
 
-SampleGZWriter::SampleGZWriter() : SampleWriter()
+SampleGZWriter::SampleGZWriter(uint srate, const char *filename)
+  : SampleWriter(srate)
 {
   init();
+  if (filename) setFile(filename);
 }
 
-SampleGZWriter::SampleGZWriter(const char *filename) : SampleWriter()
-{
-  init();
-  setFile(filename);
-}
 
 SampleGZWriter::~SampleGZWriter()
 {
@@ -160,7 +172,7 @@ SampleGZWriter::putStateChangeInfo(const SampleStruct *s)
 { 
   int n =      
     snprintf(buffer + bufEnd, BUFSIZE - (int) bufEnd,
-	     stateChangeFormat, s->channel_id, ShmMgr::samplingRateHz(), 
+	     stateChangeFormat, s->channel_id, sampling_rate_hz, 
 	     s->scan_index);
   if (n < 0) {
     throw Exception ("Internal error.", "Buffer overflow...");
@@ -172,28 +184,29 @@ SampleGZWriter::putStateChangeInfo(const SampleStruct *s)
 
 
 
-SampleBinWriter::SampleBinWriter () : SampleWriter()
-{}
-
-SampleBinWriter::SampleBinWriter (const char * file) : SampleWriter()
+SampleBinWriter::SampleBinWriter (uint srate, const char * file) 
+  : SampleWriter(srate)
 {
-  setFile(file);
+  if (file)
+    setFile(file);
 }
 
-SampleBinWriter::~SampleBinWriter () { /* not necessary ... dsdostream.end(); */ };
+SampleBinWriter::~SampleBinWriter () 
+{ /* not necessary ... dsdostream.end(); */ };
 
 void SampleBinWriter::setFile(const char *filename)
 {
-  dsdostream.setOutFile(filename, ShmMgr::samplingRateHz());
+  dsdostream.setOutFile(filename, sampling_rate_hz);
 }
 
 void SampleBinWriter::consume(const SampleStruct *s)
 {
+  if (s->scan_index > scan_index) scanIndexChanged(s->scan_index);
   dsdostream.writeSample(s);
 }
 
 void SampleBinWriter::channelStateChanged(uint channel_id, bool on_or_off = true)
 {
-  if (!on_or_off) dsdostream.removeChannelAfter(channel_id, ShmMgr::scanIndex()+1);
+  if (!on_or_off) dsdostream.removeChannelAfter(channel_id, scan_index+1);
 }
 
