@@ -537,33 +537,56 @@ ECGGraphContainer::parseRangeString (const QString & rangeString,
   
 }
 
+/* 
+   This code is extremely ugl^H^H^Hcomplex and fragile!
+   This basically takes the list of sample indices that the ecggraph
+   gives it for all the vertical gridlines' values (the x-values, if you will)
+   and labels the graph.
+*/
 void ECGGraphContainer::setXAxisLabels(const vector<uint64> & 
                                        sample_indices)
 {
   int i;
   char buf[64];
-  bool hidenshow = !xaxis->isHidden();
+  bool hidenshow = false;
 
   
-  if (hidenshow) xaxis->hide();
 
-  for (i = 0; i < static_cast<int>(xaxis_labels.size()); i++) 
-    delete xaxis_labels[i];
-  
+  if (sample_indices.size() != xaxis_labels.size()) {
 
-  xaxis_labels.clear();
-  if (xaxis_layout) delete xaxis_layout;
-  xaxis_layout = new QGridLayout(xaxis); /* so that our labels will be evenly 
-                                            spaced below */
+    /* The number of gridlines has changed, so we must rebuild
+       our graph labels */
 
-  for (i = 0; i < (int)sample_indices.size(); i++) {
+    if ( (hidenshow = !xaxis->isHidden()) )
+      xaxis->hide(); /* hide the x-axis widget to avoid flicker, only if
+                        it's not hidden already */
+
+    /* delete all our old label widgets */
+    for (i = 0; i < static_cast<int>(xaxis_labels.size()); i++) 
+      delete xaxis_labels[i];       
+    xaxis_labels.clear();
+
+    /* delete our layout.. for some reason this is necessary to
+       ensures proper spacing underneath the graph */
+    if (xaxis_layout) delete xaxis_layout;
+
+    xaxis_layout = new QGridLayout(xaxis); /* so that our labels will be 
+                                              evenly spaced */
+
+    /* now creata the blank label widgets... */
+    for (i = 0; i < static_cast<int>(sample_indices.size()); i++) {
+      xaxis_labels.push_back(new QLabel(xaxis));
+      xaxis_layout->addWidget(xaxis_labels[i], 0, i);
+      xaxis_layout->setColStretch(i, 1); // make them each fight for horiz. 
+    }
+  }
+
+  for (i = 0; i < (int)sample_indices.size(); i++) {    
     double time = sample_indices[i] 
                  / (double)(graph->sampleRateHz() ? graph->sampleRateHz() : 1);
 
     snprintf(buf, 64, "%.1f", time); /* cheesy way to round to nearest 10th */
-    xaxis_labels.push_back(new QLabel(QString() + buf + " sec.", xaxis));
-    xaxis_layout->addWidget(xaxis_labels[i], 0, i);
-    xaxis_layout->setColStretch(i, 1); 
+    xaxis_labels[i]->setText(QString() + buf + " sec.");
   }
 
   if (hidenshow) xaxis->show();
