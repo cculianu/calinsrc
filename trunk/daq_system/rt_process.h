@@ -62,7 +62,7 @@ typedef struct {
 #define RT_HZ 1000             //rt_process loop frequency
 #define RT_QUEUE_SIZE (1000*sizeof(FIFO_struct))//size of RT queue
 #define RT_PROCESS_SHM_NAME "RT-Linux DAQ system"  //text ID for this process
-#define INITIAL_CHANNEL_GAIN 3  //initial channel gain (COMEDI)
+#define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
 #define INITIAL_V_CHANNEL 0     //initial channel for V signal
 #define INITIAL_A_CHANNEL 1     //initial channel for A signal
 
