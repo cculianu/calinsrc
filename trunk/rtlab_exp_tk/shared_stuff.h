@@ -44,6 +44,13 @@
 extern "C" {
 #endif
 
+
+# define RT_QUEUE_SZ_BLOCKS (24000) /* size of queue in terms of \
+				       number of sample blocks */
+# define RT_QUEUE_BLOCK_SZ_BYTES (sizeof(SampleStruct))
+/* size of RT queue (RTF's) in bytes. */
+# define RT_QUEUE_SZ_BYTES (RT_QUEUE_SZ_BLOCKS * RT_QUEUE_SAMPLE_SZ_BYTES) 
+
 /* The maximum number of channels per subdevice for our automatically
    allocated shared memory struct */
 # define SHD_MAX_CHANNELS 256

@@ -62,6 +62,10 @@ static RTPException failure_exception =
   RTPException(QObject::tr("No exception occurred"), 
 	       QObject::tr("What is the sound of one hand clapping?"));
 
+/* note that these inlines mean stuff gets inlined only within
+   this .o file, but elsewhere in the app it isn't inlined! */
+
+
 void 
 ShmMgr::check()
 {
@@ -188,6 +192,7 @@ ShmMgr::devFileIsValid()
   return true;
 }
 
+
 unsigned int *
 ShmMgr::chanArray(int subdevtype) 
 { 
@@ -197,11 +202,13 @@ ShmMgr::chanArray(int subdevtype)
 	  : shm->ai_chan);
 }
  
+
 unsigned int *
 ShmMgr::chanArray(ComediSubDevice::SubdevType t) 
 { return chanArray(ComediSubDevice::sd2int(t)); }
 
  
+
 char *
 ShmMgr::chanUseArray (int channeltype) 
 {
@@ -212,9 +219,11 @@ ShmMgr::chanUseArray (int channeltype)
 }
 
  
+
 char *
 ShmMgr::chanUseArray (ComediSubDevice::SubdevType channeltype) 
 { return chanUseArray(ComediSubDevice::sd2int(channeltype)); }   
+
 
 
 unsigned int
@@ -222,6 +231,7 @@ ShmMgr::channelRange(ComediSubDevice::SubdevType subdev, unsigned int chan)
 { return channelRange(ComediSubDevice::sd2int(subdev), chan); }  
 
  
+
 unsigned int 
 ShmMgr::channelRange(int subdevtype, unsigned int chan) 
 {
@@ -229,18 +239,21 @@ ShmMgr::channelRange(int subdevtype, unsigned int chan)
 }
 
  
+
 void 
 ShmMgr::setChannelRange(ComediSubDevice::SubdevType s, unsigned int c, 
 			unsigned int r)
 {setChannelRange(ComediSubDevice::sd2int(s), c, r);}
 
  
+
 void 
 ShmMgr::setChannelRange(int s, unsigned int c, unsigned int r)
 {
   unsigned int *arr = chanArray(s);
   arr[c] = CR_PACK(CR_CHAN(arr[c]), r, CR_AREF(arr[c]));
 }
+
 
 
 bool
@@ -254,11 +267,48 @@ ShmMgr::isChanOn (ComediSubDevice::SubdevType t, unsigned int c)
 
 
 
+
 void
 ShmMgr::setChannel(ComediSubDevice::SubdevType t,  unsigned int c, bool onoff)
 { setChannel(ComediSubDevice::sd2int(t), c, onoff); }
 
 
+
 void
 ShmMgr::setChannel(int t,  unsigned int c, bool onoff)
 { set_chan ( c, chanUseArray(t), onoff ); }
+
+
+unsigned int
+ShmMgr::numChannels(ComediSubDevice::SubdevType t)
+{
+  return numChannels(ComediSubDevice::sd2int(t));
+}
+
+
+unsigned int 
+ShmMgr::numChannels(int t)
+{
+  return (t == COMEDI_SUBD_AO 
+	  ? shm->n_ao_chans
+	  : shm->n_ai_chans);
+}
+
+
+unsigned int
+ShmMgr::numChannelsInUse(ComediSubDevice::SubdevType t)
+{
+  return numChannelsInUse(ComediSubDevice::sd2int(t));
+}
+
+
+unsigned int
+ShmMgr::numChannelsInUse(int t)
+{
+  unsigned int ret = 0;
+
+  for (unsigned int i = 0; i < numChannels(t); i++) {
+    ret += isChanOn(t, i);
+  }
+  return ret;
+}

@@ -10,6 +10,7 @@
 #include <string.h>
 #include "exception.h"
 #include "sample_source.h"
+#include "shm_mgr.h"
 #include "shared_stuff.h"
 
 /*----------------------------------------------------------------------------
@@ -36,7 +37,7 @@ SampleStructSource::numBytesLastRead() const
 unsigned int 
 SampleStructSource::numSamplesLastRead() const
 {
-  return numBytesLastRead() / sizeof (SampleStruct);
+  return numBytesLastRead() / SAMPLE_SOURCE_BLOCK_SZ_BYTES;
 }
 
 SampleStructFileSource::SampleStructFileSource (const string & filename)
@@ -87,7 +88,7 @@ SampleStructFileSource::numBytesReady() const
 int
 SampleStructFileSource::numSamplesReady() const 
 {
-  return numBytesReady() / sizeof(SampleStruct);
+  return numBytesReady() / SAMPLE_SOURCE_BLOCK_SZ_BYTES;
 }
 
 const SampleStruct *
@@ -173,4 +174,75 @@ SampleStructRTFSource::flush() {
   
   read(0);  
   
+}
+
+int 
+SampleStructRTFSource::suggestSleepTime(int proc_time_ms = 0) const 
+{
+  int sleeptime_ms, n_read;
+  unsigned int n_chans_in_use;
+
+  sleeptime_ms = DESIRED_FIFO_FEEL_MS - proc_time_ms;  
+  n_chans_in_use = ShmMgr::numChannelsInUse(ComediSubDevice::AnalogInput);
+  n_read = numSamplesLastRead();
+
+  /* Thus far our 'period' is DESIRED_FIFO_FEEL_MS - proc_time_ms,
+     but now check for negative! */
+  if ( (sleeptime_ms) < 0 ) sleeptime_ms = 0;
+ 
+  /* fixme: this code is more or less not really too helpful.  It is just
+     complex and seems to provide little benefit above a constant 1 ms sleep
+     time.  The idea was to minimize CPU usage by reading from the sample
+     reader only when enough data acrues... but in actualiy I can't
+     see any benefit to this code.. :(
+
+     Todo: determine if this logic actually helps keep cpu usage down
+  */
+
+  /* if we have channels... */
+  if (n_chans_in_use) {
+    double samples_per_ms, ms_per_proc;
+    
+    /* collect some stats... */
+    samples_per_ms = n_chans_in_use * (ShmMgr::shm->sampling_rate_hz / 1000.0);
+    ms_per_proc = proc_time_ms / ( /* no 0's */ n_read ? n_read : 1.0 );
+
+    if ( samples_per_ms == 0.0 ) /* prevent divide by 0 */ 
+      samples_per_ms = 1/(double)ShmMgr::shm->sampling_rate_hz; 
+
+    /* is sleeptime way too small? (we won't even get 1 sample in that time)
+       so we might as wait sleep until we think we will have a sample */
+    if ( samples_per_ms * sleeptime_ms < 1 ) 
+      sleeptime_ms = (int) (1 / samples_per_ms);
+    
+    
+    /* is it too big? (will we fill our buffer past the 10% watermark?) */
+    if ( sleeptime_ms * samples_per_ms > (RT_QUEUE_SZ_BLOCKS * 0.50) ) {
+      /* we want to sleep just enough to fill 10% of the buffer per sleep 
+	 cycle, if possible */
+      sleeptime_ms = (int) ( RT_QUEUE_SZ_BLOCKS * 0.10 * (1/samples_per_ms) 
+			     -  RT_QUEUE_SZ_BLOCKS * 0.10 * ms_per_proc );
+      sleeptime_ms = ( sleeptime_ms < 0 ? 0 : sleeptime_ms );
+    }
+
+#ifdef DAQ_SYSTEM_PROFILE_SLEEPTIME_CODE
+    {
+      static int max_sleeptime = sleeptime_ms, min_sleeptime = max_sleeptime; 
+      static double avg_sleeptime = sleeptime_ms;
+      static unsigned long long idx=1;
+      
+      if ( sleeptime_ms > max_sleeptime) max_sleeptime = sleeptime_ms;
+      if ( sleeptime_ms < min_sleeptime) min_sleeptime = sleeptime_ms;
+      avg_sleeptime += (sleeptime_ms - avg_sleeptime) / ((double)idx);
+      
+      if (idx % (1000 / DESIRED_FIFO_FEEL_MS) == 0) {
+	cerr << "Idx: " << idx << " Sleeptime: " << sleeptime_ms 
+	     << " Avg: " << avg_sleeptime  << " Max: " << max_sleeptime 
+	     << " Min: " << min_sleeptime << endl;
+      }
+      idx++;
+    }
+#endif
+  } /* end if (we have channels) */
+  return sleeptime_ms;
 }
