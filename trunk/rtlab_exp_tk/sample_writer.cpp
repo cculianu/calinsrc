@@ -79,7 +79,7 @@ SampleGZWriter::setFile(const char *filename)
 }
 
 void
-SampleGZWriter::newSample(const SampleStruct *s)
+SampleGZWriter::consume(const SampleStruct *s)
 {
   if (file == NULL) {
     /* should maybe throw an exception? */

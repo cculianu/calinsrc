@@ -57,25 +57,18 @@ class DAQSystem;
    Threads weren't working so I reverted back to using one main thread */
 class ReaderLoop: public QObject
 {
-
+  
   Q_OBJECT
 
   friend class DAQSystem;
 
  protected:
   
-  ReaderLoop(uint n_channels, const DAQSettings & settings);
+  ReaderLoop(DAQSystem *daq_system);
   ~ReaderLoop();
   
   
-  /* adds a listener to the list for channels in listener->channelIds() */
-  void addListener(SampleListener *listnener);
-
  protected slots:
-  /* removes a listeners from the list*/
-  void removeListener(const SampleListener *listener);
-  /* removes only the listeners that concern themselves with graphing */
-  void removeGraphListeners (uint chan);
   /* this should be the target of a singleshot timer */
   void loop();
 
@@ -85,12 +78,7 @@ class ReaderLoop: public QObject
   
  protected:
 
-  bool isGraphListener(uint channel_id, uint index)
-  {
-    if (channel_id < listeners.size() && index < listeners[channel_id].size())
-      return dynamic_cast<DAQECGGraphContainer*>(listeners[channel_id][index]);  
-    return false;
-  }
+  DAQSystem *daq_system;
 
   bool graphListenerExists(uint channel_id);
 
@@ -100,15 +88,19 @@ class ReaderLoop: public QObject
   
   bool pleaseStop;
 
-  /* listeners[channel_index] = 
-     a vector of sample listener pointers that  are interested in channel 
-     'channel_index' */
-  vector<vector<SampleListener *> > listeners;
+  uint n_channels; // redundant as n_channels == producers.size()
+
+  /* producers[channel_index] = a producer that is producing for 
+     the channel number equal to its index in the vector 
+     (ie 'channel_index') */
+  vector<Producer<const SampleStruct *> > producers;
 };
 
 class DAQSystem : public QMainWindow
 {
   Q_OBJECT
+
+  friend class ReaderLoop;
 
  public:
   DAQSystem (ConfigurationWindow & cw, QWidget * parent = 0, 
@@ -122,7 +114,7 @@ class DAQSystem : public QMainWindow
  public slots:
   void addChannel(); 
   void openChannelWindow(uint chan, uint range, uint n_secs);
-  void removeGraphContainer(const DAQECGGraphContainer *);
+  void saveGraphWindowPositions(const DAQECGGraphContainer *);
   void about() { /* about the application */ };
 
  protected slots:
@@ -168,9 +160,6 @@ class DAQSystem : public QMainWindow
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
 
-  /* keep track of the graph container windows we have 
-     association is channel_id -> DAQECGGraphContainer * */
-  map <uint, DAQECGGraphContainer *> gcontainers;
   bool daqSystemIsClosingMode;
 
   ExperimentLog log; /* the experiment log window */

@@ -38,6 +38,9 @@
    also: maybe make this class automatically read from
          ConfigurationWindow so that it can automatically update itself??
 */
+
+#  define DAQ_SYSTEM_USER_DIR QString(getenv("HOME")) + "/." + DAQ_DIRNAME
+
 class Settings
 {
  public:

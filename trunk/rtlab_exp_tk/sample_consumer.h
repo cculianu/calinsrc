@@ -2,7 +2,7 @@
  * This file is part of the RT-Linux Multichannel Data Acquisition System
  *
  * Copyright (C) 1999,2000 David Christini
- * Copyright (c) 2001 David Christini, Lyuba Golub, Calin Culianu
+ * Copyright (C) 2001 David Christini, Lyuba Golub, Calin Culianu
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,22 +20,13 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
+#ifndef _SAMPLE_CONSUMER_H
+# define _SAMPLE_CONSUMER_H
 
-#ifndef _COMMON_H
-#  define _COMMON_H
-#  include "config.h"
-#  include <values.h>
+#include "common.h"
+#include "producer_consumer.h"
+#include "shared_stuff.h"
 
-typedef unsigned int uint;
-
-typedef short int16;
-typedef unsigned short uint16;
-
-typedef char int8;
-typedef unsigned char uint8;
-
-typedef unsigned long long uint64;
-typedef long long int64;
-
+typedef Consumer<const SampleStruct *> SampleConsumer;
 
 #endif

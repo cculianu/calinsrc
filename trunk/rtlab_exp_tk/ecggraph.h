@@ -1,6 +1,28 @@
+/*
+ * This file is part of the RT-Linux Multichannel Data Acquisition System
+ *
+ * Copyright (C) 2001 Calin Culianu
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program (see COPYRIGHT file); if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA, or go to their website at
+ * http://www.gnu.org.
+ */
 #ifndef __ECGGRAPH_H
 # define __ECGGRAPH_H
 
+#include "common.h"
 #include <qwidget.h>
 #include <qevent.h>
 #include <qcolor.h>
@@ -90,7 +112,7 @@ signals:
 
   void rangeChanged(double newRangeMin, double newRangeMax);
 
-  void spikeDetected(long long spikeSampleNumber, 
+  void spikeDetected(uint64 spikeSampleNumber, 
 		     double spikeAmplitude);
 
   void spikeDetected(ECGPoint p);
@@ -103,10 +125,10 @@ signals:
   void mouseOverAmplitude(double amplitude);
 
   /** emits the cunulative sample index that the mouse is over */
-  void mouseOverSampleIndex(long long cumSampleIndex);
+  void mouseOverSampleIndex(uint64 cumSampleIndex);
 
   /** emits the sample vector that the mouse is over */
-  void mouseOverVector(double amplitude, long long cumSampleIndex);
+  void mouseOverVector(double amplitude, uint64 cumSampleIndex);
 
   /** emitted when the user clicks on the graph */
   void rightClicked();  void leftClicked(); void eitherClicked();
@@ -137,7 +159,7 @@ signals:
   virtual void makePoint (double amplitude, int sampleIndex = -1);
 
   virtual void plotLines (int firstIndex, 
-		  int lastIndex);
+			  int lastIndex);
 
   virtual void resizeEvent (QResizeEvent *event);
 
