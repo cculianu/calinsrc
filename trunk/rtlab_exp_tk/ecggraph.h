@@ -60,9 +60,17 @@ class ECGGraph : public QWidget {
   
   virtual ~ECGGraph();
 
+  enum PlotMode {
+    Lines, /* Plots points as connected line segments */
+    Points /* plots points as little points */
+  };
+
   /*
     Property Methods 
   */
+
+  virtual PlotMode plotMode() const { return pMode; }
+  virtual void setPlotMode(PlotMode m) { pMode = m; }
 
   /** Use this to change the way the pen looks.  Default is a yellowish
       width=1 pen */
@@ -186,8 +194,8 @@ signals:
 
  protected:
 
-  virtual void plotLines (int firstIndex, 
-                          int lastIndex);
+  virtual void plotPoints (int firstIndex, 
+                           int lastIndex);
 
   void resizeEvent (QResizeEvent *event);
 
@@ -233,12 +241,14 @@ signals:
 
   QPoint spikeTHoldPoints[2], lastBlip;
 
+  PlotMode pMode;
+
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
-  virtual void plotLines (int firstIndex, int lastIndex, QPaintDevice & device,
-                          QPainter & painter, const QPen & pen, 
-                          const QPointArray  & points) const;
+  virtual void plotPoints (int firstIndex, int lastIndex, QPaintDevice & device,
+                           QPainter & painter, const QPen & pen, 
+                           const QPointArray  & points) const;
 
   virtual void deletePlotsBetween (int firstIndex, int secondIndex);
 

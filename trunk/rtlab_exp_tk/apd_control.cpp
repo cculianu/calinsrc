@@ -42,6 +42,8 @@
 #include <qfiledialog.h>
 #include <qfile.h>
 #include <qtextstream.h>
+#include <qpen.h>
+#include <qcolor.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -122,6 +124,10 @@ const APDcontrol::GraphRangeSettings APDcontrol::apd_ranges[n_apd_ranges] =
     { min: -10, max: 600 }, { min: 0,  max: 1000 } 
   };
 
+/* This is the color of every other action potential the APD graphs */
+const QColor APColor1 = "#ff0000", APColor2 = "#cccccc";
+const unsigned int apdGraphPointWidth = 4;
+
 /********************************************************************/
 /*
  *MAIN OBJECT*
@@ -175,12 +181,14 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   
   for (int which_apd_graph=0; which_apd_graph<NumAPDGraphs; which_apd_graph++) {
     apd_graph[which_apd_graph]   = new ECGGraph (beats_per_gridline, num_gridlines, 
-	             apd_ranges[0].min, apd_ranges[0].max, 
-                             graphs, QString(name()) + " - APD");
-
+                                                 apd_ranges[0].min, apd_ranges[0].max, 
+                                                 graphs, QString(name()) + " - APD");
+    apd_graph[which_apd_graph]->setPlotFactor(1);
+    apd_graph[which_apd_graph]->setPlotMode(ECGGraph::Points);
+    apd_graph[which_apd_graph]->plotPen().setWidth(apdGraphPointWidth);
     int which_graph_row;
     int which_graph_column;
-    DetermineGraphRowColumn(which_apd_graph,&which_graph_row,&which_graph_column);
+    determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
 
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
     graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
@@ -188,7 +196,7 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
     graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
 
-    addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
+    //addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
     buildRangeComboBoxesAndConnectSignals(which_apd_graph);
   }
 
@@ -564,7 +572,7 @@ DAQSystem * APDcontrol::daqSystem()
 
 /* Very long-winded code to build the graph axis labels... */
 void APDcontrol::addAxisLabels(int which_apd_graph, int which_graph_row, 
-			       int which_graph_column)
+                               int which_graph_column)
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
@@ -602,13 +610,13 @@ void APDcontrol::addAxisLabels(int which_apd_graph, int which_graph_row,
 
 }
 
-void APDcontrol::DetermineGraphRowColumn(int apd_graph, int *graph_row, 
-					 int *graph_column) {
-    *graph_row = 2*apd_graph;
-    *graph_column = 0;
+void APDcontrol::determineGraphRowColumn(int apd_graph, int &graph_row, 
+                                        int &graph_column) {
+    graph_row = 2*apd_graph;
+    graph_column = 0;
     if (apd_graph>3) {
-      *graph_row -= NumAPDGraphs;
-      *graph_column = 2;
+      graph_row -= NumAPDGraphs;
+      graph_column = 2;
     }
 }
 
@@ -622,6 +630,7 @@ void APDcontrol::periodic()
 void APDcontrol::readInFifo()
 {
   static const int n2rd = 1000; /* number of MCSnapShot's to read at a time */
+
   MCSnapShot buf[n2rd];
   int n_read = 0, n_bufs = 0, i = 0;
 
@@ -647,7 +656,18 @@ void APDcontrol::readInFifo()
        ao_chan_buf[buf[i].ao_chan]=i;
       }
     */
-      apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
+
+    /* HACK to alternate colors every other AP */
+    if (apd_graph[buf[i].apd_channel]->plotPen().color() != APColor1) {
+      apd_graph[buf[i].apd_channel]->plotPen().setColor(APColor1);
+      apd_graph[buf[i].apd_channel]->blipPen().setColor(APColor1);
+    } else {
+      apd_graph[buf[i].apd_channel]->plotPen().setColor(APColor2);
+      apd_graph[buf[i].apd_channel]->blipPen().setColor(APColor2);
+    }
+      
+    apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
+
       if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
 }
 
@@ -962,14 +982,14 @@ void APDcontrol::graphHasChangedRange(int which_apd_graph)
 
   int which_graph_row;
   int which_graph_column;
-  DetermineGraphRowColumn(which_apd_graph,&which_graph_row,&which_graph_column);
+  determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
 
   const GraphRangeSettings & setting = apd_ranges[index];
   apd_graph[which_apd_graph]->setRange(setting.min, setting.max);
-  delete apd_graph_labels[which_apd_graph];
-  apd_graph_labels[which_apd_graph] = 0;
-  addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
-  apd_graph_labels[which_apd_graph]->show();
+  //delete apd_graph_labels[which_apd_graph];
+  //apd_graph_labels[which_apd_graph] = 0;
+  //addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
+  //apd_graph_labels[which_apd_graph]->show();
 }
 
 
