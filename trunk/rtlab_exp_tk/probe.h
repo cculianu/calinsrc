@@ -47,7 +47,7 @@ class Probe
 
   /* Warning: this constructor may fail and throw a NoComediDeviceException
      if probe finds no candidate comedi devices! */
-  Probe(bool allowBusyDevices = false, 
+  Probe(bool allowBusyDevices = true, 
         const QString & prefix = "/dev/comedi"); 
   
   bool have_rt_process;

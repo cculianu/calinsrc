@@ -90,8 +90,8 @@ pluralize (const QString & s, int qty)
 
 #endif
 
-Probe::Probe(bool a = false, const QString & prefix = "/dev/comedi") 
-  : allowBusyDevices(a)
+Probe::Probe(bool allowBusy, const QString & prefix) 
+  : allowBusyDevices(allowBusy)
 {
 
   QString devfile;
@@ -226,12 +226,12 @@ void
 Probe::attach_to_shm_and_stuff()
 {
   // temporary hack
-  //try {
+  try {
     have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
-    //} catch (ShmException & e) {
-    //have_rt_process = false;
-    //shm = 0;
-    //}
+  } catch (ShmException & e) {
+    have_rt_process = false;
+    shm = 0;
+  }
 }
 
 void

@@ -126,7 +126,7 @@ extern SharedMemStruct *rtp_shm;
 
 /* the handle one should use when calling comedi_open() and comedi_close()
    the reason this handle is needed is because of the type/semantic
-   changes between comedi 0.7.64 and earlier versions */
+   changes between comedi 0.7.65+ and earlier versions */
 extern COMEDI_T rtp_comedi_ai_dev_handle, rtp_comedi_ao_dev_handle;
 
 /* Run-time spike information exported to the outside world. */

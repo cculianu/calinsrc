@@ -141,7 +141,7 @@ char *ai_device = DEFAULT_COMEDI_DEVICE,
 
 /* exported handles to be used with comedi functions.  This abstraction of
    comedi types is needed due to different treatments of the first parameter
-   to many kcomedilib functions between comedi before version 0.7.64 and 
+   to many kcomedilib functions between comedi before version 0.7.65 and 
    newer versions */
 COMEDI_T rtp_comedi_ai_dev_handle = (COMEDI_T)-1, 
          rtp_comedi_ao_dev_handle = (COMEDI_T)-1;
