@@ -70,7 +70,7 @@ class Probe
   void kill_shm(); /* tries to detach shm if attached */
   bool allowBusyDevices;
 
-  RTPShm *rtpshm;
+  SharedMemStruct *shm;
 };
 
 

@@ -33,16 +33,173 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/major.h>
+#include <sys/types.h>
+#include <sys/shm.h>
 
 
 #include "tweaked_mbuff.h"
 
-/* note that these inlines mean stuff gets inlined only within
-   this .o file, but elsewhere in the app it isn't inlined! */
+const QString ShmController::failureReasons[] = {
+  QObject::tr("There is no error."),
+
+  QObject::tr("The cause of the error is unknown."),
+  
+  QObject::tr(
+  "It is likely that rt_process.o (or the comedi coprocess) is not loaded, "
+  "because the shared memory segment could not be found.  If rt_process.o "
+  "(or the comedi coprocess) is loaded, check to make sure it is the "
+  "correct version for this program."),
+  
+  QObject::tr(
+  "The compiled version of rt_process.o (or the comedi coprocess) and this "
+  "program do not match."),
+
+  QObject::tr(
+  "The shared memory segment region exported by rt_process.o and/or the "
+  "comedi coprocess has the wrong size.  This is an internal error that "
+  "should never occur.  Email the programmers!"),
+
+  QObject::tr(
+  "There was an error accessing the mbuff character device.  Possible "
+  "reasons include permissions problems on the character device "
+  "and/or the mbuff.o kernel module not being loaded."),
+
+  0
+};
 
 
-ShmController::ShmController(SharedMemStruct *shm) : shm(shm) {}
-ShmController::~ShmController() {};
+ShmController::ShmController(ShmType t) 
+  throw(ShmException, /* if cannot attach to type */
+        IllegalStateException /* if t is Unknown */
+        )
+{
+  shm = attach(t);
+  shmType = t;
+}
+
+/* static */
+SharedMemStruct * 
+ShmController::attach(ShmType t)
+{
+  SharedMemStruct *shm = 0;
+  FailureReason failureReason = Ok;
+  QString fullErrorMessage;
+  struct shmid_ds shmid_ds;
+  int shmid = 0;
+
+
+  switch (t) {
+  case MBuff:
+    fullErrorMessage = 
+      QObject::tr("Could not attach to rt_process's shared memory segment "
+                  "named:\"") +
+      + SHARED_MEM_NAME 
+      + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through "
+                    MBUFF_DEV_NAME ")");
+
+
+    shm = reinterpret_cast<SharedMemStruct *>(mbuff_attach(SHARED_MEM_NAME, 
+                                                           sizeof(SharedMemStruct)));
+
+    if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
+      failureReason = WrongStructVersion;
+      mbuff_detach(SHARED_MEM_NAME, shm); 
+      shm = NULL;
+    } else if ( !mbuffDevFileIsValid() ) {
+      failureReason = CharacterDevAccessError;
+      shm = NULL;
+    }   
+    break;
+  case IPC:
+    fullErrorMessage =
+    (QObject::tr("Could not attach to the interprocess shared memory segment "
+                 "named:\"") +
+     + SHARED_MEM_NAME 
+     + QObject::tr("\" via the comedi coprocess."));
+    for (uint i = 0; i < strlen(SHARED_MEM_NAME); i++) 
+      shmid += reinterpret_cast<const char *>(SHARED_MEM_NAME)[i];
+    
+
+    shm = reinterpret_cast<SharedMemStruct *>( shmat(shmid, 0, 0) );
+        
+    if (!shm || reinterpret_cast<int>(shm) == -1) {
+      failureReason = RegionNotFound;
+      shm = NULL;
+      break;
+    }
+
+    if (shm->struct_version != SHD_SHM_STRUCT_VERSION) {
+      failureReason = WrongStructVersion;
+      shmdt(shm); 
+      shm = NULL;
+    } else if (!shmctl(shmid, IPC_STAT, &shmid_ds) 
+               && shmid_ds.shm_segsz < sizeof(SharedMemStruct)) {
+      shmdt(shm);
+      failureReason = WrongStructSize;
+      shm = NULL;
+    }
+    break;
+  default:
+    throw IllegalStateException("Illegal State in ShmController::attach()",
+                                "INTERNAL BUG: ShmController::attach() was "
+                                "given an invalid argument.");
+    break;
+  } /* end switch */
+
+  if (!shm) throw ShmException ( QObject::tr("Could not attach to ") 
+                                 + SHARED_MEM_NAME,
+                                 fullErrorMessage + "\n\n" 
+                                 + failureReasons[failureReason] );
+
+  return shm;                                
+}
+
+ShmController::ShmController(SharedMemStruct *shm) 
+  : shm(shm), 
+    shmType(NotSharedOrUnknown) 
+{
+  /* nothing.. */
+}
+
+ShmController::~ShmController() 
+{
+  detach(shm, shmType);
+}
+
+/* static */
+void 
+ShmController::detach (SharedMemStruct *shm, ShmType t)
+{
+  switch (t) {
+  case MBuff:
+    mbuff_detach(SHARED_MEM_NAME, shm);
+    break;
+  case IPC:
+    shmdt(shm);
+    break;
+  default:
+    /* nothing.. */
+    break;
+  }
+}
+
+/* static */
+bool /* mbuff file exists and is readable */
+ShmController::mbuffDevFileIsValid() 
+{
+  /* since mbuff_attach isn't very good about giving us exactly what 
+     went wrong, we will attempt to figure out if it was a permissions
+     issue or some other error. */
+  struct stat statbuf;
+  int fd = -1;
+  
+  if (stat (MBUFF_DEV_NAME, &statbuf) || !S_ISCHR(statbuf.st_mode)
+      || (fd = open(MBUFF_DEV_NAME, O_RDWR)) < 0 || close(fd)) {
+    return false;
+  }
+  return true;
+}
+
 
 void ShmController::clearSpikeSettings()
 {
@@ -87,173 +244,4 @@ double ShmController::spikeThreshold(uint chan) const
 uint ShmController::spikeBlanking(uint chan) const
 {
   return shm->spike_params.blanking[chan];
-}
-
-
-
-ShmBase::FailureReason ShmBase::failureReason = ShmBase::Unknown;
-
-const char * ShmBase::failureReasons[] = {
-  "There is no error.",
-
-  "The cause of the error is unknown.",
-  
-  "It is likely that rt_process.o (or the comedi coprocess) is not loaded, "
-  "because the shared memory segment could not be found.  If rt_process.o "
-  "(or the comedi coprocess) is loaded, check to make sure it is the "
-  "correct version for this program.",
-  
-  "The compiled version of rt_process.o (or the comedi coprocess) and this "
-  "program do not match.",
-
-  "The shared memory segment region exported by rt_process.o and/or the "
-  "comedi coprocess has the wrong size.  This is an internal error that "
-  "should never occur.  Email the programmers!",
-
-  "There was an error accessing the mbuff character device.  Possible "
-  "reasons include permissions problems on the character device "
-  "and/or the mbuff.o kernel module not being loaded.",
-
-  0
-};
-
-ShmException ShmBase::failureException =
-  ShmException(QObject::tr("No exception occurred"), 
-               QObject::tr("What is the sound of one hand clapping?"));
-
-
-const char *RTPShm::devFileName = MBUFF_DEV_NAME;
-
-
-void
-ShmBase::operator delete(void *mem)
-{
-  switch (reinterpret_cast<SharedMemStruct *>(mem)->reserved[0]) {
-  case RTP:
-    delete reinterpret_cast<RTPShm *>(mem);
-    break;    
-  case IPC:
-    delete reinterpret_cast<IPCShm *>(mem);    
-    break;
-  default:
-    delete reinterpret_cast<SharedMemStruct *>(mem);
-    break;
-  }  
-}
-
-void * 
-RTPShm::operator new(size_t size)
-{
-  static const QString fullErrorMessage 
-    (QObject::tr("Could not attach to rt_process's shared memory segment "
-                 "named:\"") +
-     + SHARED_MEM_NAME 
-     + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through ") +
-     "%1).");
-
-  if (size < sizeof(SharedMemStruct)) size = sizeof(SharedMemStruct);
-
-  void *mem = mbuff_attach(SHARED_MEM_NAME, size);
-  SharedMemStruct * & shm = reinterpret_cast<SharedMemStruct *>(mem);
-
-  if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
-    failureReason = WrongStructVersion;
-    mbuff_detach(SHARED_MEM_NAME, shm); 
-    shm = NULL;
-  } else if ( !devFileIsValid() ) {
-    failureReason = CharacterDevAccessError;
-    shm = NULL;
-  }
-
-  failureException =
-    ShmException(QObject::tr("Could not attach to ") + SHARED_MEM_NAME,
-                 fullErrorMessage.arg(devFileName) + "\n\n" 
-                 + failureReasons[failureReason], Exception::GUI);
-
-  if (!shm) throw failureException; 
-  
-  shm->reserved[0] = RTP; /* now put our rtti stiff in there */
-  
-  return mem;
-}
-
-bool /* mbuff file exists and is readable */
-RTPShm::devFileIsValid() 
-{
-  /* since mbuff_attach isn't very good about giving us exactly what 
-     went wrong, we will attempt to figure out if it was a permissions
-     issue or some other error. */
-  struct stat statbuf;
-  int fd = -1;
-  
-  if (stat (devFileName, &statbuf) || !S_ISCHR(statbuf.st_mode)
-      || (fd = open(devFileName, O_RDWR)) < 0 || close(fd)) {
-    return false;
-  }
-  return true;
-}
-
-void
-RTPShm::operator delete(void *mem)
-{
-  mbuff_detach(SHARED_MEM_NAME, mem);
-}
-
-# include <sys/types.h>
-# include <sys/shm.h>
-
-void *
-IPCShm::operator new(size_t size)
-{
-  struct shmid_ds shmid_ds;
-
-  static const QString fullErrorMessage 
-    (QObject::tr("Could not attach to the interprocess shared memory segment "
-                 "named:\"") +
-     + SHARED_MEM_NAME 
-     + QObject::tr("\" via the comedi coprocess."));
-
-  if (size < sizeof(SharedMemStruct)) size = sizeof(SharedMemStruct);
-
-  int shmid = 0;
-
-  for (uint i = 0; i < strlen(SHARED_MEM_NAME); i++) 
-    shmid += reinterpret_cast<const char *>(SHARED_MEM_NAME)[i];
-  
-
-  void *mem = shmat(shmid, 0, 0);
-  SharedMemStruct * & shm = reinterpret_cast<SharedMemStruct *>(mem);
-  
-  if (reinterpret_cast<int>(shm) == -1) {
-    failureReason = RegionNotFound;
-    shm = NULL;
-  }
-
-  if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
-    failureReason = WrongStructVersion;
-    shmdt(shm); 
-    shm = NULL;
-  } else if (shm && !shmctl(shmid, IPC_STAT, &shmid_ds) && shmid_ds.shm_segsz < size) {
-    shmdt(shm);
-    failureReason = WrongStructSize;
-    shm = NULL;
-  }
-
-  
-  failureException =
-      ShmException(QObject::tr("Could not attach to ") + SHARED_MEM_NAME,
-                   fullErrorMessage + "\n\n" + failureReasons[failureReason], 
-                   Exception::GUI);
-
-  if (!shm) throw failureException; // change this exception type!
-  
-  shm->reserved[0] = IPC; /* now put our rtti stiff in there */ 
-
-  return mem;
-}
-
-void
-IPCShm::operator delete (void * mem)
-{
-  shmdt(mem);
 }

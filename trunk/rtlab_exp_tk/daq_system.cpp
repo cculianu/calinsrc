@@ -822,8 +822,7 @@ ReaderLoop(DAQSystem *d) :
 {
   switch (d->settings.getInputSource()) {
   case DAQSettings::RTProcess:
-    shm = new RTPShm();
-    shmCtl = new ShmController(shm);
+    shmCtl = new ShmController(ShmController::MBuff);
 
     source = new SampleStructFIFOSource(string("/dev/rtf") + shmCtl->aiFifoMinor());
     source->flush();
@@ -876,7 +875,6 @@ ReaderLoop::~ReaderLoop()
   delete source; source = 0;
   delete writer; writer = 0;
   delete shmCtl; shmCtl = 0;
-  delete shm; shm = 0;
 }
 
 void

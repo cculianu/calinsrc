@@ -21,8 +21,8 @@
  * http://www.gnu.org.
  */
 
-#ifndef _SHM_MGR_H
-#  define _SHM_MGR_H
+#ifndef _SHM_CTL_H
+#  define _SHM_CTL_H
 
 
 #include "common.h"
@@ -30,62 +30,24 @@
 #include "comedi_device.h"
 #include "shared_stuff.h"
 
-struct ShmBase : public SharedMemStruct
-{
-  
-  void operator delete(void *mem); /* dispatches to correct subclass, based
-                                      on contents of reserved[0], which keys
-                                      off of enum RTTI --
-                                      note for this to be called, your variable
-                                      needs to be of type ShmBase * */
-
-  static const ShmException & exception() { return failureException; }
-  static const char * errorMessage() { return failureReasons[failureReason]; }
-  
- protected:
-  enum FailureReason {
-    Ok = 0, /* no failure */
-    Unknown,
-    RegionNotFound,
-    WrongStructVersion,
-    WrongStructSize,
-    CharacterDevAccessError
-  };
-
-  enum RTTI {
-    RTP = 0,
-    IPC = 1
-  };
-  
-  static FailureReason failureReason;    /* non-thread-safe, like perror! */
-  static ShmException failureException;  /* non-thread-safe, like perror! */
-  static const char *failureReasons[];
-
-};
-
-struct RTPShm : public ShmBase
-{
-  static bool devFileIsValid(); /* mbuff file exists and is readable */
-
-  void * operator new(size_t size);
-  void   operator delete(void *mem);  
-
- private:
-  static const char *devFileName;
-};
-
-struct IPCShm : public ShmBase
-{
-  void * operator new(size_t size);
-  void   operator delete(void *mem);  
-};
+class QString;
 
 class ShmController 
 {
  public:
-  ShmController(SharedMemStruct *shm);
-  virtual ~ShmController();
 
+  enum ShmType { MBuff, IPC, NotSharedOrUnknown = 0 };
+
+  ShmController(ShmType t) throw(ShmException, /* if cannot attach to type */
+                                 IllegalStateException /* if t is Unknown */
+                                );
+  ShmController(SharedMemStruct *shm); /* if you already have the shm.. this 
+                                          means our shm is not owned by this 
+                                          instance */
+  ~ShmController();
+
+  static SharedMemStruct *attach(ShmType t = MBuff);
+  static void detach(SharedMemStruct *, ShmType t = MBuff);
 
   /* channel-specific stuff--basically wrappers to CR_PACK */
 
@@ -132,7 +94,23 @@ class ShmController
   uint aiFifoMinor() const; /* not meaningful in all contexts */
 
  private:
+  
+  static bool mbuffDevFileIsValid();
+
   SharedMemStruct *shm; /* the actual shared memory region */
+  ShmType shmType;
+
+  enum FailureReason {
+    Ok = 0, /* no failure */
+    Unknown,
+    RegionNotFound,
+    WrongStructVersion,
+    WrongStructSize,
+    CharacterDevAccessError
+  };
+  
+  /* above enum is index into this array */
+  static const QString failureReasons[];
 
 };
 
