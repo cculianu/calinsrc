@@ -144,7 +144,7 @@ public slots:
      the graph and the actual sample's scan index.
      In addition we may also have ab O.B.1 (Obi-Wan) error here -- I didn't 
      check since I will re-write this mechanism soon.  --Calin */
-  void setMouseVectorStatus(double voltage, scan_index_t index);
+  void setMouseVectorStatus(double voltage, uint64 index);
 
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
