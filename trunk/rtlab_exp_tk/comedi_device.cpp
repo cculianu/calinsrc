@@ -50,3 +50,20 @@ unitsToSample(SampleStruct & s, double unitdata) const
 	   * maxdata));
 } 
 */
+
+
+QString
+ComediSubDevice::  /* Generates a string for the given range */
+generateRangeString(uint channelId) const
+{
+  QString ret;
+
+  if (channelId < ranges().size() ) {
+    /* build range id combo box inside here */
+    const comedi_range & r = ranges()[channelId];
+    QString u( ( r.unit == UNIT_volt ? "V" : "mV" ) );
+    ret = QString().setNum(r.min) + u + " - " + QString().setNum(r.max) + u;
+  }
+
+  return ret;
+}

@@ -192,8 +192,9 @@ Settings::parseSettings()
   dirtySettings.clear();
   settingsMap.clear();
 
+  settingsMap = readAll();
+
   if (masterSettings) {
-    SettingsMap allSettings = readAll();
     SettingsMap::const_iterator master;
     Section::const_iterator subMaster;
     QString section, key, value;
@@ -204,7 +205,6 @@ Settings::parseSettings()
       for (subMaster = master->second.begin(); subMaster != master->second.end(); subMaster++) {
           key = subMaster->first;
           value = subMaster->second;
-          settingsMap[section][key] = allSettings[section][key];
           if ( settingsMap[section][key].isNull() ) {
             settingsMap[section][key] = value;
             dirtySettings[section].insert(key);
@@ -212,10 +212,7 @@ Settings::parseSettings()
       }
     }
 
-  } else {
-    settingsMap = readAll();
-  }
-
+  } 
 
 }
 
@@ -232,7 +229,7 @@ Settings::readAll()
     while (! (line = fileContents.readLine()).isNull()) {
       matchedLine = testSectionLine(line);
       if ( !matchedLine.isNull()) {
-        _currentSection = matchedLine;
+        setSection(matchedLine);
         continue;
       }
       matchedLine = testLine(line);

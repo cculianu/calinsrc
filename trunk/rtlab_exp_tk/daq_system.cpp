@@ -150,29 +150,32 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
   { /* build menus */
     fileMenu.insertItem("&Plugins...", &plugin_menu, SLOT(raisenShow() ) );
-    fileMenu.insertSeparator();
+    fileMenu.insertSeparator(); /* ---- */
     fileMenu.insertItem("P&rint...", this, SLOT(printDialog()));
     fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
-    fileMenu.insertSeparator();
+    fileMenu.insertSeparator(); /* ---- */
     fileMenu.insertItem("&Quit", this, SLOT( close() ) );
 
     logMenu.insertItem("Show &Log Window", this, SLOT (showLogWindow()), CTRL + Key_L);
-    logMenu.insertSeparator();
+    logMenu.insertSeparator(); /* ---- */
     logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
     channelsMenu.insertItem("Set Analog Input &Reference Mode...", this, SLOT( changeAREFDialog() ), CTRL + Key_R );
+    
+    windowMenu.insertItem("&Window Templates...", this, SLOT ( showWindowTemplateDialog() ));
+    windowMenu.insertSeparator(); /* ---- */
     windowMenu.insertItem("&Cascade Channel Windows", &ws, SLOT( cascade() ) );
     windowMenu.insertItem("&Tile Channel Windows", &tyler, SLOT( tyle() ) );
     windowMenu.insertSeparator(); /* after this, all open windows will be
                                      stored */
     windowMenu.insertItem("&Resynch Channel Windows", this, SLOT (resynch()));
-    windowMenu.insertSeparator();
+    windowMenu.insertSeparator(); /* ---- */
 
     connect(&windowMenu, SIGNAL(activated(int)), 
 	    this, SLOT(windowMenuFocusWindow(int)));
 
     helpMenu.insertItem("DAQ System Help", help1);
-    helpMenu.insertItem("Configurating DAQ System", help2);
+    helpMenu.insertItem("Configuring DAQ System", help2);
     helpMenu.insertItem("&About", help3);
 
     connect(&helpMenu, SIGNAL(activated(int)), 
@@ -182,7 +185,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     _menuBar.insertItem("&Log", &logMenu);
     _menuBar.insertItem("&Channels", &channelsMenu);
     _menuBar.insertItem("&Window", &windowMenu);
-    _menuBar.insertSeparator();
+    _menuBar.insertSeparator(); /* ---- */
     _menuBar.insertItem("&Help", &helpMenu);
   }
 
@@ -229,8 +232,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   /* now open up all the channel windows that are left over
      from the last session */
   set<uint> s = settings.windowSettingChannels();
-  uint n_chans_this_device = configWindow.selectedDevice()
-                             .find(ComediSubDevice::AnalogInput).n_channels;
+  uint n_chans_this_device = configWindow.selectedDevice().find().n_channels;
   for (set<uint>::iterator i = s.begin(); i != s.end();  i++) 
     if (*i < n_chans_this_device) /* ignore non-existant channels in
                                      case we just changed boards */
@@ -326,6 +328,9 @@ void DAQSystem::changeAREFDialog()
   
   QDialog *d = new QDialog(this, "Change Analog Reference Dialog",
                            TRUE, WDestructiveClose);
+
+  d->setCaption("Change Analog Reference Mode");
+
   QGridLayout *l =  new QGridLayout(d, 1, 1);
 
   QVBox *vbox = new QVBox(d);
@@ -435,6 +440,8 @@ DAQSystem::queryOpen(uint & chan, uint & range,
   map<uint, uint> cbox2idMap,id2cboxMap;
 
   QDialog openDialog(this, 0, true);
+  openDialog.setCaption("Add a Channel");
+
   QGridLayout gl(&openDialog, 7, 2); /* cheap and easy layout */
   QLabel 
     enterId("Choose a channel to monitor", &openDialog),
@@ -458,7 +465,7 @@ DAQSystem::queryOpen(uint & chan, uint & range,
   connect(&cancel, SIGNAL(clicked(void)), &openDialog, SLOT(reject(void)));
   { /* build combo boxex */
     const ComediSubDevice & subdev 
-      = currentDevice().find(ComediSubDevice::AnalogInput);
+      = currentDevice().find();
     for (uint i = 0, cboxid = 0; 
          i < (uint)subdev.n_channels ||
            i < subdev.ranges().size() ||
@@ -473,13 +480,11 @@ DAQSystem::queryOpen(uint & chan, uint & range,
         id2cboxMap [ i ] = cboxid;
         cboxid++;
       }
-      if (i < subdev.ranges().size() ) {
-        /* build range id combo box inside here */
-        const comedi_range & r = subdev.ranges()[i];
-        QString u( ( r.unit == UNIT_volt ? "V" : "mV" ) );
-        gain.insertItem(QString().setNum(r.min) + u + " - " 
-                        + QString().setNum(r.max) + u);
-      }
+
+      /* build the range combo box */
+      QString tmpRangeStr = subdev.generateRangeString(i);
+      if (!tmpRangeStr.isNull()) gain.insertItem(tmpRangeStr);
+
       if (i < sizeof(n_seconds_options) / sizeof(const int)) {
         /* build n_secs combo box here */
         nSecs.insertItem(QString().setNum(n_seconds_options[i]) +" seconds");
@@ -601,14 +606,10 @@ DAQSystem::openChannelWindow(uint chan, uint range,
     }
 
     gcont->rangeChange(chanParams.range);
-    gcont->setSpikePolarity( (chanParams.spike_polarity 
-                              ? Positive 
-                              : Negative) );
+    gcont->setSpikePolarity( chanParams.spike_polarity );
     gcont->setSpikeBlanking( static_cast<int>(chanParams.spike_blanking) );
     shmCtl.setSpikeBlanking( chan, chanParams.spike_blanking );
-    shmCtl.setSpikePolarity( chan, (chanParams.spike_polarity 
-                                     ? Positive 
-                                     : Negative));
+    shmCtl.setSpikePolarity( chan, chanParams.spike_polarity );
 
     graph->setSecondsVisible( chanParams.n_secs );
   } 
@@ -805,6 +806,27 @@ DAQSystem::graphOff(const ECGGraphContainer * gcont)
   emit channelClosed(gcont->channelId);
 }
 
+void DAQSystem::closeGraphWindow( int channel_id )
+{
+  vector<const ECGGraphContainer *>gcs = graphContainers();
+  vector<const ECGGraphContainer *>::iterator it;
+
+  for (it = gcs.begin(); it != gcs.end(); it++) {
+    if ((*it)->channelId == static_cast<uint>(channel_id)) 
+      const_cast<ECGGraphContainer *>(*it)->close(true);
+  }
+}
+
+void DAQSystem::closeAllGraphWindows()
+{
+  vector<const ECGGraphContainer *>gcs = graphContainers();
+  vector<const ECGGraphContainer *>::iterator it;
+
+  for (it = gcs.begin(); it != gcs.end(); it++) 
+    closeGraphWindow((*it)->channelId);
+}
+
+
 void
 DAQSystem::resynch() 
 {
@@ -827,7 +849,7 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 {
   
   const vector<comedi_range> ranges = 
-    currentDevice().find(ComediSubDevice::AnalogInput).ranges();
+    currentDevice().find().ranges();
 
   for (uint i = 0; i < ranges.size(); i++) {
     c->addRangeSetting(ranges[i].min, ranges[i].max,
@@ -866,6 +888,7 @@ void DAQSystem::printDialog()
 {
   QDialog whichGraphs(this, 0, true, WStyle_Customize|WStyle_NormalBorder
                                      |WStyle_Title|WStyle_SysMenu);
+  whichGraphs.setCaption("Select Graphs to Print");
   QGridLayout l(&whichGraphs, 1, 1);
   QVBox *vbox = new QVBox(&whichGraphs);
   l.addWidget(vbox, 0, 0);
@@ -1018,7 +1041,7 @@ ReaderLoop::
 ReaderLoop(DAQSystem *d) :
   daq_system(d), 
   pleaseStop(false), 
-  n_channels(d->currentdevice.find(ComediSubDevice::AnalogInput).n_channels),
+  n_channels(d->currentdevice.find().n_channels),
   producers(n_channels),
   saved_curr_index(0),
   last_sleep_time(1000)
@@ -1059,10 +1082,25 @@ ReaderLoop(DAQSystem *d) :
     throw UnimplementedException 
       ("Unimplemented feature",
        "The use of non-rt_process input sources is not yet implemented!\n"
-       "Either insmod rt_process.o or give up for now... (Sorry!)");
+       "Either insmod rtlab.o or give up for now... (Sorry!)");
     break;
   }
 }
+
+
+void DAQSystem::showWindowTemplateDialog()
+{
+  if (!windowTemplateDlg) {
+    windowTemplateDlg = new WindowTemplateDialog(this, "Window Templates", 
+                                                 WType_TopLevel);
+    windowTemplateDlg->setCaption(windowTemplateDlg->name());
+  }
+  
+  windowTemplateDlg->show();
+  windowTemplateDlg->setActiveWindow();
+  windowTemplateDlg->raise();
+}
+
 
 ReaderLoop::~ReaderLoop()
 {
@@ -1225,7 +1263,7 @@ PluginMenu::PluginMenu(DAQSystem * ds,
 
 {
    
-  plugin_cmenu = new QPopupMenu(0, QString(name) + " - Plugin Menu Context");
+  plugin_cmenu = new QPopupMenu(this, QString(name) + " - Plugin Menu Context");
   plugin_cmenu->insertItem("Show Window", this, SLOT(showSelectedWindow()));
   plugin_cmenu->insertItem("Load", this, SLOT(carefullyLoadSelected()));
   plugin_cmenu->insertItem("Unload", this, SLOT(removeSelectedPlugin()));
@@ -1307,7 +1345,6 @@ PluginMenu::PluginMenu(DAQSystem * ds,
 PluginMenu::~PluginMenu()
 {
   unloadAll();
-  delete plugin_cmenu;
 }
 
 void PluginMenu::raisenShow()
@@ -1416,7 +1453,7 @@ void PluginMenu::pluginMenuContextReq(QListViewItem *item,
   plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(4), /* unload all */
                                plugins_and_handles.size());
   plugin_cmenu->popup(point);
-  col++; // keep compiler happy..
+  (void)col; // keep compiler happy..
 }
 
 void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin, 
@@ -1552,4 +1589,141 @@ Plugin * PluginMenu::pluginFindByName(QString name)
     if (name == i->first->name()) 
       return i->first; /* all plugins call unloadPlugin internally */ 
   return 0;
+}
+
+
+WindowTemplateDialog::WindowTemplateDialog(DAQSystem *parent, 
+                                           const char *name = 0, WFlags f = 0)
+  : QWidget (parent, name, f)
+{
+  ds = parent;
+  QGridLayout *layout = new QGridLayout(this);
+ 
+  
+   
+  layout->addWidget((new QLabel("<B>Window Templates</b><p>Window templates allow you to save or load the current window and channel 'state' to/from a named profile.<P>This is useful if you want this program to remember specific channel settings, so they can be recalled at a later date.", new QVGroupBox("Description", this)))->parentWidget(),    0, 0);
+
+  templateNames = new QListBox(new QVGroupBox("Available Templates", this), 
+                               "Template Name ListBox");
+
+  QToolTip::add(templateNames, "Right click to create/delete/apply a profile");
+  templateNames->setSelectionMode(QListBox::Single);
+  connect(templateNames, SIGNAL(selectionChanged()), this, SLOT(updateDetails()));
+  layout->addWidget(templateNames->parentWidget(), 1, 0);
+
+  details = new QTextEdit(new QVGroupBox("Details", this));
+  details->setReadOnly(true);
+
+  layout->addWidget(details->parentWidget(), 2, 0);
+
+  cmenu = new QPopupMenu(templateNames, "Window Template Context Menu Popup");
+
+  cmenu->insertItem("Create New...", this, SLOT(createNew()));
+  cmenu->insertSeparator();
+  delete_id = cmenu->insertItem("Delete Selected", this, SLOT(deleteSelected()));
+  apply_id = cmenu->insertItem("Apply Selected", this, SLOT(applySelected()));
+
+  connect (templateNames, SIGNAL(contextMenuRequested ( QListBoxItem *, const QPoint & )), this, SLOT(contextRequest(QListBoxItem *, const QPoint &)));
+
+  
+  refreshContents();
+}
+
+void WindowTemplateDialog::refreshContents()
+{
+  vector<QString> profiles = ds->settings.windowSettingProfiles();
+  vector<QString>::iterator it;
+
+  templateNames->clear();
+
+  for (it = profiles.begin(); it != profiles.end(); it++) 
+    templateNames->insertItem(*it);
+
+  updateDetails();
+}
+
+void WindowTemplateDialog::updateDetails()
+{
+  QString profileName( templateNames->currentText() );
+  DAQSettings::WindowSettingProfile profile 
+    = ds->settings.getWindowSettingProfile(profileName);
+  map<uint, DAQSettings::ChannelParams>::iterator it;
+  
+  QString detailStr="";
+
+  for (it = profile.channelParams.begin(); it != profile.channelParams.end();
+       it++)
+    {
+      DAQSettings::ChannelParams & cp = it->second;
+      
+      if (cp.isNull()) continue;
+
+      
+      detailStr += 
+        QString("<b>Channel ") + QString().setNum(it->first) + "</b><br>\n" 
+        + QString("<u>Range:</u> ") 
+        + ds->currentdevice.find().generateRangeString(cp.range) + "<br>\n"
+        + QString("<u>Seconds Visible:</u> ") + QString().setNum(cp.n_secs) 
+        + "<br>\n" 
+        + QString("<u>Spike:</u> ") 
+        + (cp.spike_on 
+           ?  QString().setNum(cp.spike_thold)  + "V "
+              + (cp.spike_polarity == Positive 
+                 ? "Positive" 
+                 : "Negative") + " polarity, " 
+           + QString().setNum(cp.spike_blanking) + "ms blanking" 
+             
+           : QString("Off")) + "<br>\n" 
+        + "<P>\n";
+      
+    }
+  details->setText(detailStr);
+}
+
+void
+WindowTemplateDialog::contextRequest(QListBoxItem * lbi, const QPoint & p)
+{
+  bool enabled = lbi && !ds->settings.getWindowSettingProfile(lbi->text()).isNull();
+  cmenu->setItemEnabled(apply_id, enabled);
+  cmenu->setItemEnabled(delete_id, enabled);
+    
+  cmenu->popup(p);
+}
+
+void WindowTemplateDialog::createNew()
+{
+  QMessageBox::information(this, "Unimplemented", "Unimplemented Feature", QMessageBox::Ok);
+}
+
+void WindowTemplateDialog::deleteSelected()
+{
+  QMessageBox::information(this, "Unimplemented", "Unimplemented Feature", QMessageBox::Ok);
+}
+
+void WindowTemplateDialog::applySelected()
+{
+  if (QMessageBox::warning(this, "Are you sure?", "Applying the selected profile will close all the current channels and open a new set of channels.  Are you sure you wish to continue?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+    return;
+
+  ds->closeAllGraphWindows();
+  ds->settings.clearAllChannelWindowSettings();
+
+  QString profileName( templateNames->currentText() );
+  DAQSettings::WindowSettingProfile profile 
+    = ds->settings.getWindowSettingProfile(profileName);
+  map<uint, DAQSettings::ChannelParams>::iterator it;
+  
+  for (it = profile.channelParams.begin(); it != profile.channelParams.end();
+       it++)
+    {
+      uint chan = it->first;
+      QRect & pos = profile.windowSettings[chan];
+      DAQSettings::ChannelParams & cp = it->second;
+
+      ds->settings.setChannelParameters(chan, cp);
+      ds->settings.setWindowSetting(it->first, pos);
+
+      ds->openChannelWindow(chan, cp.range, cp.n_secs);
+    }
+  
 }

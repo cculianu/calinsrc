@@ -78,6 +78,7 @@ DAQSettings::DAQSettings(const char *filename = 0)
   parseSettings();
   parseWindowSettings();
   parseChannelParameters();
+  parseAllWindowProfiles();
 }
 
 const QString &
@@ -224,19 +225,31 @@ DAQSettings::windowSettingChannels() const
   return s;
 }
 
+void DAQSettings::clearWindowSettings()
+{
+  set<uint> windows(windowSettingChannels());
+  set<uint>::iterator it;
+  static const QRect nullqr;
+
+  /* now clear 'em all */
+  for (it = windows.begin(); it != windows.end(); it++) 
+    setWindowSetting(*it, nullqr);   
+}
+
+/* the null channel parameter */
+const DAQSettings::ChannelParams DAQSettings::ChannelParams::null; 
+
 const
 DAQSettings::ChannelParams &
 DAQSettings::getChannelParameters(uint channel_number) const
 {
-  static const ChannelParams nullCP;
-
   map<uint, ChannelParams>::const_iterator i = channelParams.find(channel_number);
 
   if (i != channelParams.end()) {
     return i->second;
   }
 
-  return nullCP;
+  return ChannelParams::null;
 }
 
 void
@@ -251,12 +264,80 @@ DAQSettings::setChannelParameters(uint channel_number,
   generateChannelParametersString();
 }
 
+void 
+DAQSettings::clearChannelParameters()
+{
+  map<uint, ChannelParams>::iterator it;
+  set<uint> ids;
+  set<uint>::iterator sit;
+
+  for (it = channelParams.begin(); it != channelParams.end(); it++) 
+    ids.insert(it->first);
+  
+  for (sit = ids.begin(); sit != ids.end(); sit++) 
+    setChannelParameters(*sit, ChannelParams::null); /* set them all to null */
+  
+}
+
+vector<QString>
+DAQSettings::windowSettingProfiles() const
+{
+  map<QString, WindowSettingProfile>::const_iterator it;
+  vector<QString> ret;
+
+  for(it = _windowSettingProfiles.begin(); it != _windowSettingProfiles.end();
+      it++) 
+    ret.push_back(it->first);
+  return ret;
+}
+
+DAQSettings::WindowSettingProfile DAQSettings::WindowSettingProfile::null;
+
+DAQSettings::WindowSettingProfile 
+DAQSettings::getWindowSettingProfile(QString name) const
+{
+  map<QString, WindowSettingProfile>::const_iterator it = 
+    _windowSettingProfiles.find(name);
+
+  if (it != _windowSettingProfiles.end()) return it->second;
+  return WindowSettingProfile::null;
+}
+
+void DAQSettings::setWindowSettingProfile(const WindowSettingProfile &p)
+{
+  QString wss = "", cps = "";
+  QString section = QString(WP_SECTION_NAME_PREFIX) + p.name;
+
+  if (p.isNull()) {
+    _windowSettingProfiles.erase(p.name);    
+  } else {
+    _windowSettingProfiles [ p.name ] = p;
+    wss = generateWindowSettingsString(p.windowSettings);  
+    cps = generateChannelParametersString(p.channelParams);
+  }
+
+  if (p.name.isNull()) return;
+
+  settingsMap [section] [ KEY_WP_CHANNEL_PARAMS ] = cps;
+  settingsMap [section] [ KEY_WP_CHAN_WIN_SETTINGS ] = wss;
+
+  dirtySettings[section].insert(QString(KEY_WP_CHANNEL_PARAMS));
+  dirtySettings[section].insert(QString(KEY_WP_CHAN_WIN_SETTINGS));
+}
+
+
 void
 DAQSettings::parseWindowSettings()
 {
   windowSettings.clear(); /* empty it out */
+  windowSettings = parseWindowSettings(settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ]);
+}
 
-  const QString & ws(settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ]);
+map<uint, QRect>
+DAQSettings::parseWindowSettings(QString ws)
+{
+  map<uint, QRect> ret; 
+
   QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,\\d+;");
   int curr_match = 0, len = 0;
   while ( (curr_match = winsetRE.match(ws, curr_match+len, &len)) > -1 ) {
@@ -272,19 +353,30 @@ DAQSettings::parseWindowSettings()
     match = match.mid(tmp + 1); // consume number
     h = match.left((tmp = match.find(';'))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
-    windowSettings[ chan ] = QRect(x,y,w,h); // add channel to map
+    ret[ chan ] = QRect(x,y,w,h); // add channel to map
   }
+
+  return ret;
 }
 
 void
 DAQSettings::generateWindowSettingsString() 
 {
+  QString out(generateWindowSettingsString(windowSettings));
+
+  settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ] = out;
+  dirtySettings[SECTION_NAME].insert(KEY_CHAN_WIN_SETTINGS);
+}
+
+QString
+DAQSettings::generateWindowSettingsString(const map<uint, QRect> & ws) 
+{
   QString out;
 
-  map<uint, QRect>::iterator i;
-  for (i = windowSettings.begin(); i != windowSettings.end(); i++) {
+  map<uint, QRect>::const_iterator i;
+  for (i = ws.begin(); i != ws.end(); i++) {
     uint chan = i->first;
-    QRect & r = i->second;
+    const QRect & r = i->second;
     out += 
       QString().setNum(chan) + ":"
       + QString().setNum(r.x()) + "," 
@@ -292,17 +384,21 @@ DAQSettings::generateWindowSettingsString()
       + QString().setNum(r.width()) + ","
       + QString().setNum(r.height()) + ";";
   }
-  settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ] = out;
-  dirtySettings[SECTION_NAME].insert(KEY_CHAN_WIN_SETTINGS);
-  //cerr << "Settings string: " << out << endl;
+  return out;
 }
 
 void
 DAQSettings::parseChannelParameters()
 {
   channelParams.clear(); /* empty it out */
+  channelParams = parseChannelParameters(settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ]);
+}
 
-  const QString & cp(settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ]);
+map<uint, DAQSettings::ChannelParams>
+DAQSettings::parseChannelParameters(QString cp)
+{
+  map<uint, ChannelParams> ret;
+
   QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+.?\\d*,\\d+,\\d+;");
   int curr_match = 0, len = 0;
   while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
@@ -319,24 +415,36 @@ DAQSettings::parseChannelParameters()
     match = match.mid(tmp + 1); // consume number
     c.spike_thold = match.left((tmp = match.find(','))).toDouble(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.spike_polarity = match.left((tmp = match.find(','))).toInt(); // parse number
+    c.spike_polarity = (match.left((tmp = match.find(','))).toInt() == Negative ? Negative : Positive); // parse number
     match = match.mid(tmp + 1); // consume number
     c.spike_blanking = match.left((tmp = match.find(';'))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
     c.setNull(false);
-    channelParams[ chan ] = c; // add channel params to map
+    ret[ chan ] = c; // add channel params to map
   }
+
+  return ret;
 }
 
 void
 DAQSettings::generateChannelParametersString()
 {
+  QString out(generateChannelParametersString(channelParams));
+
+  settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ] = out;
+  dirtySettings[SECTION_NAME].insert(KEY_CHANNEL_PARAMS);
+}
+
+QString
+DAQSettings::
+generateChannelParametersString(const map<uint, ChannelParams> & cp)
+{
   QString out;
 
-  map<uint, ChannelParams>::iterator i;
-  for (i = channelParams.begin(); i != channelParams.end(); i++) {
+  map<uint, ChannelParams>::const_iterator i;
+  for (i = cp.begin(); i != cp.end(); i++) {
     uint chan = i->first;
-    ChannelParams & c = i->second;
+    const ChannelParams & c = i->second;
     out += 
       QString::number(chan) + ":" +
       QString::number(c.n_secs) + "," +
@@ -346,9 +454,7 @@ DAQSettings::generateChannelParametersString()
       QString::number((short)c.spike_polarity) + "," +
       QString::number(c.spike_blanking) + ";";
   }
-
-  settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ] = out;
-  dirtySettings[SECTION_NAME].insert(KEY_CHANNEL_PARAMS);
+  return out;
 }
 
 QPrinter::PageSize 
@@ -361,4 +467,27 @@ void DAQSettings::setPageSize(QPrinter::PageSize pagesize)
 {
   settingsMap[SECTION_NAME][KEY_PAGE_SIZE] = QString::number(static_cast<int>(pagesize));
   dirtySettings[SECTION_NAME].insert(KEY_PAGE_SIZE);  
+}
+
+void DAQSettings::parseAllWindowProfiles()
+{
+  SettingsMap::const_iterator it;
+  static const QString section_name_prefix(WP_SECTION_NAME_PREFIX);
+
+  _windowSettingProfiles.clear();
+
+  /* Find all the sections beginning with the window profile prefix */
+  for (it = settingsMap.begin(); it != settingsMap.end(); it++) {
+    QString thissec = it->first.stripWhiteSpace();
+    if (thissec.startsWith(section_name_prefix)) {
+      WindowSettingProfile newwsp;
+      newwsp.setNull(false);
+      newwsp.name = thissec.mid(section_name_prefix.length());
+      newwsp.windowSettings = parseWindowSettings(settingsMap[it->first][KEY_WP_CHAN_WIN_SETTINGS]);
+      newwsp.channelParams = parseChannelParameters(settingsMap[it->first][KEY_WP_CHANNEL_PARAMS]);
+      if (!newwsp.name.isNull() && newwsp.windowSettings.size() 
+          && newwsp.channelParams.size() )
+        _windowSettingProfiles[newwsp.name] = newwsp;
+    }
+  }
 }

@@ -7,8 +7,8 @@ class DSDRStream : public DSDIStream {
 public:
 
   DSDRStream()  { init(); }
-  DSDRStream (const QString & inFile)// throw (FileException)
-    { setInFile(inFile); init(); } ;
+  DSDRStream (const QString & inFile) : DSDIStream(inFile)
+    { init();  } ;
   
   void start();
   bool readNextScan (map<uint, SampleStruct> & m);

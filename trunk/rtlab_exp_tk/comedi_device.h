@@ -69,6 +69,10 @@ class ComediSubDevice
   vector<comedi_range> & ranges() { return _ranges; }
   const vector<comedi_range> & ranges() const {return _ranges;}
 
+  /* Generates a string for the given range index
+     returns a null QString if channelId is invalid...  */
+  QString generateRangeString(uint channelId) const;
+
   lsampl_t maxData() const { return maxdata; }
   lsampl_t & maxData() { return maxdata; }
 
@@ -105,7 +109,8 @@ class ComediDevice
     : filename(filename) {};
 
   /* returns a null (isNull() == true) ComediSubDevice if not found */
-  const ComediSubDevice & find(ComediSubDevice::SubdevType type, 
+  const ComediSubDevice & find(ComediSubDevice::SubdevType type 
+                               = ComediSubDevice::AnalogInput, 
                                int id_start = 0) const; 
 
   QString filename;

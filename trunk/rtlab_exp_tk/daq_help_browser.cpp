@@ -33,8 +33,10 @@ DAQHelpBrowser::DAQHelpBrowser( QWidget *parent = 0 )
 /* static */
 HTMLBrowser * DAQHelpBrowser::getDefaultBrowser() 
 {
-  if ( defaultBrowser == 0 )
+  if ( defaultBrowser == 0 ) {
     defaultBrowser = new DAQHelpBrowser();
+    defaultBrowser->setCaption("DAQSystem Help");
+  }
   return defaultBrowser;
 }
 

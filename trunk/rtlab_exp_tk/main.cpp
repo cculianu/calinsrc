@@ -109,6 +109,7 @@ init(void)
     conf = 
       new ConfigurationWindow (*probe, *settings, 0, "Configuration Window", 
                                Qt::WType_TopLevel | Qt::WType_Modal);
+    conf->setCaption("DAQSystem - Configuration Window");
 }
 
 static

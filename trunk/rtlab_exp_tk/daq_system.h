@@ -47,6 +47,8 @@
 
 #define DAQ_SYSTEM_APPNAME_CSTRING "DAQSystem"
 
+class  WindowTemplateDialog; 
+
 class DAQSystem;
 class Plugin;
 
@@ -189,11 +191,47 @@ private:
   DAQSystem * daqSystem; 
 };
 
+
+
+class QListBox;
+class QTextEdit;
+
+class WindowTemplateDialog: public QWidget
+{
+  Q_OBJECT
+
+ public:
+  WindowTemplateDialog(DAQSystem *parent, const char *name = 0, WFlags f = 0);
+  ~WindowTemplateDialog() {};
+
+ private slots:
+  void updateDetails();
+  void contextRequest(QListBoxItem *, const QPoint & p);
+  void createNew();
+  void deleteSelected();
+  void applySelected();
+
+ private:
+  DAQSystem *ds;
+  
+  QListBox *templateNames;
+  QTextEdit *details;
+
+  QPopupMenu *cmenu;
+
+  int delete_id, apply_id;
+
+  void refreshContents();
+  
+};
+
+
 class DAQSystem : public QMainWindow
 {
   Q_OBJECT
 
   friend class ReaderLoop;
+  friend class WindowTemplateDialog;
 
  public:
   DAQSystem (ConfigurationWindow & cw, QWidget * parent = 0, 
@@ -219,6 +257,9 @@ class DAQSystem : public QMainWindow
                                                to all channels */
   void openChannelWindow(uint chan, uint range, uint n_secs);
   void saveGraphSettings(const ECGGraphContainer *self);
+  void closeGraphWindow( int channel_id );
+  void closeAllGraphWindows();
+
   //void about();    /* about the application */
   void daqHelp( int id );
 
@@ -249,17 +290,18 @@ class DAQSystem : public QMainWindow
   void showLogWindow(); /* calls show() on the Log Window widget */
   void printDialog(); /* brings up various pring dialogs and the like */
 
+  void showWindowTemplateDialog();
+
  private slots:
 
   void windowMenuRemoveWindow(const QWidget *w);
   /* defeat qt's type-dumbness with signals/slots */
   void windowMenuRemoveWindow(const ECGGraphContainer *w);
-
+  
   /* yet another really redundant slot:
      1) turns off the graph in the ShmMgr
      2) notifies the readerLoop */
   void graphOff(const ECGGraphContainer *);
-
 
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
@@ -272,7 +314,7 @@ class DAQSystem : public QMainWindow
   bool queryOpen(uint & chan, uint & range, 
                  uint & n_secs);
   void buildRangeSettings(ECGGraphContainer *container);
-
+  
   /* Prints the current graph's contents for each of the graph containers
      specified in the vector */
   void print(vector<const ECGGraphContainer *> &);
@@ -307,6 +349,8 @@ class DAQSystem : public QMainWindow
   Tyler tyler;
   
   PluginMenu plugin_menu;
+  
+  WindowTemplateDialog *windowTemplateDlg;
 
   enum HelpMenuIds { help1 = 0, help2, help3, n_help_dests };
   static const QString helpMenuDestinations[n_help_dests];
