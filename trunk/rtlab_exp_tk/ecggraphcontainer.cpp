@@ -234,8 +234,8 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   if (name)  this->setCaption(name);
 
   { /* for the x-axis stuff */
-    QLabel *xaxislabel = new QLabel("Time: ", this);
-    layout->addWidget(xaxislabel, 1, 0);
+    xaxisLabel = new QLabel("Time: ", this);
+    layout->addWidget(xaxisLabel, 1, 0);
 
     xaxis = new QWidget(this);
     layout->addWidget(xaxis, 1, 1);
@@ -473,6 +473,25 @@ void ECGGraphContainer::pauseUnpause()
 {
   nothungry = !nothungry;
 }
+
+void ECGGraphContainer::setXAxis(bool on)
+{
+  if (on) { xaxis->show(); xaxisLabel->show(); }
+  else    { xaxis->hide(); xaxisLabel->hide(); }
+}
+
+void ECGGraphContainer::setYAxis(bool on)
+{
+  if (on) labelBox->show();
+  else    labelBox->hide();
+}
+
+void ECGGraphContainer::setStatusBar(bool on)
+{
+  if (on) statusBar->show();
+  else    statusBar->hide();
+}
+
 
 /* returns the xAxis strings as they appeaer in the graph container's
    x axis labels */
