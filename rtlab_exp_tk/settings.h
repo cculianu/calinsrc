@@ -25,6 +25,7 @@
 #include <iterator>
 #include <set>
 #include <map>
+#include <vector>
 #include <qiodevice.h>
 #include <qstring.h>
 #include <qregexp.h>
@@ -75,7 +76,15 @@ class Settings
   virtual void put(const QString & section, const QString &key, const QString &value);
 
   virtual void putSection(const QString & section_name, const Section & section);
+  virtual void mergeSection(const QString & section_name, const Section & section);
   virtual Section getSection(const QString & section_name) const;
+
+  /* retrieves all the section names available in this settings instance */
+  virtual vector<QString> sections() const;
+
+  /* two identical methods to merge one settings instance into this one */
+  Settings & operator<<(const Settings & merge_from);
+  virtual Settings & merge(const Settings & merge_from);
 
  protected:
 

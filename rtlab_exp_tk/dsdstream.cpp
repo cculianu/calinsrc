@@ -105,6 +105,7 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
     time(&history.timeStarted);
   } else if (mode() & IO_ReadOnly) {
     sampleData.clear();
+    meta_data.clear();
     uint magic = 0, fdt = 0;
     *this >> magic >> fdt;
 #ifdef DEBUGGG
@@ -113,7 +114,7 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
     Assert<FileFormatException>( magic == MAGIC, "Bad file format", "This file is not a DSD file.");
     Assert<FileFormatException>( (fileDataType = uint2fdt(fdt)) != UNKNOWN_DATA_TYPE, "Unknown file data type",
                                 "Unknown file data type encountered.  Currently only double and float data types are supported." );
-    unserializeHistory();
+    unserializeMetaData();
   }
 }
 
@@ -127,7 +128,7 @@ void DSDStream::end()
       history.endIndex = scanIndex();
       history.maskStates.push_back(maskState);
       history.rateStates.push_back(rateState);
-      serializeHistory();
+      serializeMetaData();
     } catch (Exception & e) {  }
   }
   unsetDevice(); // also deletes .. :)
@@ -417,6 +418,18 @@ DSDStream::readNextScan (map<uint, SampleStruct> & m) //throw (IllegalStateExcep
   return ret;
 }
 
+/* here a user can put his own meta-data, which are just name/value pairs */
+void DSDStream::putUserMetaData(QString name, QString value) 
+{ 
+  meta_data[name] = value; 
+}
+
+/* here a user can read his own meta-data, which are just name/value pairs */
+QString DSDStream::getUserMetaData(QString name)
+{ 
+  return meta_data[name]; 
+}
+
 bool DSDStream::readNextSample ( SampleStruct * s ) //throw (IllegalStateException, FileFormatException, FileException)
 {
   if (!(mode() & (IO_ReadOnly)) ) return false;
@@ -653,13 +666,13 @@ QDataStream & DSDStream::readRawBytes ( char * s, uint len ) //throw (FileExcept
 }
 
 // only should be called from within end()!
-void DSDStream::serializeHistory() //throw (FileException)
+void DSDStream::serializeMetaData() //throw (FileException)
 {
   QByteArray byte_arr;
   QBuffer buf(byte_arr);
   Settings settings(&buf);
 
-
+  settings.putSection("User Meta Data", meta_data);
   history.computeMaxUniqueChannelsUsed();
   history.serialize(settings, "State History Metadata");
   settings.saveSettings();
@@ -673,7 +686,7 @@ void DSDStream::serializeHistory() //throw (FileException)
 #endif
 }
 
-void DSDStream::unserializeHistory() //throw (FileException)
+void DSDStream::unserializeMetaData() //throw (FileException)
 {
   QIODevice::Offset whereWeBegan = device()->at();
 
@@ -696,6 +709,7 @@ void DSDStream::unserializeHistory() //throw (FileException)
   Settings settings(&buf);
   settings.parseSettings();
 
+  meta_data = settings.getSection("User Meta Data");
   history.unserialize(settings, "State History Metadata");
   device()->at(whereWeBegan);
 }

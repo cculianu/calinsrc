@@ -148,6 +148,11 @@ public:
   /* reads the next full scan and modifies m to be channel-id -> SampleStruct */
   bool readNextScan (map<uint, SampleStruct> & m) ;//throw (IllegalStateException, FileFormatException, FileException);
 
+
+  /* here a user can put his own meta-data, which are just name/value pairs */
+  void putUserMetaData(QString name, QString value); 
+  QString getUserMetaData(QString name); 
+
   FileDataType dataType() const { return fileDataType; };
 
   /* can only set the data type if writing hasn't already begun */
@@ -237,8 +242,10 @@ private:
   void putUserDataInsn();
   void doInsn();
 
-  void serializeHistory();// throw (FileException);
-  void unserializeHistory();// throw (FileException);
+  void serializeMetaData();// throw (FileException);
+  void unserializeMetaData();// throw (FileException);
+  
+  Settings::Section meta_data; // <-- normally the user's meta data
 
   static Instruction uint2insn(uint i)
   {
