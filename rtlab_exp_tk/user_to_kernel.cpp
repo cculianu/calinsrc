@@ -75,28 +75,34 @@ int RTLabKernelNotifier::setAllChans(bool on)
   return do_cmd();
 }
 
-int RTLabKernelNotifier::setChanspec(uint chanspec)
+int RTLabKernelNotifier::setGain(uint chan, uint gain)
 {
-  cmd.command = RTLAB_SET_CHANSPEC;
-  cmd.u.chanspec = chanspec;
+  cmd.command = RTLAB_SET_GAIN;
+  cmd.chan = chan;
+  cmd.u.gain = gain;
   return do_cmd();
 }
 
-int RTLabKernelNotifier::setChanspec(uint chan, uint range, uint aref)
+int RTLabKernelNotifier::setAllGains(uint gain)
 {
-  return setChanspec(CR_PACK(chan, range, aref));
-}
-
-int RTLabKernelNotifier::setAllChanspecs(uint chanspec)
-{
-  cmd.command = RTLAB_SET_CHANSPEC_ALL;
-  cmd.u.chanspec = chanspec;
+  cmd.command = RTLAB_SET_GAIN_ALL;
+  cmd.u.gain = gain;
   return do_cmd();
 }
 
-int RTLabKernelNotifier::setAllChanspecs(uint range, uint aref)
+int RTLabKernelNotifier::setAREF(uint chan, uint aref)
 {
-  return setAllChanspecs(CR_PACK(0, range, aref));
+  cmd.command = RTLAB_SET_AREF;
+  cmd.chan = chan;
+  cmd.u.aref = aref;
+  return do_cmd();
+}
+
+int RTLabKernelNotifier::setAllAREFs(uint aref)
+{
+  cmd.command = RTLAB_SET_AREF_ALL;
+  cmd.u.aref = aref;
+  return do_cmd();
 }
 
 int RTLabKernelNotifier::setSpike(uint chan, bool on)

@@ -50,7 +50,7 @@ ECGGraph::ECGGraph (int sampleRateHz,
                     const char *name, 
                     WFlags f) : 
   QWidget (parent, name, f | WRepaintNoErase | WResizeNoErase), 
-  plotFactor(10),
+  plot_factor(10),
   numSamples(sampleRateHz * secsVisible),
   _sampleRateHz(sampleRateHz), 
   secsVisible(secsVisible),
@@ -73,7 +73,7 @@ ECGGraph::ECGGraph (int sampleRateHz,
   spikePen.setStyle(DashLine);
   _blipPen.setWidth(0);
   _blipPen.setCapStyle(RoundCap);
-  _blipPen.setColor("#ffffcc");
+  _blipPen.setColor("#ff0000");
 
   initBuffer(); // initialize the pixmap buffer
 
@@ -157,9 +157,9 @@ void ECGGraph::setRange(double newRangeMin, double newRangeMax) {
 
 void ECGGraph::push_back(double amplitude)
 {
-  static const int plotFactor = 125; /* actually draw to screen every 
-                                       plotFactor-th sample */
-  bool update_to_screen_flg = !(_totalSampleCount  % plotFactor);
+  static const int plot_factor = 125; /* actually draw to screen every 
+                                       plotFactor()-th sample */
+  bool update_to_screen_flg = !(_totalSampleCount  % plot_factor);
   int i;
 
   if (update_to_screen_flg) deletePlotsBetween (0, currentSampleIndex);
@@ -196,16 +196,16 @@ void ECGGraph::plot (double amplitude, uint64 sample_index) {
 void ECGGraph::plot (double amplitude) {
 
   if (currentSampleIndex && currentSampleIndex != _totalSampleCount
-      && !(currentSampleIndex  % plotFactor)) {
-    deletePlotsBetween (currentSampleIndex - plotFactor, currentSampleIndex);
+      && !(currentSampleIndex  % plotFactor())) {
+    deletePlotsBetween (currentSampleIndex - plotFactor(), currentSampleIndex);
   }
 
   makePoint(amplitude, -1);
 
-  if (currentSampleIndex && !(currentSampleIndex % plotFactor) ) {
+  if (currentSampleIndex && !(currentSampleIndex % plotFactor()) ) {
 
     /* plot the lines */
-    plotLines (currentSampleIndex - plotFactor, currentSampleIndex);  
+    plotLines (currentSampleIndex - plotFactor(), currentSampleIndex);  
 
     /* now draw the little blip */
     drawLittleBlip();

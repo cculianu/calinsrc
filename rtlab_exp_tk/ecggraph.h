@@ -60,9 +60,6 @@ class ECGGraph : public QWidget {
   
   virtual ~ECGGraph();
 
-  unsigned int plotFactor; /* actually draw to screen every  plotFactor-th 
-                              sample -- defaults to 10 */
-
   /*
     Property Methods 
   */
@@ -129,6 +126,9 @@ class ECGGraph : public QWidget {
    This method is suitable for printing the graph, as the pixmap
    can be easily printed afterwards. */    
   virtual void renderToPixmap(QPixmap &) const;
+
+  uint plotFactor() const { return plot_factor; }
+  uint setPlotFactor(uint p) { return plot_factor = p; }
 
 signals:
   // to do: move these out of here in favor of
@@ -198,6 +198,9 @@ signals:
   virtual void mousePressEvent (QMouseEvent *event);
 
   virtual void mouseReleaseEvent (QMouseEvent *event);
+
+  unsigned int plot_factor; /* actually draw to screen every  plotFactor-th 
+                              sample -- defaults to 10 */
 
   int     numSamples,          // the number of samples this graph supports
           currentSampleIndex,

@@ -35,63 +35,51 @@ LayerRenderer::~LayerRenderer() {}
 void LayerRenderer::buildRefreshRects()
 {
 
-  const int n_buffer_pixels = back_buffer.width() * back_buffer.height();
-  bool continue_flg = true;
+  Areas::const_iterator area_it;
   Layers_it it;
  
-  refresh_rects.clear();
-  for (n_pixels_in_rects = 0, it = layers.begin(); 
-       continue_flg && it != layers.end(); it++) {
-    vector<QRect>::const_iterator rect_it;
-    const vector<QRect> & rects = it->second->changedAreas();
-    for (rect_it = rects.begin(); rect_it != rects.end(); rect_it ++) {
-      n_pixels_in_rects += rect_it->width() * rect_it->height();
-      if (n_pixels_in_rects >= n_buffer_pixels) {
-        refresh_rects.clear();
-        refresh_rects.push_back(QRect(0,0,back_buffer.width(), back_buffer.height()));
-        continue_flg = false; 
-        break;
-      }
-      refresh_rects.push_back(*rect_it);
+  refresh_area = QRegion();
+  for (n_pixels_in_rects = 0, it = layers.begin();  it != layers.end(); it++) {
+    const Areas & areas = (*it)->changedAreas();
+    for (area_it = areas.begin(); area_it != areas.end(); area_it++) {
+      refresh_area += *area_it; // unite() the Areas (QRegions)
     }
-    it->second->clearChanges();
+    (*it)->clearChanges(); 
   }
   
 }
 
 void LayerRenderer::render()
 {
-  if (!layers.size()) return;
+  if (!layers.size() || back_buffer.isNull()) return;
 
   
   Layers_it it;
-  vector<QRect>::iterator r_it;
 
   buildRefreshRects();
 
+  if (refresh_area.isNull()) return;
+
+  QRect bounds = refresh_area.boundingRect();
+
   for (it = layers.begin(); it != layers.end(); it++) 
-    for (r_it = refresh_rects.begin(); r_it != refresh_rects.end(); r_it++) 
-      bitBlt(&back_buffer, r_it->topLeft(), 
-             &(it->second->layer()), *r_it, CopyROP);
-    
-  
-  
-  for (r_it = refresh_rects.begin(); r_it != refresh_rects.end(); r_it++) 
-    bitBlt(this, r_it->topLeft(), &back_buffer, *r_it, CopyROP);
-    
+    bitBlt(&back_buffer, bounds.topLeft(), 
+           &((*it)->layer()), bounds, CopyROP);        
 }
 
 void LayerRenderer::renderAll()
 {
-  if (!layers.size()) return;
+  if (!layers.size() || back_buffer.isNull() ) return;
 
   Layers_it it;
 
-  for (it = layers.begin(); it != layers.end(); it++) 
+  for (it = layers.begin(); it != layers.end(); it++) {
     bitBlt(&back_buffer, 0,0,
-           &(it->second->layer()), 0,0, back_buffer.width(), back_buffer.height(), CopyROP, false);
-  bitBlt(this, 0,0,
-         &back_buffer, 0,0, back_buffer.width(), back_buffer.height(), CopyROP, true);
+           &((*it)->layer()), 0,0, back_buffer.width(), back_buffer.height(), 
+           CopyROP);
+    (*it)->clearChanges();
+  }
+  refresh_area = QRect(0, 0, back_buffer.width(), back_buffer.height());
   
 }
 
@@ -111,20 +99,37 @@ void LayerRenderer::removeChild(QObject * obj)
 
 void LayerRenderer::addLayer(LayerGenerator * g) 
 { 
-  if (layers.find(g->layerNumber()) != layers.end()) 
-    removeChild(layers[g->layerNumber()]);
+  /* add the layer in order of its layer value */
+  Layers_it i;
+  for (i = layers.begin(); i != layers.end(); i++) {
+    if (g->layerNumber() < (*i)->layerNumber()) {
+      i = layers.insert(i, g);
+      break;
+    }
+  }
+  if (i == layers.end()) layers.push_back(g);
   
   g->setSize(size());
-  layers.insert(Layers_map::value_type(g->layerNumber(), g)); 
+  renderAll();
+  refresh();
 }
 
 void LayerRenderer::removeLayer(int layer) 
 { 
-  layers.erase(layer); 
+  Layers_it i;
+
+  for (i = layers.begin(); i != layers.end(); i++) {
+    if ((*i)->layerNumber() == layer)
+      i = layers.erase(i); 
+  }
+  renderAll();
+  refresh();
 }
 
 void LayerRenderer::paintEvent(QPaintEvent *e)
 {
+  render();
+  refresh();
   bitBlt(this, e->rect().topLeft(), &back_buffer, e->rect(), CopyROP);
 }
 
@@ -133,11 +138,19 @@ void LayerRenderer::resizeEvent(QResizeEvent *e)
   Layers_it it;
 
   for (it = layers.begin(); it != layers.end(); it++) 
-    it->second->setSize(e->size());
+    (*it)->setSize(e->size());
 
   back_buffer.resize(e->size());
   
   renderAll();
+  refresh();
+}
+
+void LayerRenderer::refresh()
+{
+  if (refresh_area.isNull()) return;
+  QRect bounds = refresh_area.boundingRect();
+  bitBlt(this, bounds.topLeft(), &back_buffer, bounds, CopyROP);
 }
 
 
