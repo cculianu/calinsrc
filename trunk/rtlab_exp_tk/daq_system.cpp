@@ -68,6 +68,7 @@
 
 #include "plugin.h"
 
+#include "comedi_coprocess.h"
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
 		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
@@ -821,6 +822,7 @@ ReaderLoop(DAQSystem *d) :
   last_sleep_time(1000)
 {
   switch (d->settings.getInputSource()) {
+  
   case DAQSettings::RTProcess:
     shmCtl = new ShmController(ShmController::MBuff);
 

@@ -504,7 +504,7 @@ void DSDStream::doInsn()
 #endif
     break;
   default:
-    throw FileFormatException("INTERNAL ERROR", "Unknown instruction encountered in data file!");
+    throw FileFormatException("INTERNAL ERROR", "Unknown instruction encountered in data file!  Either the file is corrupt or you are using an old version of this software to read a newer file format.");
     break;
   }
 }

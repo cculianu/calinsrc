@@ -225,7 +225,13 @@ Probe::validate() const
 void
 Probe::attach_to_shm_and_stuff()
 {
-  have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
+  // temporary hack
+  //try {
+    have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
+    //} catch (ShmException & e) {
+    //have_rt_process = false;
+    //shm = 0;
+    //}
 }
 
 void
