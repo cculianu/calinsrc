@@ -128,6 +128,7 @@ setOutFile (const QString &f)
     fileNameLabel.setText(_outFile.section('/',-1));
     fileMenu.setItemEnabled(saveMenuItemId, true);
   }
+  setCaption(QString(name()) + " - " + fileNameLabel.text());
 }
 
 /* attempts to use contents of file as the current text.  This implicitly
@@ -186,6 +187,24 @@ saveAs()
                                            "Logs (*.log *.txt)", this ));
   if (f.isNull()) return;
 
+  QFile file (f);
+  if (file.exists()) {
+    int buttonPicked =
+      QMessageBox::
+      warning(this, 
+              "File exists.", 
+              QString("The file ") + f + " exists.\nIf you choose to continue,"
+              " it will be overwritten.",
+              "Overwrite", "Choose Another", "Cancel", 0, 2);    
+    switch (buttonPicked) {      
+    case 1:
+      saveAs();
+    case 2:
+      return;     
+    case 0:
+      break;
+    }
+  }
   setOutFile(f);
   save();
 }

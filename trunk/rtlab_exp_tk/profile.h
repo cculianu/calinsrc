@@ -19,8 +19,6 @@
 #define _PROFILE_H
 
 #include <string>
-#include <iostream>
-#include <map>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -40,5 +38,6 @@ struct ProfileStruct {
 };
 
 void profile (const string & key, ProfileCmd cmd);
+void profileStats();
 
 #endif

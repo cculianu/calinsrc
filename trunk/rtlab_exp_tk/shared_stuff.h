@@ -45,9 +45,9 @@ extern "C" {
 
 # define RT_QUEUE_SZ_BLOCKS (24000) /* size of queue in terms of \
                                        number of sample blocks */
-# define RT_QUEUE_BLOCK_SZ_BYTES (sizeof(SampleStruct))
+# define SS_RT_QUEUE_BLOCK_SZ_BYTES (sizeof(SampleStruct))
 /* size of RT queue (RTF's) in bytes. */
-# define RT_QUEUE_SZ_BYTES (RT_QUEUE_SZ_BLOCKS * RT_QUEUE_BLOCK_SZ_BYTES) 
+# define SS_RT_QUEUE_SZ_BYTES (RT_QUEUE_SZ_BLOCKS * SS_RT_QUEUE_BLOCK_SZ_BYTES) 
 
 /* The maximum number of channels per subdevice for our automatically
    allocated shared memory struct */
@@ -144,7 +144,7 @@ typedef struct SharedMemStruct SharedMemStruct;
 #endif
 
 inline 
-unsigned int
+int
 _test_bit (unsigned int bit, const char *bits)
 {
   unsigned int elem_index = bit / 8, bitpos = bit % 8;
@@ -171,7 +171,7 @@ _set_bit (unsigned int bit, char *bits, int onoroff)
 }
 
 inline 
-unsigned int
+int
 is_chan_on (unsigned int chan, const char array[CHAN_MASK_SIZE])
 { return (chan > SHD_MAX_CHANNELS ? 0 : _test_bit(chan, array) ); }
 

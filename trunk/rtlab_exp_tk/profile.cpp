@@ -16,6 +16,8 @@
  ***************************************************************************/
 
 #include <stdio.h>
+#include <iostream>
+#include <map>
 #include "common.h"
 #include "profile.h"
 
@@ -48,11 +50,18 @@ void profile (const string & key, ProfileCmd cmd)
       p.count++;
     break;
   case PROFILE_END:
-      p.avg_time += (uint64)(((tv.tv_sec * 1000000 + tv.tv_usec) - p.last_time) / (double)p.count);
+      p.avg_time += (static_cast<uint64>(tv.tv_sec * 1000000 + tv.tv_usec) - p.last_time) / p.count;
     break;
   case PROFILE_PRINT_AVG:
       sprintf(avgt_buf, "%qu", p.avg_time); sprintf(count_buf, "%qu", p.count);
       cerr << "Avg time for operation '" << key << "' is " << avgt_buf << "usec after " << count_buf << " iterations." << endl;
     break;
   }
+}
+
+void profileStats()
+{
+  map<string, ProfileStruct>::iterator it;
+  for (it = profile_data.begin(); it != profile_data.end(); it++)
+    profile(it->first, PROFILE_PRINT_AVG);
 }

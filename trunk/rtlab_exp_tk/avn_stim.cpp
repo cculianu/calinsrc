@@ -32,7 +32,7 @@
 class AVNStim: public QFrame, public Plugin
 {
 public:
-  AVNStim(DAQSystem *daqSystem, QWidget *parent = 0);
+  AVNStim(DAQSystem *daqSystem, QWidget *parent = 0, WFlags f = 0);
   ~AVNStim();
   const char *name() const;
   const char *description() const;
@@ -42,7 +42,10 @@ private:
 };
 
 extern "C" {
-  Plugin *entry(DAQSystem *d) { return new AVNStim(d, d->centralWidget()); }
+  Plugin *entry(DAQSystem *d) 
+  { /* Top-level widget.. parent is root */
+    return new AVNStim(d, 0, Qt::WType_TopLevel); 
+  } 
   const char * name = "AV Node Control Experiment",
              * description =
               "Some gui controls for interfacing with the AV Node stimulation "
@@ -52,8 +55,8 @@ extern "C" {
 };
 
 
-AVNStim::AVNStim(DAQSystem *daqSystem, QWidget *parent) 
-  : QFrame(parent,"AVN Stim Interface"), daqSystem(daqSystem)
+AVNStim::AVNStim(DAQSystem *daqSystem, QWidget *parent, WFlags f) 
+  : QFrame(parent,"AVN Stim Interface", f), daqSystem(daqSystem)
 {
   /* stub.. */
   QGridLayout *layout = new QGridLayout(this, 1, 1);
