@@ -1,26 +1,24 @@
 #!/bin/sh
 
-(
-#for rtlinux-2.1
+#for rtlinux-3.1
 
 #setup comedi ... these also insert comedi.o, mite.o & rtl_time.o automatically
 #(comment if done automatically in /etc/rc.d/rc.local)
-/sbin/modprobe ni_atmio
-/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260
+#/sbin/modprobe ni_atmio
+#/usr/sbin/comedi_config /dev/comedi0 ni_atmio 0x260
+#/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260
 #/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260,3 
-/sbin/modprobe kcomedilib
+#/sbin/modprobe kcomedilib
 #/usr/local/comedi/comedilib-0.7.9/comedi_calibrate/comedi_calibrate #slow!
-modlocation=`pwd`
 
-/sbin/insmod rtl_sched
-/sbin/insmod rtl_posixio
-/sbin/insmod rtl_fifo
+#/sbin/modprobe rtl_sched
+#/sbin/modprobe rtl_posixio
+#/sbin/modprobe rtl_fifo
 
 #insert the mbuff shared memory module
-/sbin/modprobe mbuff
+#/sbin/modprobe mbuff
 
 #insert the rt_process for this specific application
-/sbin/insmod $modlocation/rt_process.o
+/sbin/insmod ./rt_process.o
 
 
-)
