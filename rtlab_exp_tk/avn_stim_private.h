@@ -37,7 +37,7 @@ class QSpinBox;
 class QLineEdit;
 class QScrollBar;
 class QCheckBox;
-class TempFile;
+template<class T> class TempSpooler;
 
 class AVNStim: public QObject, public Plugin
 {
@@ -82,8 +82,6 @@ private:
   bool need_to_save;
   QString outFile;
 
-  TempFile *tmpFile; /* the tempfile that spools read data to disk */
-
   /* Layout/UI related-stuff */
   QWidget *window;  /* this contains the whole shebang */
   QWidget *graphs, *controls; /* dummy containers for all the graphs */
@@ -105,6 +103,8 @@ private:
 
   QCheckBox *g_adj_manual_only, *control_toggle; 
 
+  TempSpooler<AVNLiebnitz> *spooler;
+
   void addAxisLabels(); /* puts the axis labels for the above graphs in */
   void populateAOComboBox();  
   void synchAOChan();  /* synch the ao_channels combobox with the kernel */
@@ -118,9 +118,6 @@ private:
   void moduleDetach(); /* closes the fifo fd and detached from shm */
   bool needFifo() const { return (fifo < 0); }
   void readInFifo(); /* reads in data off the fifo from the avn_stim module */
-/* Spools data from the rt-process in fifo to the tempFile,
-   throws FileException if it encounters an OS error writing! */
-  void spoolToTemp(const AVNLiebnitz * avnl, int nmemb);
 
   /* static data that is generated at compile-time and goes into
      the output textfile as a header */

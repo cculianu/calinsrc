@@ -36,6 +36,9 @@
 
 #include "exception.h"
 
+
+/* TODO: Add more error detection/correction from system calls */
+
 /* this should never change so that's why I kept it hardcoded rather
    than use an #include */
 #define NFS_SUPER_MAGIC                 0x6969
@@ -73,13 +76,11 @@ TempFile::TempFile(const char * prefix, bool requireLocal)
 
   snprintf(filename, len, "%s/%s%s", dir, prefix, Xs);
   
-  if ( (_fd = ::mkstemp(filename)) < 0) {
-    int saved_errno = errno;
-
-    throw FileCreationException("Could not create temp file",
+  Assert<FileCreationException>((_fd = ::mkstemp(filename)) >= 0, 
+                                "Could not create temp file",
                                 QString(filename) + " could not be created: " +
-                                strerror(saved_errno));
-  }
+                                strerror(errno));
+  
   ::unlink(filename); /* in case we crash, Unixey OS's will delete the file */
 }
 

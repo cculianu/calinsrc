@@ -5,7 +5,7 @@ moc_avn_stim.o: avn_stim_private.h plugin.h
 	${QTDIR}/bin/moc avn_stim_private.h > moc_avn_stim.cpp
 	g++ -g -I${QTDIR}/include -fPIC -c moc_avn_stim.cpp
 
-avn_stim.so: avn_stim.cpp plugin.h daq_system.h exception.h simple_text_editor.h common.h config.h avn_stim_private.h avn_stim.h tweaked_mbuff.h ecggraph.h moc_avn_stim.o tempfile.h
+avn_stim.so: avn_stim.cpp plugin.h daq_system.h exception.h simple_text_editor.h common.h config.h avn_stim_private.h avn_stim.h tweaked_mbuff.h ecggraph.h moc_avn_stim.o tempfile.h tempspooler.h
 	@echo "***************************************************************************"
 	@echo "                          Compiling AVN Stim Plugin"
 	@echo "***************************************************************************"

@@ -57,7 +57,7 @@
 #include "ecggraph.h"
 #include "plugin.h"
 #include "exception.h"
-#include "tempfile.h"
+#include "tempspooler.h"
 
 #include "tweaked_mbuff.h"
 #include "avn_stim.h"
@@ -121,7 +121,9 @@ extern "C" {
     /* Top-level widget.. parent is root */
     DAQSystem *d = dynamic_cast<DAQSystem *>(o);
 
-    if (!d) throw PluginException ("AVN Stim Plugin Load Error", "The AVN Stim Plugin can only be used in conjunction with daq_system!  Sorry!");    
+    Assert<PluginException>(d, "AVN Stim Plugin Load Error", 
+                            "The AVN Stim Plugin can only be used in "
+                            "conjunction with daq_system!  Sorry!");    
     return new AVNStim(d); ;
   } 
 
@@ -142,7 +144,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
   : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
 {
-  tmpFile = new TempFile("avnstim");
+  spooler = new TempSpooler<AVNLiebnitz>("avnstim", true);
 
   moduleAttach(); /* can throw exception here */
 
@@ -355,7 +357,7 @@ AVNStim::~AVNStim()
   if (shm)  shm->spike_channel = -1; // to 'turn off' avn stim...
   moduleDetach();  
   delete window;
-  delete tmpFile;
+  delete spooler;
 }
 
 const char *
@@ -374,12 +376,12 @@ AVNStim::description() const
 void AVNStim::moduleAttach()
 {
   shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
-  if (!shm || shm->magic != AVN_SHM_MAGIC) 
-    throw PluginException ("AVN Stim Plugin Attach Error", 
-                           "The AVN Stim Plugin can not find the shared "
-                           "memory buffer named \"" AVN_SHM_NAME "\".  "
-                           "(Or it is of the wrong version)\n\n"
-                           "Are you sure that module avn_stim.o is loaded?");
+  Assert<PluginException>(!shm || shm->magic == AVN_SHM_MAGIC,
+                          "AVN Stim Plugin Attach Error", 
+                          "The AVN Stim Plugin can not find the shared "
+                          "memory buffer named \"" AVN_SHM_NAME "\".  "
+                          "(Or it is of the wrong version)\n\n"
+                          "Are you sure that module avn_stim.o is loaded?");
   
 
   QString fname;
@@ -387,15 +389,15 @@ void AVNStim::moduleAttach()
   fname.sprintf("%s%d","/dev/rtf",shm->fifo_minor);
   fifo = open(fname, O_RDONLY | O_NDELAY);
 
-  if (needFifo()) 
-      throw PluginException ("AVN Stim Plugin Attach Error",
-                             QString (
-                             "Even though the AVN Stim Kernel Module is "
-                             "loaded, the AVN Stim plugin could not attach\n "
-                             "to the required fifo \"%1\".  Please make sure "
-                             "this file exists and is read/write for the \n"
-                             "current user."
-                             ).arg(fname));
+  Assert<PluginException>(!needFifo(),
+                          "AVN Stim Plugin Attach Error",
+                          QString 
+                          ( "Even though the AVN Stim Kernel Module is "
+                            "loaded, the AVN Stim plugin could not attach\n "
+                            "to the required fifo \"%1\".  Please make sure "
+                            "this file exists and is read/write for the \n"
+                            "current user."
+                            ).arg(fname));
   
   /* empty the fifo to make sure we start with a clean slate */
   char buf[AVN_FIFO_SZ];
@@ -497,7 +499,7 @@ void AVNStim::readInFifo()
     rr_graph->plot(static_cast<double>(buf[i].rr_interval));
     stim_graph->plot(static_cast<double>(buf[i].stimuli));
     g_graph->plot(buf[i].g_val);
-    spoolToTemp(buf, n_bufs);
+    spooler->spool(buf, n_bufs);
   }
   /* now update the stats once per read() call (meaning we take the
      last AVNLiebnitz we got */
@@ -540,21 +542,6 @@ void AVNStim::readInFifo()
 
   /* incomplete... please finish! - Calin */
 #undef f_equal
-}
-
-/* Spools data from the rt-process in fifo to the tmpFile,
-   throws FileException if it encounters an OS error writing! */
-void AVNStim::spoolToTemp(const AVNLiebnitz * avnl, int nmemb)
-{
-  const int bytes = nmemb * sizeof(AVNLiebnitz);
-
-  lseek(*tmpFile, 0, SEEK_END); // ensures we append
-  if (write(*tmpFile, avnl, bytes) != bytes) {
-    const char *errmsg = strerror(errno);
-    throw FileException("Temp file error", 
-                        QString("Cannot spool AVN Stim data to temp file: ")
-                        + errmsg);
-  }  
 }
 
 /* Possible race conditions here but it's too much trouble to implement
@@ -693,19 +680,27 @@ void AVNStim::changeDG(int new_dg_sliderval)
 const char * AVNStim::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#Scan_Index RR_Interval Number_of_Stimuli G RR_Avg G_Too_Small_Count G_Too_Big_Count RR_Target Delta_G Num_RR_Avg Stim_On? G_Adj_Automatically?";
+"#Scan_Index RR_Interval Number_of_Stimuli G RR_Avg G_Too_Small_Count G_Too_Big_Count RR_Target Delta_G Num_RR_Avg Stim_On? G_Adj_Automatically?\n";
 
 
-static inline 
-QString & strinfigy_liebnitz(QString & line, const AVNLiebnitz & l) 
-{
-  line.sprintf
-    ("%s %d %d %g %d %d %d %d %g %d %d %d",     
-     uint64_to_cstr(l.scan_index), l.rr_interval, l.stimuli, l.g_val,
-     l.rr_avg, l.g_too_small_count, l.g_too_big_count, l.rr_target, 
-     (double)l.delta_g, l.num_rr_avg, (int)l.stim_on, (int)l.g_adjustment_mode);
-  return line;
-}
+struct PVSaver
+{  
+  PVSaver (QTextStream & o, QString header = "") 
+    : out(o), header(header) { out << header; };
+  
+  void operator()(AVNLiebnitz & l) 
+  { 
+    dummy.sprintf
+      ("%s %d %d %g %d %d %d %d %g %d %d %d\n",     
+       uint64_to_cstr(l.scan_index), l.rr_interval, l.stimuli, l.g_val,
+       l.rr_avg, l.g_too_small_count, l.g_too_big_count, l.rr_target, 
+       (double)l.delta_g, l.num_rr_avg, (int)l.stim_on, (int)l.g_adjustment_mode);
+    out << dummy;
+  }
+
+  QTextStream &out;
+  QString dummy, header;
+};
 
 void AVNStim::save()
 { 
@@ -723,21 +718,10 @@ void AVNStim::save()
 
   QTextStream out(&f);
   out.setEncoding(QTextStream::Latin1);
-
-  out << fileheader << "\n";
   
-  QString linebuf;
-
-  
-  lseek(*tmpFile, 0, SEEK_SET);
-  struct stat buf;
-  fstat(*tmpFile, &buf);
-  unsigned int nmemb = buf.st_size/sizeof(AVNLiebnitz);
-
-  char albuf[sizeof(AVNLiebnitz) / sizeof(char)];
-  for (uint i = 0; i < nmemb; i++) {
-    read(*tmpFile, albuf, sizeof(AVNLiebnitz)); // no need to check error?
-    out << strinfigy_liebnitz(linebuf, *reinterpret_cast<AVNLiebnitz *>(albuf)) << "\n";
+  {
+    PVSaver saver(out, fileheader);
+    spooler->forEach(saver);
   }
 
   f.flush();
@@ -787,3 +771,4 @@ void AVNStim::safelyQuit()
   }
 }
 
+#undef spooler
