@@ -22,6 +22,7 @@
 #ifndef _DAQ_SETTINGS_H
 #define _DAQ_SETTINGS_H
 #include <qrect.h>
+#include <qprinter.h>
 #include "common.h"
 #include "config.h"
 #include "settings.h"
@@ -118,6 +119,9 @@ class DAQSettings: public Settings
   void setChannelParameters(uint channel_number, const ChannelParams & cp);
   const ChannelParams & getChannelParameters(uint channel_number) const;
 
+  void setPageSize(QPrinter::PageSize);
+  QPrinter::PageSize getPageSize() const;
+
  private:
 
   map<uint, QRect> windowSettings;
@@ -151,9 +155,8 @@ class DAQSettings: public Settings
     * const KEY_DATA_FILE = "dataFile",
     * const KEY_DATA_FORMAT = "dataFileDefaultFormat",
     * const KEY_CHAN_WIN_SETTINGS = "channelWindowSettings",
-
-
-    * const KEY_CHANNEL_PARAMS = "channelParameters";
+    * const KEY_CHANNEL_PARAMS = "channelParameters",
+    * const KEY_PAGE_SIZE = "printerPageSize";
 
 };
 

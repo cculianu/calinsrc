@@ -87,6 +87,7 @@ public:
   /* the index of the current range setting.. basically retrieved from
      the gui widget that controls the range settings */
   int currentRange() const { return rangeComboBox->currentItem(); };
+  const QString currentRangeText() const { return rangeComboBox->currentText(); };
 
   /** an array of strings to translate Volts and MilliVolts constants
       into pretty strings for display: 
@@ -100,6 +101,10 @@ public:
       setSecondsVisible(static_cast<uint>(secondsVisibleBox->value()));
     }
   }
+
+  /* returns the xAxis strings as they appeaer in the graph container's
+     x axis labels */
+  vector<QString> xAxisText() const;
   
  signals:
   /* Emitted whenever the range changes on the graph this container 
@@ -154,7 +159,8 @@ public slots:
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
 
-  void setXAxisLabels(const vector<uint64> &);
+  void pause(bool pause = true); /* pauses the graph 
+                                    -- 'disables' it as a consumer */
 
  protected:
 
@@ -167,6 +173,8 @@ public slots:
   void emitSpikeBlanking(int i) { emit spikeBlankingChanged(static_cast<uint>(i)); }
   void emitSpikePolarity(int i) 
     { emit spikePolarityChanged(static_cast<SpikePolarity>(i)); }
+
+  void setXAxisLabels(const vector<uint64> &);
 
  private:
   
@@ -199,6 +207,7 @@ public slots:
  QWidget *xaxis;
  QGridLayout *xaxis_layout;
  vector<QLabel *> xaxis_labels;
+ vector<uint64> saved_sample_indices;
 
  QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
          *spikeFrequency;

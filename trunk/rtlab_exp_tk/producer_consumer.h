@@ -111,7 +111,9 @@ template <class T> class Consumer : public TwoWayNode
 {  
  public:
   virtual void consume(T) = 0;
-  
+
+  bool hungry; /* producer will not send data to this consumer if this 
+                  is false */
 
  protected:
   virtual ~Consumer() { };
@@ -141,7 +143,7 @@ template <class T> class Producer : public TwoWayNode
       void operator() (TwoWayNode * r) 
 	{ 
 	  Consumer<T> *c;
-	  if ( ( c = dynamic_cast<Consumer <T> *>(r)))
+	  if ( ( c = dynamic_cast<Consumer <T> *>(r)) && c->hungry)
 	    c->consume(thing); count++; 
 	};
 

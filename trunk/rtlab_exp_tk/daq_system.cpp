@@ -35,6 +35,17 @@
 #include <qdir.h>
 #include <qstringlist.h>
 #include <qtextedit.h>
+#include <qhbox.h>
+#include <qvbox.h>
+#include <qhgroupbox.h>
+#include <qvgroupbox.h>
+#include <qkeysequence.h>
+#include <qpainter.h>
+#include <qprinter.h>
+#include <qpaintdevicemetrics.h>
+#include <qfont.h>
+#include <qfontmetrics.h>
+#include <qpixmap.h>
 
 #include <iostream>
 #include <map>
@@ -65,7 +76,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 : QMainWindow(parent, name, f), 
   configWindow(cw),
   settings(configWindow.daqSettings()),
-  currentdevice(cw.selectedDevice()),
+  currentdevice(cw.selectedDevice()),  
   ws(this),
   _menuBar(this),
   mainToolBar("DAQ System Toolbar", this, Top),
@@ -81,6 +92,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu")
 {
+  printer.setPageSize(settings.getPageSize());
 
   this->setCaption(QString("%1 - %2").arg(name).arg(settings.getDataFile()));
   this->setCentralWidget(&ws);
@@ -96,6 +108,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   { /* build menus */
     fileMenu.insertItem("&Plugins...", &plugin_menu, SLOT(raisenShow() ) );
     fileMenu.insertSeparator();
+    fileMenu.insertItem("P&rint...", this, SLOT(printDialog()));
     fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
     fileMenu.insertSeparator();
     fileMenu.insertItem("&Quit", this, SLOT( close() ) );
@@ -637,6 +650,142 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 void DAQSystem::showLogWindow()
 {
   windowMenuFocusWindow(&log);
+}
+
+
+vector<const ECGGraphContainer *> DAQSystem::graphContainers() const
+{
+  const ECGGraphContainer *gc;
+  vector<const ECGGraphContainer *> ret;
+  map <int, QWidget *>::const_iterator it = menuIdToWindowMap.begin();
+  map <uint, const ECGGraphContainer *> m;
+  map <uint, const ECGGraphContainer *>::const_iterator m_it;
+
+  for(; it != menuIdToWindowMap.end(); it++) 
+    if ( (gc = dynamic_cast<const ECGGraphContainer *>(it->second)) )
+      m [ gc->channelId ] = gc; // sorts them my putting them in a map
+  
+  for (m_it = m.begin(); m_it != m.end(); m_it++)
+    ret.push_back(m_it->second);
+  
+  return ret;
+}
+
+void DAQSystem::printDialog()
+{
+  QDialog whichGraphs(this, 0, true, WStyle_Customize|WStyle_NormalBorder
+                                     |WStyle_Title|WStyle_SysMenu);
+  QGridLayout l(&whichGraphs, 1, 1);
+  QVBox *vbox = new QVBox(&whichGraphs);
+  l.addWidget(vbox, 0, 0);
+  QHGroupBox *hgbox = new QHGroupBox("Select graphs to print:", vbox);
+  
+  vector<const ECGGraphContainer *> gcs(graphContainers());
+  map<const ECGGraphContainer *, QCheckBox *> checkboxen;
+
+  for (uint i = 0; i < gcs.size(); i++) 
+    checkboxen [ gcs[i] ] = new QCheckBox(gcs[i]->name(), hgbox);
+  
+  QHBox *hbox = new QHBox(vbox);
+  QPushButton *b = new QPushButton("Print", hbox);
+  connect(b, SIGNAL(pressed()), &whichGraphs, SLOT(accept()));
+  b->setAccel(QKeySequence(Key_Enter));
+  b = new QPushButton("Cancel", hbox);
+  b->setAccel(QKeySequence(Key_Escape));
+  connect(b, SIGNAL(pressed()), &whichGraphs, SLOT(reject()));
+
+  int result = whichGraphs.exec();
+
+  if (result == QDialog::Accepted) {    
+    /* harvest selected boxes */
+    vector<const ECGGraphContainer *>::iterator i;
+    for ( i = gcs.begin(); i != gcs.end(); i++)
+      if (!checkboxen[*i]->isChecked()) gcs.erase(i--);
+    print(gcs);
+  }
+
+}
+
+void DAQSystem::print(vector<const ECGGraphContainer *> & gcs) 
+{
+  static const int margin = 10; /* the width of the border around the page, 
+                                   in pixels */
+  static const double graph_aspect_ratio = 2.0; /* the ratio of width/height
+                                                   to which to render the 
+                                                   graph */
+
+  if (gcs.size() == 0) return;
+
+  printer.setMinMax(1, gcs.size());
+
+  if (!printer.setup(0)) return;
+
+  settings.setPageSize(printer.pageSize());
+
+  QPainter painter;
+  painter.begin(&printer);
+
+  QPaintDeviceMetrics pmetrics(&printer);
+
+  int next_page, i, start_page, endloop_page, numcopies = printer.numCopies();
+
+  switch (printer.pageOrder()) {
+  case QPrinter::LastPageFirst:
+    start_page = printer.toPage() - 1;
+    next_page = -1;
+    endloop_page = printer.fromPage() - 2;
+    break;
+  default:
+  case QPrinter::FirstPageFirst:
+    start_page = printer.fromPage() - 1;
+    next_page = 1;
+    endloop_page = printer.toPage();
+    break;
+  }
+
+  while (numcopies-- > 0)
+    for (i = start_page; i != endloop_page; /*inside loop*/) {
+      QFont font;
+      font.setPointSize(18);
+
+      painter.setFont(font);
+  
+      QFontMetrics fmetrics(painter.fontMetrics());
+
+      QPoint topleft(margin,margin);
+    
+      painter.drawText(topleft, QString(gcs[i]->name()) + " (" + gcs[i]->currentRangeText() + ")");
+      topleft += QPoint(0, margin + fmetrics.height());
+
+      int pm_width = pmetrics.width() - 2 * margin,
+          pm_height = static_cast<int>(pm_width / graph_aspect_ratio);
+
+      font.setPointSize(10);
+      painter.setFont(font);
+      fmetrics = painter.fontMetrics();
+
+      /* make sure we have room for the axis labels... */
+      if (pm_height + topleft.y() + 2*margin + fmetrics.height() > pmetrics.height())  
+        pm_height -= 2*margin + fmetrics.height();
+      
+
+      QPixmap pm(pm_width, pm_height);
+      /* FIXME: see why in greyscale pixmap ends up inverted? */
+
+      gcs[i]->graph->renderToPixmap(pm);
+      painter.drawPixmap(topleft.x(), topleft.y(), pm);
+      
+      /* draw x-axis labels.. */
+      topleft += QPoint(0, pm_height + margin);
+      vector<QString> xaxis_text = gcs[i]->xAxisText();
+      for (uint j = 0; j < xaxis_text.size(); j++ ) {
+        painter.drawText(topleft, xaxis_text[j]);
+        topleft += QPoint(pm_width / xaxis_text.size(), 0);
+      }
+      
+      if ( (i += next_page) != endloop_page || numcopies) printer.newPage();
+    }
+  painter.end();
 }
 
 ReaderLoop::

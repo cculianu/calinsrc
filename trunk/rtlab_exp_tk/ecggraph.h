@@ -122,7 +122,13 @@ class ECGGraph : public QWidget {
   virtual void plot (double amplitude);
 
   virtual void paintEvent (QPaintEvent *);
+
+/* Renders the entire graph, sans spike line and background color, to
+   a pixmap.  The pixmap should already have a width and a height defined.
    
+   This method is suitable for printing the graph, as the pixmap
+   can be easily printed afterwards. */    
+  virtual void renderToPixmap(QPixmap &) const;
 
 signals:
   // to do: move these out of here in favor of
@@ -175,8 +181,10 @@ signals:
  protected:
 
   /** creates real (points array) and virtual (samples array) points,
-      for a given amplitude at a given index */
+      for a given amplitude at a given index  */
   virtual void makePoint (double amplitude, int sampleIndex = -1);
+
+ protected:
 
   virtual void plotLines (int firstIndex, 
                           int lastIndex);
@@ -225,9 +233,9 @@ signals:
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
-  virtual void plotLines (int firstIndex, 
-                          int lastIndex, 
-                          QPaintDevice *device);
+  virtual void plotLines (int firstIndex, int lastIndex, QPaintDevice & device,
+                          QPainter & painter, const QPen & pen, 
+                          const QPointArray  & points) const;
 
   virtual void deletePlotsBetween (int firstIndex, int secondIndex);
 
@@ -236,7 +244,8 @@ signals:
   virtual void initBuffer ();
 
 
-  virtual void initGrid (QPaintDevice & dev, int columns = 10, int rows = 4);
+  virtual void initGrid (QPaintDevice & dev, int width = -1, int height = -1,
+                         int columns = 10, int rows = 4) const;
 
 
   /** This re-renders the points array from the samples array and
@@ -247,11 +256,13 @@ signals:
 
   /** The basic formula to translate a sample's vector to 
       physical x and y coordinates relative to the graph.  */
-  virtual QPoint sampleVectorToPoint (double amplitude, int sampleIndex);
+  virtual QPoint sampleVectorToPoint (double amplitude, int sampleIndex,
+                                      int n_indices = -1,
+                                      int width = -1, int height = -1) const;
 
   /** The inverse of sampleVectorToPoint() */
   virtual void pointToSampleVector (const QPoint & point, 
-				    double *amplitude, int *sampleIndex); 
+                                    double *amplitude, int *sampleIndex); 
 
   /** Converts a local sample index to a cumulative sample index */
   virtual long long cumulateSampleIndex(int localSampleIndex);

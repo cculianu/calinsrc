@@ -44,10 +44,10 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
     = QString(DAQ_RESOURCES_PREFIX) + "/default.log";
   me [SECTION_NAME][ KEY_DEVICE ] = "/dev/comedi0";
   me [SECTION_NAME][ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
-  me [SECTION_NAME][ KEY_DEFAULT_INPUT_SOURCE ] = QString().setNum((int)Comedi);
-  me [SECTION_NAME][ KEY_SHOW_CONFIG_ON_STARTUP ] = QString().setNum((int)true);
+  me [SECTION_NAME][ KEY_DEFAULT_INPUT_SOURCE ] = QString::number((int)Comedi);
+  me [SECTION_NAME][ KEY_SHOW_CONFIG_ON_STARTUP ] = QString::number((int)true);
   me [SECTION_NAME][ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.bin";
-  me [SECTION_NAME][ KEY_DATA_FORMAT ] = QString().setNum((int)Binary);
+  me [SECTION_NAME][ KEY_DATA_FORMAT ] = QString::number((int)Binary);
 
   /* the following is a  'special' setting.  It is basically
      a special-format list of the format: 
@@ -56,6 +56,9 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
 
   /* channel params settings */
   me [SECTION_NAME][ KEY_CHANNEL_PARAMS ] = "";
+
+  /* paper size settings */
+  me [SECTION_NAME][ KEY_PAGE_SIZE ] = QString::number(static_cast<int>(QPrinter::Letter));
 }
 
 DAQSettings::DAQSettings(const char *filename = 0)
@@ -175,7 +178,7 @@ DAQSettings::getDataFileFormat() const
 void 
 DAQSettings::setDataFileFormat(DataFileFormat format)
 {  
-  settingsMap[SECTION_NAME][KEY_DATA_FORMAT] = QString().setNum((int)format);
+  settingsMap[SECTION_NAME][KEY_DATA_FORMAT] = QString::number((int)format);
   dirtySettings[SECTION_NAME].insert(KEY_DATA_FORMAT);
 }
 
@@ -329,15 +332,27 @@ DAQSettings::generateChannelParametersString()
     uint chan = i->first;
     ChannelParams & c = i->second;
     out += 
-      QString().setNum(chan) + ":" +
-      QString().setNum(c.n_secs) + "," +
-      QString().setNum(c.range) + "," +
-      QString().setNum((short)c.spike_on) + "," +
-      QString().setNum(c.spike_thold) + "," +
-      QString().setNum((short)c.spike_polarity) + "," +
-      QString().setNum(c.spike_blanking) + ";";
+      QString::number(chan) + ":" +
+      QString::number(c.n_secs) + "," +
+      QString::number(c.range) + "," +
+      QString::number((short)c.spike_on) + "," +
+      QString::number(c.spike_thold) + "," +
+      QString::number((short)c.spike_polarity) + "," +
+      QString::number(c.spike_blanking) + ";";
   }
 
   settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ] = out;
   dirtySettings[SECTION_NAME].insert(KEY_CHANNEL_PARAMS);
+}
+
+QPrinter::PageSize 
+DAQSettings::getPageSize() const
+{
+  return static_cast<QPrinter::PageSize>(settingsMap.find(SECTION_NAME)->second.find(KEY_PAGE_SIZE)->second.toInt());
+}
+
+void DAQSettings::setPageSize(QPrinter::PageSize pagesize)
+{
+  settingsMap[SECTION_NAME][KEY_PAGE_SIZE] = QString::number(static_cast<int>(pagesize));
+  dirtySettings[SECTION_NAME].insert(KEY_PAGE_SIZE);  
 }

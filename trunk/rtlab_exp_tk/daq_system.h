@@ -243,6 +243,7 @@ class DAQSystem : public QMainWindow
   void resynch();
 
   void showLogWindow();
+  void printDialog(); /* brings up various pring dialogs and the like */
 
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
@@ -256,6 +257,12 @@ class DAQSystem : public QMainWindow
                  uint & n_secs);
   void buildRangeSettings(ECGGraphContainer *container);
 
+  /* Prints the current graph's contents for each of the graph containers
+     specified in the vector */
+  void print(vector<const ECGGraphContainer *> &);
+
+  QPrinter printer;  /* the printer used for printing */
+
   QWorkspace ws; 
 
   QMenuBar _menuBar;
@@ -264,6 +271,9 @@ class DAQSystem : public QMainWindow
   /* keeps track of windowMenu indexes -> MDI windows so that the 
      Window menu works */
   map <int, QWidget *> menuIdToWindowMap; 
+  /* Convenience method that returns the subset of the above widgets that are 
+     ECGGraphContainers */
+  vector<const ECGGraphContainer *> graphContainers() const;
 
   QToolBar mainToolBar;
   QToolButton addChannelB,  resynchB, timeStampB;

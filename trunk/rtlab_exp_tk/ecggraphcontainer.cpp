@@ -25,6 +25,7 @@
 #include <qvbox.h>
 #include <qhbox.h>
 #include <qlabel.h>
+#include <qcheckbox.h>
 #include <qevent.h>
 #include <qregexp.h>
 #include <qtooltip.h>
@@ -68,6 +69,9 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     last_spike_index(0)
     
 {  
+
+  hungry = true; /* default to consuming samples */
+
   if (seconds_visible_step == 0) seconds_visible_step = 1;
 
   static const QString yAxisLabelFormat( "%1 V" );
@@ -90,6 +94,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setAlignment(AlignRight | AlignTop);  
   graphNameLabel->setMargin(1);
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
+
+  QCheckBox *pauseBox = new QCheckBox("Pause", controlsBox);
+  pauseBox->setChecked(false);
+  pauseBox->setMaximumSize(pauseBox->sizeHint());
+  connect(pauseBox, SIGNAL(toggled(bool)), this, SLOT(pause(bool)));    
 
   // the range settings control
   tmpBox = new QHBox(controlsBox);
@@ -554,6 +563,9 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
 
   if (sample_indices.size() != xaxis_labels.size()) {
 
+    /* clear the saved indices as we are resetting all the labels */
+    saved_sample_indices.clear();
+
     /* The number of gridlines has changed, so we must rebuild
        our graph labels */
 
@@ -582,6 +594,11 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
   }
 
   for (i = 0; i < (int)sample_indices.size(); i++) {    
+
+    /* do nothing if the label text hasn't changed... */
+    if (saved_sample_indices.size() == sample_indices.size() &&
+        saved_sample_indices[i] == sample_indices[i]) continue;
+
     double time = sample_indices[i] 
                  / (double)(graph->sampleRateHz() ? graph->sampleRateHz() : 1);
 
@@ -589,6 +606,26 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
     xaxis_labels[i]->setText(QString() + buf + " sec.");
   }
 
+  saved_sample_indices = sample_indices;
+
   if (hidenshow) xaxis->show();
 }
 
+void ECGGraphContainer::pause(bool pause_on)
+{
+  if (pause_on) currentIndex->setText("Graph Display PAUSED");
+  hungry = !pause_on;
+}
+
+/* returns the xAxis strings as they appeaer in the graph container's
+   x axis labels */
+vector<QString> ECGGraphContainer::xAxisText() const
+{
+  vector<QLabel *>::const_iterator i;
+  vector<QString> ret;
+
+  for (i = xaxis_labels.begin(); i != xaxis_labels.end(); i++) 
+    ret.push_back((*i)->text());
+  
+  return ret;
+}

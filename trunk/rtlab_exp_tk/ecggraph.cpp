@@ -165,7 +165,7 @@ void ECGGraph::push_back(double amplitude)
   if (update_to_screen_flg) deletePlotsBetween (0, currentSampleIndex);
   
   for (i = currentSampleIndex; i > 0; i--) {
-    makePoint(samples[i-1], i); // slide everything over 1
+    points->setPoint(i, sampleVectorToPoint(samples[i-1], i)); // slide everything over 1
     samples[i] = samples[i-1];
   }
   
@@ -200,7 +200,7 @@ void ECGGraph::plot (double amplitude) {
     deletePlotsBetween (currentSampleIndex - plotFactor, currentSampleIndex);
   }
 
-  makePoint(amplitude);
+  makePoint(amplitude, -1);
 
   if (currentSampleIndex && !(currentSampleIndex % plotFactor) ) {
 
@@ -223,31 +223,45 @@ void ECGGraph::paintEvent (QPaintEvent *paintEvent) {
 
 }
 
+/* Renders the entire graph, sans spike line and background color, to
+   a pixmap.  The pixmap should already have a width and a height defined.
+   
+   This method is suitable for printing the graph, as the pixmap
+   can be easily printed afterwards. */    
+void ECGGraph::renderToPixmap(QPixmap & pm) const
+{
+  const int n_points = _totalSampleCount < numSamples ? currentSampleIndex+1 : numSamples;
+  bool color = pm.depth() > 1;
+
+  QPointArray parray(n_points);
+
+  for (int i = 0; i < n_points; i++)
+    parray.setPoint(i, sampleVectorToPoint(samples[i], i, n_points, pm.width(), pm.height()));
+  
+  if (color) pm.fill(_backgroundColor);
+  else pm.fill();
+               
+  initGrid(pm, pm.width(), pm.height(), secsVisible);
+  QPainter paint0r;
+  plotLines(0, n_points-1, pm, paint0r, color ? graphPen : QPen("Black"), parray);  
+}
+
 /* 
    protected:
 */
+void ECGGraph::makePoint (double amplitude, int sampleIndex = -1) 
+{
+  if (sampleIndex < 0) sampleIndex = currentSampleIndex;
 
-/** creates real (points array) and virtual (samples array) points,
-    for a given amplitude at a given index */
-void ECGGraph::makePoint (double amplitude, int sampleIndex = -1) {
-  
-  if (sampleIndex < 0) 
-    sampleIndex = currentSampleIndex;
-  
-  QPoint point ( sampleVectorToPoint(amplitude, sampleIndex) );
-
-#ifdef DEBUG
-  //cout << "created Point(" << point.x() << ", " << point.y() << ") for amp. " << amplitude << " and index " << sampleIndex << endl;
-#endif
-  points->setPoint(sampleIndex, point); // save the physical point
-  samples[sampleIndex] = amplitude;     // save the abstract point's amplitude
+  points->setPoint(sampleIndex, sampleVectorToPoint(amplitude, sampleIndex));
+  samples[sampleIndex] = amplitude;
 }
 
 
 void ECGGraph::plotLines (int firstIndex, int lastIndex) {
   // paint to both memory (_buffer) and to screen using private method
-  plotLines(firstIndex, lastIndex, &_buffer);
-  plotLines(firstIndex, lastIndex, this);
+  plotLines(firstIndex, lastIndex, _buffer, devicePainter, graphPen, *points);
+  plotLines(firstIndex, lastIndex, *this, devicePainter, graphPen, *points);
   
 }
 
@@ -311,13 +325,16 @@ void ECGGraph::mouseReleaseEvent(QMouseEvent *event)
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
-void ECGGraph::plotLines (int firstIndex, 
-			  int lastIndex, 
-			  QPaintDevice *device) {
-  devicePainter.begin (device);
-  devicePainter.setPen(graphPen);
-  devicePainter.drawPolyline(*points, firstIndex, lastIndex-firstIndex+1);
-  devicePainter.end();
+void ECGGraph::plotLines (int firstIndex, int lastIndex, 
+                          QPaintDevice &device, 
+                          QPainter &painter, 
+                          const QPen & pen,
+                          const QPointArray & points) const
+{
+  painter.begin (&device);
+  painter.setPen(pen);
+  painter.drawPolyline(points, firstIndex, lastIndex-firstIndex+1);
+  painter.end();
 }
 
 void ECGGraph::deletePlotsBetween (int firstIndex, int secondIndex) {
@@ -339,7 +356,7 @@ void ECGGraph::initBuffer () {
   _buffer.resize(width(), height());
   _buffer.fill(_backgroundColor); 
   
-  initGrid (_buffer, secsVisible);
+  initGrid (_buffer, width(), height(), secsVisible);
   _background = _buffer; // save the initial buffer as the background
   this->setBackgroundPixmap (_background); // set the background of the graph 
 
@@ -348,13 +365,14 @@ void ECGGraph::initBuffer () {
 }
 
 
-void ECGGraph::initGrid (QPaintDevice & dev, int columns = 10, int rows = 4) {
+void ECGGraph::initGrid (QPaintDevice & dev, int w, int h, 
+                         int columns, int rows) const 
+{
   QPainter painter(&dev);
   QPen pen(_gridColor, 1, DotLine);
 
   painter.setPen(pen);
   float i;
-  int w = width(), h = height();
 
   for (i = 0.0; columns && i < w; i += w/(float)columns) {
     painter.drawLine((int)i,0,(int)i,h);
@@ -381,18 +399,22 @@ void ECGGraph::remakeAllPoints () {
                ? _totalSampleCount 
                : numSamples );
 
-  for (i = 0; i < maxIndex ; i++) {      
-    makePoint(samples[i],i); /* re-calculate points */
-  }
-  if (i) {
-    plotLines(0,i-1);
-  }
+  for (i = 0; i < maxIndex ; i++) 
+    makePoint(samples[i], i); /* re-calculate points */
+  
+  if (i) plotLines(0,i-1);
+  
 }
 
-QPoint ECGGraph::sampleVectorToPoint (double amplitude, int sampleIndex) {
-  int w = width(), h = height(), x, y; 
+QPoint ECGGraph::sampleVectorToPoint (double amplitude, int pos, 
+                                      int n_indices, int w, int h) const {
+  int  x, y; 
+  
+  if (n_indices < 0) n_indices = numSamples;
 
-  x =  (int)rint(( (w+0.0) / numSamples ) * sampleIndex);
+  if (w < 0) w = width(); if ( h < 0 ) h = height();
+
+  x =  (int)rint(( (w+0.0) / n_indices ) * pos);
   y =  (int)rint(( h / (_rangeMax - _rangeMin) ) * (_rangeMax - amplitude));
 
   return QPoint(x, y);
