@@ -71,7 +71,8 @@ struct MCSnapShot {
   char target_shorter;   /* ui-controlled */
   char g_adjustment_mode; /* ui-controlled */
   float delta_g; /* ui-controlled */
-
+  int link_to_ao0; /* whether (1) or not (0) AO1 control is linked to AO0 pacing */
+  int ao0_ao1_cond_time; /* time it takes to conduct from AO0 electrode to AO1 electrode*/
 };
 
 #ifndef __cplusplus
@@ -93,6 +94,8 @@ struct MCShared {
   double apd_xx; // xx=0.1 for APD90, 0.2 for APD80, etc.
   int ao_chan; /* obsolete, but may still remain in apd_control.c */
   char pacing_on[NumAOchannels];    /* if nonzero, pace */
+  int link_to_ao0; /* whether (1) or not (0) AO1 control is linked to AO0 pacing */
+  int ao0_ao1_cond_time; /* time it takes to conduct from AO0 electrode to AO1 electrode*/
   int nominal_pi[NumAOchannels]; /* in milliseconds */  
   char control_on[NumAOchannels];    /* if nonzero, control */
   char continue_underlying[NumAOchannels];    /* if nonzero, continue underlying pacing during control */

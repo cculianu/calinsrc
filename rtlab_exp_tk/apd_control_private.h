@@ -83,6 +83,9 @@ private slots:
   void toggleOnlyNegativePerturbations(int); /* If ON, then allow only negative perturbations
                                                                                 if OFF both positive and negative control perturbations */
 
+  void toggleLinkToAO0(bool);
+  void changeAO0_AO1_CondTime(int);
+
   void togglePacing(int);    /* disables pacing by making pacing_on false */
   void changeNominalPI(int); /* change the nominal Pacing Interval */
   void toggleUnderlying(int); /* toggles continue_underlying, which, if control is active,
@@ -151,10 +154,11 @@ private:
     *gui_indicator_delta_g_bar_value[NumAOchannels];
 
   SearchableComboBox *ai_channels[NumAOchannels];
-  QSpinBox *nominal_pi[NumAOchannels];
+  QSpinBox *nominal_pi[NumAOchannels], *ao0_ao1_cond_time;
   QLineEdit *gval[NumAOchannels], *apd_xx_edit_box;
   QScrollBar *delta_g_bar[NumAOchannels];
   QCheckBox *pacing_toggle[NumAOchannels], 
+    *link_to_ao0_toggle,
     *control_toggle[NumAOchannels], 
     *only_negative_toggle[NumAOchannels], 
     *underlying_toggle[NumAOchannels], 

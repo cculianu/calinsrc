@@ -331,7 +331,24 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 	     nominal_pi_mapper, SLOT(map()));
     connect(nominal_pi_mapper, SIGNAL(mapped(int)),
 	    this, SLOT(changeNominalPI(int)));
-    
+
+    if (which_ao_chan==1) {  //this is specific to AO1
+      //new line of control widgets
+      tmphb = new QHBox(tmpvb);
+      tmphb->setSpacing(5);
+
+      link_to_ao0_toggle = new QCheckBox("Link control to AO0 pacing", tmphb);
+      link_to_ao0_toggle->setChecked(shm->link_to_ao0);    
+      tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |---------| */
+      connect(link_to_ao0_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleLinkToAO0(bool)));
+
+      (void) new QLabel("AO0 to AO1 conduction (ms):", tmphb);
+      ao0_ao1_cond_time = new QSpinBox(1, 20, 1, tmphb);    
+      shm->ao0_ao1_cond_time = 5; //assume 5 ms, based on 1cm btwn sites & 2 m/s conduction
+      ao0_ao1_cond_time->setValue(static_cast<int>(shm->ao0_ao1_cond_time));
+      connect(ao0_ao1_cond_time, SIGNAL(valueChanged(int)), this, SLOT(changeAO0_AO1_CondTime(int)));
+    }
+
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(5);
@@ -619,13 +636,17 @@ void APDcontrol::readInFifo()
   int ao_chan_buf[NumAOchannels];
   for (i=0; i<NumAOchannels; i++) ao_chan_buf[i]=-1;
 
+  /*  plot to graphs here... */
   for (i = 0; i < n_bufs; i++) {
-    /* todo: plot to graphs here... */
-    if (buf[i].ao_chan >= 0) {
-      apd_graph[buf[i].ao_chan]->plot(static_cast<double>(buf[i].apd));
-      ao_chan_buf[buf[i].ao_chan]=i;
-    }
-  }
+    /*
+      if (buf[i].ao_chan >= 0) {
+       apd_graph[buf[i].ao_chan]->plot(static_cast<double>(buf[i].apd));
+       ao_chan_buf[buf[i].ao_chan]=i;
+      }
+    */
+      apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
+      if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
+}
 
   /* now update the stats once per read() call (meaning we take the
      latest MCSnapShot that corresponds to AO0 and AO1 */
@@ -715,6 +736,17 @@ void APDcontrol::changeNominalPI(int which_ao_chan)
   shm->nominal_pi[which_ao_chan] = nominal_pi[which_ao_chan]->value();
 }
 
+void APDcontrol::toggleLinkToAO0(bool on)
+{
+  shm->link_to_ao0 = on;
+}
+
+
+void APDcontrol::changeAO0_AO1_CondTime(int cond_time)
+{
+  shm->ao0_ao1_cond_time = cond_time;
+}
+
 void APDcontrol::toggleControl(int which_ao_chan)
 {
   
@@ -781,7 +813,7 @@ void APDcontrol::changeDG(int which_ao_chan)
 const char * APDcontrol::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#APD_channel AO_channel scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
+"#APD_channel AO_channel scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter, link_to_ao0, ao0_ao1_conduction_time\n";
 
 //save important snapshot values to disk 
 //important to edit this to suit your data needs
@@ -797,7 +829,7 @@ struct PVSaver
             apTf     (uint64_to_cstr(ws.ap_tf));
     
     dummy.sprintf
-      ("%d %d %s %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
+      ("%d %d %s %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d %d %d\n",     
        ws.apd_channel, 
        ws.ao_chan, 
        scanIndex.latin1(), 
@@ -819,7 +851,10 @@ struct PVSaver
        ws.consec_alternating, 
        (int)ws.only_negative_perturbations, 
        (int)ws.continue_underlying, 
-       (int)ws.target_shorter);
+       (int)ws.target_shorter,
+       (int)ws.link_to_ao0,
+       (int) ws.ao0_ao1_cond_time
+);
 
     out << dummy;
   }
