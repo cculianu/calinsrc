@@ -207,8 +207,15 @@ protected:
 
 
   void init(int mode);// throw (FileException);
+  
+  // all of the below call the above
   void init(const QString & outFile, sampling_rate_t rate, FileDataType dataType) ;//throw (FileException);
   void init(const QString & inFile) ;//throw (FileException);
+  // the two above call these
+  void init(QIODevice *d); // read mode init
+  void init(QIODevice *d, sampling_rate_t rate, FileDataType dataType); // write mode init
+
+
   void unsetDevice() {   QIODevice * d = device(); QDataStream::unsetDevice(); if (d) { d->close(); delete d; } };
 
 private:
@@ -330,8 +337,9 @@ public:
     { setInFile(inFile); } ;
   void setInFile(const QString & inFile)// throw (FileException)
     { end(); init(inFile); } ;
-  void jumpToScanIndex(scan_index_t index)// throw (IllegalStateException, FileFormatException, FileException)
-    { index++;/* stub for now */ };
+  void jumpToScanIndex(scan_index_t index);// throw (FileException, IllegalStateException);
+/*  seek forward/back relative to the current position */  
+  void seek(scan_index_t offset_from_current, bool forward=true); // throw (FileException, IllegalStateException);
 
 };
 
