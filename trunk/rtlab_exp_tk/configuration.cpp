@@ -330,7 +330,8 @@ ConfigurationWindow::validate()
   QFile of (outputFile.text());
 
   
-
+  /* todo: put this particular file check somewhere
+     more logical like inside DAQSystem class? */
   if (of.exists() && startupScreenSemantics ) {
     struct stat buf;
 
