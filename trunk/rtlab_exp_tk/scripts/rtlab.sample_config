@@ -8,6 +8,6 @@ COMEDI_DRIVER=comedi_test
 COMEDI_BOARD=comedi_test
 COMEDI_PARAMS=""
 RTOS="RTAI"
-LMODULES="rtlab avn_stim map_control" # rtlab modules to load, in order
-UMODULES="map_control avn_stim rtlab" # rtlab modules to unload, in order
+LMODULES="rtlab avn_stim apd_control" # rtlab modules to load, in order
+UMODULES="apd_control avn_stim rtlab" # rtlab modules to unload, in order
 
