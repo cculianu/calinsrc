@@ -178,32 +178,19 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 	             apd_ranges[0].min, apd_ranges[0].max, 
                              graphs, QString(name()) + " - APD");
 
-    //    graphlayout->addMultiCellWidget(apd_graph[which_apd_graph], (2*which_apd_graph+1), 
-    //				    (2*which_apd_graph+1), 1, 2); 
+    int which_graph_row;
+    int which_graph_column;
+    DetermineGraphRowColumn(which_apd_graph,&which_graph_row,&which_graph_column);
 
-    //int start_row = 4*which_apd_graph;
-    //int end_row = 4*which_apd_graph+3;
-    //int start_column = which_apd_graph%2;
-    //int end_column = (which_apd_graph%2)+2; 
-    int which_graph_row = 2*which_apd_graph;
-    int which_graph_column = 0;
-    if (which_apd_graph>3) {
-      which_graph_row -= NumAPDGraphs;
-      which_graph_column = 2;
-    }
-    //    graphlayout->addWidget(apd_graph[which_apd_graph], start_row, end_row,
-    //				    start_column, end_column);
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
     graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
     apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
     graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
 
-    addAxisLabels(which_apd_graph);
+    addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
     buildRangeComboBoxesAndConnectSignals(which_apd_graph);
   }
-
-  //  graphlayout->addColSpacing (1, 30); 
 
   /* end graphs... */
 
@@ -576,7 +563,8 @@ DAQSystem * APDcontrol::daqSystem()
 
 
 /* Very long-winded code to build the graph axis labels... */
-void APDcontrol::addAxisLabels(int which_apd_graph)
+void APDcontrol::addAxisLabels(int which_apd_graph, int which_graph_row, 
+			       int which_graph_column)
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
@@ -594,6 +582,11 @@ void APDcontrol::addAxisLabels(int which_apd_graph)
     w = apd_graph_labels[which_apd_graph] = new QWidget(graphs); // dummy widget to have nested grids
 
     graphlayout->addWidget(w, 1, 0);
+    //the following doesn't seem to work, so I went back to (w,1,0), b/c at least that puts one
+    //set of axis labels on the screen, so at least it's something to work with for future
+    //modifications when I, or someone, gets a chance. It'll need to be based on 
+    //which_graph_row, which_graph_column
+    // graphlayout->addWidget(w, which_graph_row, which_graph_column);
     
     tmp_lo = new QGridLayout(w, 3, 1);
 
@@ -607,6 +600,16 @@ void APDcontrol::addAxisLabels(int which_apd_graph)
     tmp_l->setFont(f);
   }
 
+}
+
+void APDcontrol::DetermineGraphRowColumn(int apd_graph, int *graph_row, 
+					 int *graph_column) {
+    *graph_row = 2*apd_graph;
+    *graph_column = 0;
+    if (apd_graph>3) {
+      *graph_row -= NumAPDGraphs;
+      *graph_column = 2;
+    }
 }
 
 void APDcontrol::periodic()
@@ -957,11 +960,15 @@ void APDcontrol::graphHasChangedRange(int which_apd_graph)
 {
   int index = apd_range_ctl[which_apd_graph]->currentItem();
 
+  int which_graph_row;
+  int which_graph_column;
+  DetermineGraphRowColumn(which_apd_graph,&which_graph_row,&which_graph_column);
+
   const GraphRangeSettings & setting = apd_ranges[index];
   apd_graph[which_apd_graph]->setRange(setting.min, setting.max);
   delete apd_graph_labels[which_apd_graph];
   apd_graph_labels[which_apd_graph] = 0;
-  addAxisLabels(which_apd_graph);
+  addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
   apd_graph_labels[which_apd_graph]->show();
 }
 
