@@ -1500,12 +1500,16 @@ void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin,
   handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
   plugin = NULL;
   plugin_entry_fn_t entry = NULL;
-  const char *name = NULL;
+  const char *name = NULL, **name_ptr = NULL;
   map<Plugin *, int *>::iterator i;
 
-  if (handle == NULL) throw PluginException ("Plugin open failed", dlerror());
+  if (handle == NULL) 
+    plugin_exception:
+    throw PluginException ("Plugin open failed", dlerror());
 
-  name = (const char *)dlsym(handle, "name");
+  name_ptr = (const char **)dlsym(handle, "name");
+  if (!name_ptr) goto plugin_exception;
+  name = *name_ptr;
 
   /* check for dupes */
   for (i = plugins_and_handles.begin(); i != plugins_and_handles.end(); i++) 

@@ -119,8 +119,9 @@ static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
 -----------------------------------------------------------------------------*/
 static const   int INIT_NOM_NUM_STIMS = 20;  /* the nominal num_stims value  */
 static const   int STIM_PERIOD        = 5;   /* in milliseconds              */
-static const   int STIM_SUSTAIN       = 1;   /* in milliseconds              */
-static const float INITIAL_DELTA_G    = 0.1; /* for MCShared init.          */
+static const   int STIM_SUSTAIN       = 2;   /* in milliseconds              */
+static const float STIM_VOLTAGE       = 1.0; /* Preferred stim voltage       */
+static const float INITIAL_DELTA_G    = 0.1; /* for MCShared init.           */
 static const   int INITIAL_NUM_RR_AVG = 10;  /* "   "         "              */
 static const float INITIAL_G_VAL      = 1.0; /* "   "         "              */
 static const   int G_MOD_THRESHOLD    = 2;   /* G_INC_CURR, C_DEC_CURR,      */
@@ -269,10 +270,8 @@ static int init_ao_chan(void)
   if (last_ao_chan_used > -1 && last_ao_chan_used != shm->ao_chan)  
     /* indicate that now this channel is free */
     _set_bit(last_ao_chan_used, rtp_shm->ao_chans_in_use, 0);
-
-  ao_range = 0;
-
-  for (i = 0; i < n_ranges; i++) {
+ 
+  for (i = 0, ao_range = 0; i < n_ranges; i++) {
     comedi_get_krange(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, 
                       shm->ao_chan, i, &krange);
     if (krange.max > max_v) {

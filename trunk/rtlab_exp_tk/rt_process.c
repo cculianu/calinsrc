@@ -66,6 +66,12 @@ MODULE_PARM(ai_device,"s");
 MODULE_PARM_DESC(ai_device, "The comedi device file to use for analog input. Defaults to device file " DEFAULT_COMEDI_DEVICE ".");
 MODULE_PARM(ao_device, "s");
 MODULE_PARM_DESC(ao_device, "The comedi device file to use for analog output. Defaults to device file " DEFAULT_COMEDI_DEVICE ".");
+MODULE_PARM(sampling_rate, "i");
+#define STR1(x) #x
+#define STR(x) STR1(x)
+MODULE_PARM_DESC(sampling_rate, "The sampling rate to run the acquisition at, in Hz.  Defaults to " STR(INITIAL_SAMPLING_RATE_HZ) "Hz.");
+#undef STR
+#undef STR1
 
 EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
@@ -158,6 +164,7 @@ DECLARE_MUTEX(rt_functions_sem);
 /* module parameters */
 char *ai_device = DEFAULT_COMEDI_DEVICE,
      *ao_device = DEFAULT_COMEDI_DEVICE;
+int  sampling_rate = INITIAL_SAMPLING_RATE_HZ;
 
 /* exported handles to be used with comedi functions.  This abstraction of
    comedi types is needed due to different treatments of the first parameter
@@ -635,7 +642,7 @@ init_shared_mem(void)
   /* num AI channels in use */
   rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_comedi_ai_dev_handle, ai_subdev); 
   rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_comedi_ao_dev_handle, ao_subdev);
-  rtp_shm->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
+  rtp_shm->sampling_rate_hz = (sampling_rate_t)sampling_rate;
   rtp_shm->scan_index = 0;
 
   /* initialize the spike_params member */
