@@ -322,7 +322,6 @@ struct rt_task_data {
 
 #define NON_RT_POLL_COND(x) \
     do { \
-        int POLL_I = 0; \
         while (x) { \
           current->state = TASK_INTERRUPTIBLE; \
           schedule_timeout(POLLING_SLEEPTIME); \

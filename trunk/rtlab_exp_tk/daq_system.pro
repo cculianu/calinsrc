@@ -5,9 +5,7 @@
 #TODO: Have ONE unified Makefile.tmake/template combo that generates both
 #      Makefile.daq_system and Makefile.rt_process based on the common
 #      config options and file paths. 
-RTL_MK = /usr/src/rtlinux/rtl.mk
-
-TEMPLATE    =	daq_system.t
+TEMPLATE    = app
 CONFIG      =	qt warn_on debug #release thread
 INCLUDEPATH =   
 HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h daq_settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp producer_consumer.h sample_consumer.h sample_writer.h shm.h ecggraph.h ecggraphcontainer.h simple_text_editor.h profile.h dsdstream.h plugin.h spike_polarity.h layer_renderer.h tweaked_mbuff.h tempfile.h sample_spooler.h output_file_w.h comedi_coprocess.h daq_mime_sources.h html_browser.h daq_images.h play.xpm pause.xpm timestamp.xpm plus.xpm synch.xpm spike_plus.xpm spike_minus.xpm daq_help_browser.h

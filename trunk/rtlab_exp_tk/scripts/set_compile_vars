@@ -7,3 +7,19 @@
 # ...
 # do stuff....
 # ...
+
+MODULE_COMPILE_FLAGS="-DMODULE -D__KERNEL__ -D${RTOS} -I${COMEDI_DEVEL_INCLUDE} -I${LINUXDIR}/include -I${RTOSDIR}/include"
+
+if [ $RTOS == "RTAI" ]; then
+	MODULE_COMPILE_FLAGS="${MODULE_COMPILE_FLAGS} "`grep ^CFLAGS ${RTOSDIR}/.buildvars | cut -f 2- -d '=' `
+	CC=`grep ^CC ${RTOSDIR}/.buildvars | cut -f 2- -d '='`
+	LD=`grep ^LD[^A-Za-z] ${RTOSDIR}/.buildvars | cut -f 2- -d '='`
+	LDFLAGS=`grep ^LDFLAGS ${RTOSDIR}/.buildvars | cut -f 2- -d '='`
+	MODULE_COMPILE_FLAGS="${MODULE_COMPILE_FLAGS} -I${RTOSDIR}/posix/include"
+else
+	MODULE_COMPILE_FLAGS="${MODULE_COMPILE_FLAGS} "`grep ^CFLAGS ${RTOSDIR}/rtl.mk | cut -f 2- -d '='`
+	CC=`grep ^CC ${RTOSDIR}/rtl.mk | cut -f 2- -d "="`
+fi
+
+CC=${CC:-"gcc"}
+LD=${LD:-"ld"}
