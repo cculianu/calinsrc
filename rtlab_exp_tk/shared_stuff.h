@@ -89,7 +89,7 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 58      /* test this against the below 
+# define SHD_SHM_STRUCT_VERSION 61      /* test this against the below 
                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
@@ -115,17 +115,27 @@ struct SharedMemStruct {
 7                                           Use inline funcs set_chan() and 
                                            is_chan_on() to set this           */
   volatile char ao_chans_in_use[CHAN_MASK_SIZE];  
-  volatile sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
-                                       loop (dangerous!).  Initialized to 1000  */
+  
+  /* The constant sampling rate --
+     this directly affects the period of the rt loop.  
+     Initialized at rtlab.o module insertion time to a configurable 
+     default of 1000  */
+  dconst sampling_rate_t sampling_rate_hz; 
   
   volatile scan_index_t scan_index; /* index of current analog input scan --   
                                        notice how this property is writable..
                                        we can reset this at any time from the 
                                        user process so as to allow the ability
                                        to reset the scan index               */
+  volatile dconst unsigned int nanos_per_scan; /* Basically the number of 
+                                                  nanoseconds  per scan.  This
+                                                  is a trivial function
+                                                  of BILLION / sampling rate */
 				     
   SpikeParams spike_params;              /* see struct definition above      */
-
+  int    attached_pid;  /* Normally the PID of daq_system, but crashed
+                           daq_system's can forget to clean up after themselves
+                           here! */
   /* read-only struct members for userland, read/write for kernel            */
   dconst int ai_minor;                   /* /dev/comediX                     */
   dconst int ao_minor;                   /* /dev/comediX (currently unused)  */
@@ -141,7 +151,7 @@ struct SharedMemStruct {
 typedef struct SharedMemStruct SharedMemStruct;
 #endif
 
-inline 
+static inline 
 int
 _test_bit (unsigned int bit, volatile const char *bits)
 {
@@ -153,7 +163,7 @@ _test_bit (unsigned int bit, volatile const char *bits)
   return (bits[elem_index] & mask) != 0;
 }
 
-inline
+static inline
 void
 _set_bit (unsigned int bit, volatile char *bits, int onoroff)
 {
@@ -168,17 +178,17 @@ _set_bit (unsigned int bit, volatile char *bits, int onoroff)
     bits[elem_index] &= ~mask;    
 }
 
-inline 
+static inline 
 int
 is_chan_on (unsigned int chan, volatile const char array[CHAN_MASK_SIZE])
 { return (chan > SHD_MAX_CHANNELS ? 0 : _test_bit(chan, array) ); }
 
-inline
+static inline 
 void
 set_chan (unsigned int chan, volatile char array[CHAN_MASK_SIZE], int onoroff)
 { if (chan < SHD_MAX_CHANNELS) _set_bit(chan, array, onoroff); }
 
-inline
+static inline 
 void
 init_spike_params (SpikeParams *p)
 {

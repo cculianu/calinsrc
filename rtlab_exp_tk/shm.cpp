@@ -206,6 +206,9 @@ ShmController::attach(ShmType t)
                                  fullErrorMessage + "\n\n" 
                                  + failureReasons[failureReason] );
 
+  /* tell rtlab.o who we are? */
+  shm->attached_pid = getpid();
+
   return shm;                                
 }
 
@@ -225,6 +228,8 @@ ShmController::~ShmController()
 void 
 ShmController::detach (SharedMemStruct *shm, ShmType t)
 {
+  shm->attached_pid = 0;
+
   switch (t) {
   case MBuff:
     mbuff_detach(SHARED_MEM_NAME, shm);

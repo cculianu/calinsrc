@@ -336,7 +336,8 @@ int InfoOp::doIt()
     in.start(); /* Potential exception here -- */
     vector<SampleStruct> dummy;
     in.readNextScan(dummy);
-    if (in.scanIndex() != 1) compensate_for_start_quirk = true;
+    if (in.startIndex() == 0 && in.scanIndex() != 1) 
+      compensate_for_start_quirk = true;
   } catch (Exception & e) {
     e.showConsoleError();   /* will generate its own error message */
     return EINVAL;

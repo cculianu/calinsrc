@@ -33,6 +33,7 @@
 
 #include "rt_process.h"
 #include "rtos_middleman.h"
+#include "stimulator.h"
 #include "avn_stim.h"
 #include "proc_macros.h"
 
@@ -77,7 +78,8 @@ static void do_avn_control_stuff(MultiSampleStruct *);
 static void do_pre_control_stuff(void);
 static void calc_rr(void);  
 static void calc_stim(void); 
-static void stimulate(int new_stim); /* if true, a new stim is started */
+static void stimulate(void); /* if called, a new stim is started */
+static void stimulate_old(int); /* works.. for now.. but soon delete me */
 static void calc_g(void);
 static void out_to_fifo(void);
 static int find_free_chan(volatile char *, unsigned int);
@@ -145,6 +147,9 @@ struct StimState state = {0, -1, -1};
 
 static struct proc_dir_entry *proc_ent = 0;
 
+static int init_stimulator_stuff(void);
+static void cleanup_stimulator_stuff(void);
+
 int avn_stim_init (void)
 {
   int retval = 0;
@@ -170,13 +175,18 @@ int avn_stim_init (void)
   proc_ent = create_proc_entry("avn_stim", S_IFREG|S_IRUGO, rtlab_proc_root);
   if (proc_ent)  /* if proc_ent is zero, we silently ignore... */
     proc_ent->read_proc = avn_stim_proc_read;
-  
+
+  /* commented out due to broken stimulator */
+  if ( (retval = init_stimulator_stuff()) ) 
+    avn_stim_cleanup();
   
   return retval;
 }
 
 void avn_stim_cleanup (void)
 {
+  cleanup_stimulator_stuff();
+
   if (proc_ent)
     remove_proc_entry("avn_stim", rtlab_proc_root);
 
@@ -196,10 +206,10 @@ static void do_avn_control_stuff (MultiSampleStruct * m)
 
   do_pre_control_stuff();
 
-  /* is there a spike? */
-  if ( (have_spike = 
-        shm->spike_channel > -1 
-        && _test_bit((int)shm->spike_channel, spike_info.spikes_this_scan))) { 
+ /* is there a spike? */
+  if ( (have_spike =
+        shm->spike_channel > -1
+        && _test_bit((int)shm->spike_channel, spike_info.spikes_this_scan))) {
 
     calc_rr(); /* calculate the rr */
    
@@ -209,11 +219,17 @@ static void do_avn_control_stuff (MultiSampleStruct * m)
 
     out_to_fifo();    
 
+    /* create a stim.. */
+    /* broken so commented out.. stimulate(); */
+
   }
 
-  /* Note that stimulate modulates the stimulation voltage
-     the assumption is that rt_process.o is running at precisely 1000 hz! */
-  stimulate(have_spike);
+  /* Note that stimulate_old modulates the stimulation voltage
+     the assumption is that rtlab.o is running at precisely 1000 hz! */
+  stimulate_old(have_spike);
+
+  if (1 == 0) { stimulate(); } /* keep compiler happy... */
+
   m = 0; /* to avoid compiler errors... */
 }
 
@@ -345,8 +361,61 @@ static void calc_stim(void)
 
 }
 
-static void stimulate(int new_spike)
-{ 
+static struct rtlab_stim_params rsp = EMPTY_STIM_PARAMS;
+static struct rtlab_comedi_context ctx = {0, 0, 0, 0, 0};
+static struct rtlab_stimulator *stimulator = 0;
+
+static int init_stimulator_stuff(void)
+{
+
+  ctx.dev = rtp_comedi_ao_dev_handle;
+  ctx.subdev = rtp_shm->ao_subdev;
+  ctx.chan = shm->ao_chan;
+  ctx.aref = AREF_GROUND;
+
+  stimulator = rtlab_stim_alloc(&ctx, AVN_MAX_NUM_STIMS);
+  return (!stimulator ? -ENOMEM : 0);
+}
+
+static void cleanup_stimulator_stuff(void)
+{
+  if (stimulator)  rtlab_stim_free(stimulator);
+}
+
+static void stimulate(void)
+{
+  int err = 0;
+  
+  if (!STIM_CURR || !STIM_ON_CURR) return;
+
+  if (ctx.chan != shm->ao_chan) { 
+    ctx.chan = shm->ao_chan; 
+    rtlab_stim_set_context(stimulator, &ctx);
+  }
+
+  rsp.on_voltage = STIM_VOLTAGE;
+  rsp.off_voltage = 0;
+  rsp.when_ms = 0;
+  rsp.duration_ms = STIM_SUSTAIN;
+  rsp.spacing_ms = STIM_PERIOD - STIM_SUSTAIN;
+  rsp.end_silence_ms = 0;
+  rsp.num_trains = 1;
+  rsp.num_per_train = STIM_CURR;
+  
+  if ( (err = rtlab_stimulate(stimulator, &rsp)) < 0 ) {
+    rtos_printf("avn_stim: ERROR! rtlab_stimulate returned error %d!\n", 
+                err);
+  } else {
+#ifdef DEBUG
+    //DEBUG
+    rtos_printf("avn_stim: rtlab_stimulate worked!\n");
+#endif
+  }
+  
+}
+
+static void stimulate_old(int new_spike)
+{   
   if (new_spike) {
     state.stims = STIM_CURR;
     state.waiting = 0;    

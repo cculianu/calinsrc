@@ -24,6 +24,8 @@
 #ifndef _RT_PROCESS_H 
 # define _RT_PROCESS_H
 
+# include <linux/comedilib.h>
+
 #include <version.h> /* in comedi's include/ or include/modbuild directory */
 #if (! defined COMEDI_VERSION_CODE) 
 #  define COMEDI_VERSION_CODE 0
@@ -55,11 +57,12 @@ typedef comedi_t* COMEDI_T;
 
 # define RT_PROCESS_MODULE_NAME "rtlab"
 
-# define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
+# define INITIAL_CHANNEL_GAIN 0  /*initial channel gain (COMEDI)*/
 # define INITIAL_SAMPLING_RATE_HZ 1000
-# define INITIAL_SPIKE_BLANKING (10) 
+# define DEFAULT_SETTLING_TIME_ns 0
 /* initial interval for disabling
-   v_spike detect ... i.e. 1/20 sec, 50ms */
+   v_spike detect ... i.e. 10ms */
+# define INITIAL_SPIKE_BLANKING (10) 
 
 
 #define DEFAULT_COMEDI_DEVICE "/dev/comedi0"
@@ -137,6 +140,21 @@ extern int rtp_find_free_rtf(int *minor, int size);
 /* The shared memory struct is also exported */
 extern SharedMemStruct *rtp_shm;
 
+/* Data type for future use by rtlab rt_process API to capture a 
+   device/subdev/channel/range/data combination in terms of a 'context' */
+struct rtlab_comedi_context {
+  COMEDI_T dev;
+  unsigned int subdev;
+  unsigned int chan;
+  unsigned int range;
+  unsigned int aref;
+};
+
+typedef struct rtlab_comedi_context rtlab_comedi_context;
+
+#define EMPTY_CONTEXT ((rtlab_comedi_context){0,0,0,0,0})
+#define CLEAR_CONTEXT(x) (memset(x, 0, sizeof(rtlab_comedi_context)))
+
 /* the handle one should use when calling comedi_open() and comedi_close()
    the reason this handle is needed is because of the type/semantic
    changes between comedi 0.7.65+ and earlier versions */
@@ -146,7 +164,7 @@ extern COMEDI_T rtp_comedi_ai_dev_handle, rtp_comedi_ao_dev_handle;
 extern struct spike_info spike_info;
 
 /* helper rounding function */
-inline int round (double d) { return (int)(d + (d >= 0 ? 0.5 : -0.5)); }
+static inline int round (double d) { return (int)(d + (d >= 0 ? 0.5 : -0.5)); }
 
 /* the proc dir root for rtlab -- in case additional modules want to add
    themselves to the proc fs */
@@ -180,5 +198,26 @@ extern struct proc_dir_entry *rtlab_proc_root;
    the trailing \0.
  */
 extern int float2string(char *dest, int n, float f, int num_decs);
+
+/* Helper functions to convert a sample to a volt for a given context,
+   and vice-versa */   
+extern double rtlab_lsampl_to_volts(const struct rtlab_comedi_context *,
+                                   lsampl_t sampl);
+extern lsampl_t rtlab_volts_to_lsampl(const struct rtlab_comedi_context *,
+                                      double volts);
+/* 
+   Populates the context with an appropriate range setting that is capable
+   of outputting and inputting voltage 'desired_voltage' 
+   Returns 0 on success or EINVAL if not found 
+*/
+extern int rtlab_find_and_set_best_range(struct rtlab_comedi_context *, 
+                                         double desired_voltage);
+
+/* Convenience function for constructing an rtlab_comedi_context */
+extern int rtlab_init_ctx(struct rtlab_comedi_context *,
+                          unsigned int subdev_type,
+                          unsigned int chan, 
+                          double desired_voltage,
+                          unsigned int aref);
 
 #endif 

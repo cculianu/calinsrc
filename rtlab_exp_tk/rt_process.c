@@ -35,7 +35,11 @@
 #include <linux/fs.h> /* for the determine_minor() functionality */
 #include <linux/proc_fs.h>
 
+#define RTLAB_INTERNAL
+
 #include "rtos_middleman.h"
+#include "rtlab_cmd.h"
+#include "stimulator.h"
 
 #ifdef TIME_RT_LOOP
 #  define I_SHOULD_PRINT_TIME \
@@ -70,6 +74,8 @@ MODULE_PARM(sampling_rate, "i");
 #define STR1(x) #x
 #define STR(x) STR1(x)
 MODULE_PARM_DESC(sampling_rate, "The sampling rate to run the acquisition at, in Hz.  Defaults to " STR(INITIAL_SAMPLING_RATE_HZ) "Hz.");
+MODULE_PARM(settling_time, "i");
+MODULE_PARM_DESC(settling_time, "The time in nanoseconds it takes the board's AI multiplexer to settle.  See your board's specifications for an appropriate settling time.  The default value is " STR(DEFAULT_SETTLING_TIME_ns) " nanoseconds.");
 #undef STR
 #undef STR1
 
@@ -85,9 +91,13 @@ EXPORT_SYMBOL_NOVERS(rtp_comedi_ao_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtlab_proc_root);
 EXPORT_SYMBOL_NOVERS(float2string);
 EXPORT_SYMBOL_NOVERS(voltage_at);
+EXPORT_SYMBOL_NOVERS(rtlab_lsampl_to_volts);
+EXPORT_SYMBOL_NOVERS(rtlab_volts_to_lsampl);
+EXPORT_SYMBOL_NOVERS(rtlab_find_and_set_best_range);
+EXPORT_SYMBOL_NOVERS(rtlab_init_ctx);
 
 int init_module(void);        /* set up RT stuff */
-void cleanup_module(void) ;    /* clean up RT stuff */
+void cleanup_module(void);    /* clean up RT stuff */
 
 /* initializes some comedi stuff. Returns 0 and sets global 'error' on error */
 static int init_comedi(void);
@@ -103,6 +113,11 @@ static int rtlab_proc_register(void);
 struct calib_parms { int iterations; long period; };
 static void *calibrate_jitter(void *arg);
 
+/* Cleans up the sampling_rate parameter that comes in as a mod param,
+   so that it is a multiple of 1000, or an even factor of 1000 */
+static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate);
+/* Computes the number of nanos per scan */
+static void computeNanosPerScan(void);
 static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
@@ -132,20 +147,32 @@ static int rtlab_proc_read (char *, char **, off_t, int, int *, void *data);
 
 /* operates on krange_cache below to determine the voltage for a sample */
 inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t data);
+/* operates on krange_cache below to determine the sample for a voltage */
+inline lsampl_t volts_to_sampl(SubDevT t, uint chan, uint range, double data);
+/* Helper function that retrieves a particular krange from the cache 
+   returns 0 on error */
+inline comedi_krange *get_krange(SubDevT t, uint chan, uint range);
+/* The equivalent of comedi_data_read_delelayed() in comedilib */
+static int internal_data_read_delayed( COMEDI_T, uint subdev, uint chan, 
+                                       uint range, uint aref, lsampl_t *data, 
+                                       uint nano_sec);
+
 
 static pthread_t daq_task = 0;          /* main RT task */
 static void     *daq_task_stack = 0;    /* main RT task stack */
 
 struct krange_cache {
-  comedi_krange *ai_ranges;
-  comedi_krange *ao_ranges;
-  int            ai_max_n_ranges; /* --|__ these two members are column size */
-  int            ao_max_n_ranges; /* --|   for each row in above  2d arrays */
+  comedi_krange *ai_ranges; /* index as: + chan * ai_max_n_ranges + range */
+  comedi_krange *ao_ranges; /* index as: + chan * ao_max_n_ranges + range */
+  uint           ai_max_n_ranges; /* --|__ these two members are column size */
+  uint           ao_max_n_ranges; /* --|   for each row in above  2d arrays */
+  uint          *ai_n_ranges; /* for each channel, the number of ranges */
+  uint          *ao_n_ranges; /* ditto */
   lsampl_t      *ai_maxdatas;
   lsampl_t      *ao_maxdatas;
 };
 
-static struct krange_cache krange_cache = {0, 0, 0, 0, 0, 0};
+static struct krange_cache krange_cache;
 
 /* functions to be run at the end of the real-time daq loop
    they are chained on, one after the other */
@@ -166,6 +193,7 @@ DECLARE_MUTEX(rt_functions_sem);
 char *ai_device = DEFAULT_COMEDI_DEVICE,
      *ao_device = DEFAULT_COMEDI_DEVICE;
 int  sampling_rate = INITIAL_SAMPLING_RATE_HZ;
+int  settling_time = DEFAULT_SETTLING_TIME_ns;
 
 /* exported handles to be used with comedi functions.  This abstraction of
    comedi types is needed due to different treatments of the first parameter
@@ -270,6 +298,11 @@ static void *daq_rt_task (void *arg)
           curr->function(&one_full_scan);
       
     }
+    
+    /* now call the commands infrastructure to process pending commands.. */
+    /* broken so commented out.. 
+       rtlab_cmd_process(); */
+    
 
 #ifdef TIME_RT_LOOP
     /*---- time code */
@@ -308,12 +341,28 @@ static void *daq_rt_task (void *arg)
   return (void *)0;
 }
 
+/* This enforces sampling rates to be 'millisecond friendly' numbers  --
+   numbers that are factors of 1000 or are multiples of 1000 */
+static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate)
+{  
+  sampling_rate_t ret = INITIAL_SAMPLING_RATE_HZ;
+  int multiple = 0;
+
+  if (rate > 1000 && (multiple = round(rate / 1000.0))) { /* rate > 1000 */
+    ret = multiple * 1000;
+  } else if (rate && (multiple = round(1000.0 / rate)) ) { /* rate < 1000 */
+    ret = 1000 / multiple;
+  }
+
+  return ret;
+}
+
 int init_module(void) 
 {
   int i;
 
   error = -EBUSY;
-  
+ 
   /* initialize the array of last spikes encountered */
   for (i = 0; i < SHD_MAX_CHANNELS; i++)  {
     spike_info.last_spike_time[i] = 0;
@@ -371,6 +420,20 @@ int init_module(void)
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
+
+  /* command subsystem broken so commented out.. 
+  if ( ( error = init_cmd_engine() ) ) {
+    errorMessage = "Cannot initialize RTLab command subsystem!";
+    goto init_error;
+  }
+  */
+
+  /* broken..
+  if ( ( error = init_stim_engine() ) ) {
+    errorMessage = "Cannot initialize RTLab stimulator subsystem!";
+    goto init_error;
+  }
+  */
 
   if ( !(daq_task_stack = kmalloc(RTL_PTHREAD_STACK_MIN, GFP_KERNEL)) ) {
     error = -ENOMEM;
@@ -431,9 +494,11 @@ int init_module(void)
   
   rtlab_proc_register(); /* it doesn't matter if this fails, we still go on */
 
+
   printk(RT_PROCESS_MODULE_NAME ": acquisition started at %d Hz (%s)\n", 
          rtp_shm->sampling_rate_hz, 
          errorMessage);
+
   return 0;
 
  init_error:
@@ -650,8 +715,9 @@ init_shared_mem(void)
   /* num AI channels in use */
   rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_comedi_ai_dev_handle, ai_subdev); 
   rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_comedi_ao_dev_handle, ao_subdev);
-  rtp_shm->sampling_rate_hz = (sampling_rate_t)sampling_rate;
+  rtp_shm->sampling_rate_hz = normalizeSamplingRate(sampling_rate);
   rtp_shm->scan_index = 0;
+  rtp_shm->attached_pid = 0;
 
   /* initialize the spike_params member */
   init_spike_params(&rtp_shm->spike_params);
@@ -673,28 +739,34 @@ init_shared_mem(void)
 static
 int  build_krange_cache(void)
 {
-  int i, j, *ai_n_ranges = 0, *ao_n_ranges = 0, ret = -1;
+  int i, j, ret = -1;
 
-  if (!(ai_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
-      !(ao_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ao_chans, GFP_KERNEL)) ||
-      !(krange_cache.ai_maxdatas = kmalloc(sizeof(lsampl_t) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
-      !(krange_cache.ao_maxdatas = kmalloc(sizeof(lsampl_t) * rtp_shm->n_ao_chans, GFP_KERNEL)) )
+  memset(&krange_cache, 0, sizeof(krange_cache));
+
+  if (!(krange_cache.ai_n_ranges = 
+        kmalloc(sizeof(uint) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
+      !(krange_cache.ao_n_ranges = 
+        kmalloc(sizeof(uint) * rtp_shm->n_ao_chans, GFP_KERNEL)) ||
+      !(krange_cache.ai_maxdatas = 
+        kmalloc(sizeof(lsampl_t) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
+      !(krange_cache.ao_maxdatas = 
+        kmalloc(sizeof(lsampl_t) * rtp_shm->n_ao_chans, GFP_KERNEL)) )
     goto end;
   
   /* record the number of ranges for each channel */
   for (i = 0; i < rtp_shm->n_ai_chans; i++) {
-    if ( (ai_n_ranges[i] = 
-	  comedi_get_n_ranges(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i)) 
+    if ( (krange_cache.ai_n_ranges[i] = 
+       comedi_get_n_ranges(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i)) 
 	 > krange_cache.ai_max_n_ranges )
-      krange_cache.ai_max_n_ranges = ai_n_ranges[i];
+      krange_cache.ai_max_n_ranges = krange_cache.ai_n_ranges[i];
     krange_cache.ai_maxdatas[i] = 
       comedi_get_maxdata(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i);
   }
   for (i = 0; i < rtp_shm->n_ao_chans; i++) {
-      if ( (ao_n_ranges[i] =
+      if ( (krange_cache.ao_n_ranges[i] =
 	    comedi_get_n_ranges(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i))
 	   > krange_cache.ao_max_n_ranges )
-	krange_cache.ao_max_n_ranges = ao_n_ranges[i];
+	krange_cache.ao_max_n_ranges = krange_cache.ao_n_ranges[i];
       krange_cache.ao_maxdatas[i] = 
 	comedi_get_maxdata(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i);
   }
@@ -708,21 +780,18 @@ int  build_krange_cache(void)
     goto end;
  
   for (i = 0; i < rtp_shm->n_ai_chans; i++) {
-    for (j = 0; j < ai_n_ranges[i]; j++)
+    for (j = 0; j < krange_cache.ai_n_ranges[i]; j++)
       comedi_get_krange(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i, j, 
-			krange_cache.ai_ranges + i 
-			* krange_cache.ai_max_n_ranges + j);
+			krange_cache.ai_ranges + i * krange_cache.ai_max_n_ranges + j);
   }
   for (i = 0; i < rtp_shm->n_ao_chans; i++) {
-    for (j = 0; j < ao_n_ranges[i]; j++)
+    for (j = 0; j < krange_cache.ao_n_ranges[i]; j++)
       comedi_get_krange(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i, j, 
-			krange_cache.ao_ranges + i 
-			* krange_cache.ao_max_n_ranges + j);
+                        krange_cache.ao_ranges + 
+                        i * krange_cache.ao_max_n_ranges + j);
   }
   ret = 0;
   end:
-  if (ai_n_ranges) { kfree(ai_n_ranges); ai_n_ranges = 0; }
-  if (ao_n_ranges) { kfree(ao_n_ranges); ao_n_ranges = 0; }  
   return ret;
 }
 
@@ -745,6 +814,11 @@ static int rtlab_proc_register(void)
   ent->read_proc = rtlab_proc_read;
   ent->data = (void *)RTLAB_PROC_FILE_RTLAB;
   return(0);
+}
+
+static void computeNanosPerScan(void)
+{
+  rtp_shm->nanos_per_scan = BILLION / (unsigned int)rtp_shm->sampling_rate_hz;
 }
 
 static void rtlab_proc_cleanup(void)
@@ -792,7 +866,13 @@ void cleanup_module(void)
 
   /* NB: clearing out of all of the other functions from the function linked 
      list is not required since if we were called here the function linked list
-     must be empty since our module use count is now 0 */
+     must be empty since our module use count is now 0 
+
+     commented out becuase broken.. 
+  cleanup_stim_engine();
+  cleanup_cmd_engine();
+
+ */
 
   /* close all successfully opened fifos */
   cleanup_fifos();
@@ -851,23 +931,14 @@ static
 void cleanup_krange_cache (void) 
 {
   /* release the cache of kranges */
-  if (krange_cache.ai_ranges) {
-    kfree(krange_cache.ai_ranges);
-    krange_cache.ai_ranges = 0;
-  }
-  if (krange_cache.ao_ranges) {
-    kfree(krange_cache.ao_ranges);
-    krange_cache.ao_ranges = 0;
-  }
-  if (krange_cache.ai_maxdatas) {
-    kfree(krange_cache.ai_maxdatas);
-    krange_cache.ai_maxdatas = 0;
-  }
-  if (krange_cache.ao_maxdatas) {
-    kfree(krange_cache.ao_maxdatas);
-    krange_cache.ao_maxdatas = 0;
-  }
+  if (krange_cache.ai_ranges)  kfree(krange_cache.ai_ranges);
+  if (krange_cache.ao_ranges)  kfree(krange_cache.ao_ranges);
+  if (krange_cache.ai_n_ranges) kfree(krange_cache.ai_n_ranges);
+  if (krange_cache.ao_n_ranges) kfree(krange_cache.ao_n_ranges);
+  if (krange_cache.ai_maxdatas) kfree(krange_cache.ai_maxdatas);
+  if (krange_cache.ao_maxdatas) kfree(krange_cache.ao_maxdatas);
 
+  memset(&krange_cache, 0, sizeof(krange_cache));
 }
 
 static void grabScanOffBoard (MultiSampleStruct *m)
@@ -894,9 +965,9 @@ static void grabScanOffBoard (MultiSampleStruct *m)
   for (i = 0, m->n_samples = 0; i < rtp_shm->n_ai_chans; i++) {
     if (is_chan_on(i, m->channel_mask)) {
       packed_param = rtp_shm->ai_chan[i]; /* for shorter line length  below */
-      comedi_data_read(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, 
-                       CR_CHAN(packed_param),CR_RANGE(packed_param), 
-                       CR_AREF(packed_param),&samp);      
+      internal_data_read_delayed(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, 
+                                 CR_CHAN(packed_param),CR_RANGE(packed_param), 
+                                 CR_AREF(packed_param),&samp, settling_time);
       m->samples[m->n_samples].data = 
         sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
       m->samples[m->n_samples].scan_index = rtp_shm->scan_index;
@@ -1218,22 +1289,49 @@ inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
   lsampl_t maxdata;
   double ret;
 
+  krange = get_krange(t, chan, range);
+
+  if (!krange) return -666666.66; /* error here.. what to do? */
+
   if (t == AI) {
-    krange = 
-      krange_cache.ai_ranges + chan * krange_cache.ai_max_n_ranges + range;
     maxdata = krange_cache.ai_maxdatas[chan];
   } else {
-    krange = 
-      krange_cache.ao_ranges + chan * krange_cache.ao_max_n_ranges + range;
     maxdata = krange_cache.ao_maxdatas[chan];    
   }
   
-  ret = ((krange->max - krange->min) * (sampl/(double)maxdata) + krange->min) 
-        * 1e-6;
+  ret = ((krange->max - krange->min) 
+         * (sampl/(double)maxdata) + krange->min)  * 1e-6;
 
   if (RF_UNIT(krange->flags) == UNIT_mA) 
     ret *= 0.001;
   
+  return ret;
+}
+
+inline lsampl_t volts_to_sampl(SubDevT t, uint chan, uint range, double data)
+{
+  comedi_krange *krange;
+  lsampl_t ret, maxdata;
+
+  krange = get_krange(t, chan, range);
+
+  if (!krange) return UINT_MAX;
+
+  if (t == AI) {
+    maxdata = krange_cache.ai_maxdatas[chan];
+  } else {
+    maxdata = krange_cache.ao_maxdatas[chan];    
+  }
+
+  if (RF_UNIT(krange->flags) == UNIT_mA) data *= 1000.0;
+  
+  
+  if (krange->max - krange->min)
+    ret =  
+      ((data * 1e6 - krange->min) / (krange->max - krange->min)) * maxdata ;
+  else 
+    ret = 0;
+ 
   return ret;
 }
 
@@ -1242,17 +1340,25 @@ inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
 static int rtlab_proc_read (char *page, char **start, off_t off, int count, 
                             int *eof,  void *data)
 {
+  char pidbuf[24];
   PROC_PRINT_VARS;
 
   switch ( (enum RTLabProcFiles)data ) {
   case RTLAB_PROC_FILE_RTLAB:
-    PROC_PRINT("AI Channels:\n%s\n"
+    if (rtp_shm->attached_pid)
+      sprintf(pidbuf, "%d", rtp_shm->attached_pid);
+    else
+      sprintf(pidbuf, "(no process attached)");
+    pidbuf[23] = 0;
+    PROC_PRINT("RTLab is attached to PID: %s\n"
+               "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
                "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
                "Realtime Loop Jitter (in nanos): %u\n",
+               pidbuf,
                "(unimplmented)",
                "(unimplemented)",
                (uint)rtp_shm->sampling_rate_hz,
@@ -1260,8 +1366,7 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
-               rtp_shm->jitter_ns);
-    
+               rtp_shm->jitter_ns);    
     break;
   default:
     PROC_PRINT_RETURN;
@@ -1277,8 +1382,10 @@ inline void readjust_rt_task_wakeup(void)
 {
   if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
     /* user changed sampling rate -- DANGEROUS if set too high!!! */
+    rtp_shm->sampling_rate_hz = normalizeSamplingRate(rtp_shm->sampling_rate_hz);
+    computeNanosPerScan();
     last_sampling_rate = rtp_shm->sampling_rate_hz;
-    task_period = ((1000.0 / (double)last_sampling_rate) * MILLION);
+    task_period = rtp_shm->nanos_per_scan;
   }
 
   /* now re-tune the period, note that this is dangerous if set too
@@ -1357,6 +1464,194 @@ double voltage_at(unsigned int channel_id, const MultiSampleStruct *m)
     
   }
   return ret;
+}
+
+
+/* Wrapper function that is exported -- wraps sampl_to_volts */
+double rtlab_lsampl_to_volts(const struct rtlab_comedi_context *c,
+                             lsampl_t sampl)
+{
+  if (c->dev != rtp_comedi_ai_dev_handle && c->dev != rtp_comedi_ao_dev_handle)
+    return 0; /* some sort of error in the context */
+
+  return sampl_to_volts
+    (c->subdev == rtp_shm->ao_subdev ? AO : AI, c->chan, c->range, sampl);
+}
+
+lsampl_t rtlab_volts_to_lsampl(const struct rtlab_comedi_context *c,
+                               double volts)
+{
+  if (c->dev != rtp_comedi_ai_dev_handle && c->dev != rtp_comedi_ao_dev_handle)
+    return 0; /* some sort of error in the context */
+
+  return volts_to_sampl
+    (c->subdev == rtp_shm->ao_subdev ? AO : AI, c->chan, c->range, volts);
+}
+
+
+inline comedi_krange *get_krange(SubDevT t, uint chan, uint range)
+{
+  /*    krange = 
+        krange_cache.ai_ranges + chan * krange_cache.ai_max_n_ranges + range;*/
+
+  comedi_krange *ranges = 0;
+  unsigned int num_cols, num_ranges, num_chans;
+  switch (t) {
+  case AI:
+    num_chans = rtp_shm->n_ai_chans;
+    if (chan >= num_chans) return 0;
+    num_cols = krange_cache.ai_max_n_ranges;    
+    num_ranges = krange_cache.ai_n_ranges[chan];
+    ranges = krange_cache.ai_ranges;
+    break;
+  case AO:
+    num_chans = rtp_shm->n_ao_chans;
+    if (chan >= num_chans) return 0;
+    num_cols = krange_cache.ao_max_n_ranges;
+    num_ranges = krange_cache.ao_n_ranges[chan];
+    ranges = krange_cache.ao_ranges;
+    break;
+  default:
+    rtos_printf("BUG in rt_process.c::find_krange -- invalid subdev %d!\n", t);
+    return 0;
+    break;
+  }
+  if (range >= num_ranges) return 0;
+
+  return ranges + num_cols * chan + range;
+}
+
+int rtlab_find_and_set_best_range(struct rtlab_comedi_context *c, 
+                                  double desired_voltage)
+{
+  int n_ranges, r, found_range = -1;
+  comedi_krange *found_krange = 0;
+  SubDevT s;
+  static const double threshold = 0.0001;
+
+  if (c->dev != rtp_comedi_ai_dev_handle 
+      && c->dev != rtp_comedi_ao_dev_handle ) {
+    return EINVAL;
+  } else if (c->dev == rtp_comedi_ao_dev_handle 
+             && c->subdev == rtp_shm->ao_subdev) {
+    /* Analog Output.. */
+    s = AO;
+  } else if (c->dev == rtp_comedi_ai_dev_handle 
+             && c->subdev == rtp_shm->ai_subdev) {
+    /* Analog Input.. */
+    s = AI;
+  } else {
+    /* Unknown subdev */
+    //DEBUG
+    rtos_printf("rt_process: UNKNOWN SUBDEV!\n");
+    return EINVAL;
+  }
+
+  n_ranges = comedi_get_n_ranges(c->dev, c->subdev, c->chan);
+
+  for (r = 0; r < n_ranges; r++) {
+    comedi_krange *range = get_krange(s, c->chan, r);
+    double min, max;
+    char is_candidate = 0;
+
+    if (!range) {
+      //DEBUG
+      rtos_printf("rt_process: INVALID CHANNEL/SUBDEV - s is %d, chan is %u, r is %d!\n", s, c->chan, r);
+      return EINVAL; /* invalid channel/subdev combo */
+    }
+    min = (range->min) * ( (RF_UNIT(range->flags) == UNIT_mA) ? 1e-9 : 1e-6 );
+    max = (range->max) * ( (RF_UNIT(range->flags) == UNIT_mA) ? 1e-9 : 1e-6 );
+    is_candidate = desired_voltage <= (max+threshold) 
+                   && desired_voltage >= (min-threshold);
+    if ( is_candidate && 
+         (!found_krange /* we need one and it's a candidate */
+         /* OR, we have one but this one is better */
+          || (found_krange && (found_krange->min < range->min 
+                               || found_krange->max > range->max)) ) ) {
+      found_krange = range;
+      found_range = r;
+      //DEBUG
+      rtos_printf("rt_process: found range %d\n", r);
+    } 
+  }
+
+  /* we have one.. */
+  if (found_range > -1) {
+    c->range = found_range;
+    return 0;
+  }
+
+  /* None found... */
+  return ESRCH;
+}
+
+int rtlab_init_ctx(struct rtlab_comedi_context *c,
+                       unsigned int subdev_type,
+                       unsigned int chan, 
+                       double desired_voltage,
+                       unsigned int aref)
+{
+  switch (subdev_type) {
+  case COMEDI_SUBD_AO:
+    c->dev = rtp_comedi_ao_dev_handle;
+    c->subdev = rtp_shm->ao_subdev;
+    break;
+  case COMEDI_SUBD_AI:
+    c->dev = rtp_comedi_ai_dev_handle;
+    c->subdev = rtp_shm->ai_subdev;
+    break;
+  default:
+    return EINVAL;
+    break;
+  }
+  
+  c->chan = chan;
+  c->aref = aref;
+  
+  return rtlab_find_and_set_best_range(c, desired_voltage);
+}
+
+
+static int internal_data_read_delayed( COMEDI_T dev, uint subdev, uint chan, 
+                                       uint range, uint aref, lsampl_t *data, 
+                                       uint nano_sec)
+{
+    comedi_insn insn;
+	lsampl_t delay = nano_sec;
+    unsigned int chanspec = CR_PACK( chan, range, aref );
+	
+	memset( &insn, 0, sizeof(insn) );
+
+    if ( nano_sec ) {
+      // setup, no conversions
+      insn.insn = INSN_READ;
+      insn.n = 0;
+      insn.data = data;
+      insn.subdev = subdev;
+      insn.chanspec = chanspec;
+
+      comedi_do_insn (dev, &insn);
+
+      memset( &insn, 0, sizeof(insn) );
+
+      // delay
+      insn.insn = INSN_WAIT;
+      insn.n = 1;
+      insn.data = &delay;
+    
+      comedi_do_insn (dev, &insn);
+
+    }
+
+	// take conversion
+	insn.insn = INSN_READ;
+	insn.n = 1;
+	insn.data = data;
+	insn.subdev = subdev;
+	insn.chanspec = chanspec;
+
+
+	return comedi_do_insn (dev, &insn);
 }
 
 #undef __I_AM_BUSY
