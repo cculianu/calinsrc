@@ -302,7 +302,7 @@ bool ShmController::haveRTLabDotO()
 ShmControllerWithFifo::ShmControllerWithFifo()
   : rtlab(0)
 {
-  rtlab = new RTLabKernelNotifier(shm->control_fifo);
+  rtlab = new RTLabKernelNotifier(shm->control_fifo, shm->reply_fifo);
   /* tell rtlab.o who we are? */
   rtlab->setAttachedPid(getpid());
 }

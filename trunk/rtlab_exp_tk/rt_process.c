@@ -421,8 +421,14 @@ int init_module(void)
   }
   
   if ((error = rtp_find_free_rtf(&rtp_shm->control_fifo, 
-				 256 * sizeof(struct rtfifo_cmd)))) {
+				 SHD_MAX_CHANNELS * sizeof(struct rtfifo_cmd)))) {
     errorMessage = "Cannot create fifo for user to kernel communication!";     
+    goto init_error;
+  }
+
+  if ((error = rtp_find_free_rtf(&rtp_shm->reply_fifo, 
+				 SHD_MAX_CHANNELS * sizeof(char)))) {
+    errorMessage = "Cannot create fifo for kernel to user communication!";     
     goto init_error;
   }
 

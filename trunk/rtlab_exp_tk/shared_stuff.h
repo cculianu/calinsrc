@@ -79,8 +79,8 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 64      /* test this against the below 
-                                           struct_version member            */
+# define SHD_SHM_STRUCT_VERSION 65       /* test this against the below 
+                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
 /* prevent compiler errors due to consts below */
@@ -134,8 +134,9 @@ struct SharedMemStruct {
   int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
   int ao_fifo_minor;              /* (currently unused)               */
   int control_fifo;               /* The RT-FIFO rtlab.o listens on
-					    for control commands..
-					    (unimplemented) */
+                                     for control commands..
+                                     (unimplemented) */
+  int reply_fifo;                 /* Reply FIFO from rtlab.o to user  */
   unsigned int n_ai_chans;        /* the number of channels in subdev */
   unsigned int n_ao_chans;        /* ditto                            */
   volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos       */

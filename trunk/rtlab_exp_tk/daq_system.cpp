@@ -1095,6 +1095,11 @@ ReaderLoop(DAQSystem *d) :
   case DAQSettings::RTProcess:
     shmCtl = new ShmControllerWithFifo(); /* auto-probe a shm_type */
 
+    shmCtl->clearSpikeSettings();
+    for (uint i=0; i<shmCtl->numChannels(ComediSubDevice::AnalogInput);i++) {
+      shmCtl->setChannel(ComediSubDevice::AnalogInput, i, false);
+    }
+
     source = new SampleStructFIFOSource(string("/dev/rtf") + shmCtl->aiFifoMinor());
     source->flush();
 

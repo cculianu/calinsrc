@@ -87,6 +87,7 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
                              SharedMemStruct *rtp_shm)
 {
   unsigned int i;
+  static const unsigned char reply = 1;
 #define CHKCHAN if (cmd->chan >= rtp_shm->n_ai_chans) break
   switch(cmd->command) {
   case RTLAB_SET_CHAN:
@@ -176,7 +177,7 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
        it's a multiple of 500Hz or so */
     break;
   case RTLAB_SET_SCAN_INDEX:
-    ERROR("user_cmd.c: Scan Index changs unimplemented!!");
+    ERROR("user_cmd.c: Scan Index change unimplemented!!");
     /*rtp_shm->scan_index = cmd.u->scan_index;*/
     /* TODO: Handle scan index changes!! */
     break;
@@ -184,6 +185,8 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
     ERROR("user_cmd.c: Unknown user command encountered!\n");
     break;
   }
+  /* synchronous reply is always 1 for now... */
+  rtf_put(rtp_shm->reply_fifo, &reply, sizeof(reply));
 #undef CHKCHAN
 }
 

@@ -28,16 +28,25 @@
 #include "user_to_kernel.h"
 #include "exception.h"
 
-RTLabKernelNotifier::RTLabKernelNotifier(int control_fifo)
+RTLabKernelNotifier::RTLabKernelNotifier(int control_fifo, int reply_fifo)
   : fd(0)
 {
-  QString pathname = "/dev/rtf%1";
-
+  QString pathname1 = "/dev/rtf%1", pathname2;
+  pathname2 = pathname1;
   if (control_fifo < 0 
-      || (fd = ::open( (pathname = pathname.arg(control_fifo)).latin1(),
+      || (fd = ::open( (pathname1 = pathname1.arg(control_fifo)).latin1(),
 		       O_WRONLY | O_SYNC)) < 0 ) {
     throw IllegalStateException("No control FIFO", 
 				QString("Could not open rtlab control fifo") +
+				(fd < 0 
+				 ? QString(". Error was: %1").arg(strerror(errno))
+				 : QString("")));
+  }
+  if (reply_fifo < 0 
+      || (replyfd = ::open( (pathname2 = pathname2.arg(reply_fifo)).latin1(),
+                            O_RDONLY | O_SYNC)) < 0 ) {
+    throw IllegalStateException("No control reply FIFO", 
+				QString("Could not open rtlab control reply fifo") +
 				(fd < 0 
 				 ? QString(". Error was: %1").arg(strerror(errno))
 				 : QString("")));
@@ -55,9 +64,17 @@ RTLabKernelNotifier::~RTLabKernelNotifier()
 
 int RTLabKernelNotifier::do_cmd()
 {
+  unsigned char reply = 0;
   ssize_t ret =  ::write(fd, &cmd, sizeof(cmd));
-  if (ret < 0) return errno;
-  else return 0;
+  if (ret < 0) goto reterr;
+  else {
+    /* synchronously wait for reply */
+    ret = ::read(replyfd, &reply, sizeof(reply));
+    if (ret < 0 || !reply) goto reterr;
+  }
+  return 0;
+ reterr:
+  return errno;
 }
 
 int RTLabKernelNotifier::setChan(uint chan, bool on)

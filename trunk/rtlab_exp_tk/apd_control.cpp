@@ -208,10 +208,10 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
     if (which_apd_graph < NumAPDGraphs)
-      graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+      graphlayout->addWidget(new QLabel(QString("Electrode %1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
     else {
       // the 'All APD's' graph..
-      graphlayout->addWidget(new QLabel(QString("All APDs"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+      graphlayout->addWidget(new QLabel(QString("All Used Electrodes"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
       // create the interleaver class that talks to this graph
       apd_interleaver = new APDInterleaver(this, apd_graph[which_apd_graph],
@@ -226,17 +226,21 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     //addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
     buildRangeComboBoxesAndConnectSignals(which_apd_graph);
   }
-  
-  QHBox *eoBox = new QHBox(graphs);
+
+  QVBox *vb = new QVBox(graphs);
   determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
-  graphlayout->addWidget(eoBox, which_graph_row, which_graph_column);
-  (void)new QLabel("Electrode Order: ", eoBox);
+  graphlayout->addWidget(vb, which_graph_row, which_graph_column);
+  QHBox *eoBox = new QHBox(vb);
+  (void)new QLabel("Master Electrode Order: ", eoBox);
   QLineEdit *eo = new QLineEdit(apd_monitor->masterOrder(), eoBox);
+  eoBox = new QHBox(vb);
+  (void)new QLabel("Actual Order Being Used: ", eoBox);
+  QLabel *eoLabel = new QLabel(apd_monitor->orderString(), eoBox);
   eo->setValidator(new QRegExpValidator(ELECTRODE_ORDER_RE, eo));
   connect(eo, SIGNAL(textChanged(const QString &)),
           apd_monitor, SLOT(setMasterOrder(const QString &)));
-  connect(apd_monitor, SIGNAL(masterOrderChanged(const QString &)),
-          eo, SLOT(setText(const QString &)));
+  connect(apd_monitor, SIGNAL(orderChanged(const QString &)),
+          eoLabel, SLOT(setText(const QString &)));
   /* end graphs... */
 
 /*******************************************************/
@@ -471,10 +475,8 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 
   // when a new channel is opened, we want to synch that channel's graph
   // with teh other graphs.. the below slot does this
-  connect(daqSystem_parent, SIGNAL(spikeThresholdSet(uint, double)),
-          this, SLOT(ffwdGraph(uint)));
-  connect(daqSystem_parent, SIGNAL(spikeOff(uint)),
-          this, SLOT(ffwdGraph(uint)));
+  connect(apd_monitor, SIGNAL(orderChanged(const QString &)),
+          this, SLOT(ffwdAllGraphs()));
 
   window_id = daqSystem()->windowMenuAddWindow(window);  
   window->show();
@@ -676,10 +678,21 @@ void APDcontrol::periodic()
 
 void APDcontrol::ffwdGraph(uint chan)
 {
-  if (chan < NumAPDGraphs) {
+  if (chan > NumAPDGraphs) return;
+
+  bool found;
+  uint order;
+  order = apd_monitor->orderOf(chan, &found);
+  if (found) {
     apd_graph[apd_monitor->orderOf(chan)]->reset();
     apd_graph[apd_monitor->orderOf(chan)]->ffwd(apd_monitor->beatNumber());
   }
+}
+
+void APDcontrol::ffwdAllGraphs()
+{
+  uint i;
+  for (i = 0; i < NumAPDGraphs; i++) ffwdGraph(i);
 }
 
 // read fifo from real-time-process, store in snapshot, and display via setText
@@ -1091,35 +1104,34 @@ APDInterleaver::APDInterleaver(QObject *parent,
                                DAQSystem *_ds)
   : QObject(parent), graph(g), monitor(monitor)
 {
-  set<unsigned int> cs;
-  set<unsigned int>::iterator it, end;
 
+  lastBeatGraphed = monitor->beatNumber();
   ds = _ds;
   if (!ds) {
     ds = *(DAQSystem::daqSystems().begin());
   }
-
-  cs = ds->channelsWithSpikeThresholds();
-  for (it = cs.begin(), end = cs.end(); it != end; it++)  spikeSet(*it, 0);
-  connect(ds, SIGNAL(spikeThresholdSet(uint, double)),
-          this, SLOT(spikeSet(uint, double)));
-  connect(ds, SIGNAL(spikeThresholdOff(uint)),
-          this, SLOT(spikeOff(uint)));  
+  calculateChannels();
+  connect(monitor, SIGNAL(orderChanged(const QString &)),
+          this, SLOT(calculateChannels()));
+  connect(monitor, SIGNAL(beatNumberChanged(uint)),
+          this, SLOT(newBeat(uint)));
 }
 
-void APDInterleaver::spikeSet(uint chan, double d)
+void APDInterleaver::calculateChannels()
 {
-  (void)d;
+  set<unsigned int> cs;
+  set<unsigned int>::iterator it, end;
 
-  (void)channelAPDs[chan]; /* doesn't matter if it's already there.. */
+  channelAPDs.clear();
+  cs = ds->channelsWithSpikeThresholds();
+  for (it = cs.begin(), end = cs.end(); it != end; it++)  spikeSet(*it);
   reset();
+  graph->setSecondsVisible(channelAPDs.size()+1);
 }
 
-void APDInterleaver::spikeOff(uint chan)
-{ 
-  channelAPDs.erase(chan); /* doesn't matter if it isn't there..
-                               this is a set! */
-  reset();
+void APDInterleaver::spikeSet(uint chan)
+{
+  (void)channelAPDs[chan]; /* doesn't matter if it's already there.. */
 }
 
 void APDInterleaver::reset()
@@ -1142,9 +1154,13 @@ void APDInterleaver::gotAPD(MCSnapShot *m)
   APDPair & p = it->second;
   
   p.apd[p.ct % 2] = m->apd;
+  p.color[p.ct % 2] = monitor->currentColor();
   p.ct++;
-  
-  if(it->first == ((uint)monitor->orderLast()) && p.ct == 2) {
+}
+
+void APDInterleaver::newBeat(uint b)
+{
+  if (b-lastBeatGraphed > 2) {
     graphAPDs();
     reset();
   }
@@ -1152,12 +1168,6 @@ void APDInterleaver::gotAPD(MCSnapShot *m)
 
 void APDInterleaver::graphAPDs()
 {
-
-  QColor 
-    current = monitor->currentColor(), 
-    c1 = monitor->evenColor(), 
-    c2 = monitor->oddColor();
-
   /* . <-- reset graph here.. */
   graph->reset();
 
@@ -1179,13 +1189,13 @@ void APDInterleaver::graphAPDs()
     APDPair & p = it->second;
     if (p.ct >= 2) { // should actually always EQUAL 2!
       /* plot even here ..*/
-      graph->blipPen().setColor(current == c1 ? c2 : c1 );
-      graph->plotPen().setColor(current == c1 ? c2 : c1 );
+      graph->blipPen().setColor(p.color[0]);
+      graph->plotPen().setColor(p.color[0]);
       graph->plot(p.apd[0]);
                                   
       /* now plot odd here.. */
-      graph->blipPen().setColor(current);
-      graph->plotPen().setColor(current);
+      graph->blipPen().setColor(p.color[1]);
+      graph->plotPen().setColor(p.color[1]);
       graph->plot(p.apd[1]);
     }
 
@@ -1195,11 +1205,12 @@ void APDInterleaver::graphAPDs()
                    /(channelAPDs.size() + 1)
                    - 2));
   }
+  lastBeatGraphed = monitor->beatNumber();
 }
 
 APDMonitor::APDMonitor(const QColor & c1, const QColor & c2, 
                        QObject *parent, DAQSystem *_ds) 
-  : QObject(parent), beat_num(0), first(NumAPDGraphs), last(-1),
+  : QObject(parent), beat_num(0), first(0), last(0),
     color1(c1), color2(c2), colorState(c1) 
 { 
   ds = _ds;
@@ -1207,20 +1218,24 @@ APDMonitor::APDMonitor(const QColor & c1, const QColor & c2,
   if (!ds) ds = *(DAQSystem::daqSystems().begin());
   
 
-  for (uint i = 0; i < NumAPDGraphs; i++)
-    master_order[i] = i; // default ordering
+  setMasterOrder("0,1,2,3,4,5,6,7");
   
   rebuildOrder();
 
   connect(ds, SIGNAL(spikeThresholdSet(uint, double)),
-          this, SLOT(spikeSet(uint, double)));
+          this, SLOT(rebuildOrder()));
   connect(ds, SIGNAL(spikeThresholdOff(uint)),
-          this, SLOT(spikeOff(uint)));  
+          this, SLOT(rebuildOrder()));
+  connect(ds, SIGNAL(channelOpened(uint)),
+          this, SLOT(rebuildOrder()));
+  connect(ds, SIGNAL(channelClosed(uint)),
+          this, SLOT(rebuildOrder()));
 
 }
 
 vector<uint> APDMonitor::orderVector() const
 {
+  Order inverted;
   vector<uint> ret;
   Order::const_iterator it, end;
 
@@ -1231,18 +1246,48 @@ vector<uint> APDMonitor::orderVector() const
   return ret;
 }
 
+QString APDMonitor::orderString() const
+{
+  vector<uint> v = orderVector();
+  vector<uint>::const_iterator it, end;
+  QString ret = "";
+
+  for (it = v.begin(), end = v.end(); it != end; it++) {
+    ret += QString::number(*it) + ",";
+  }
+  if (ret.length())
+    ret.truncate(ret.length()-1);    
+  return ret;
+}
+
 void APDMonitor::rebuildOrder()
 {
   
-  set<unsigned int> cs;
-  set<unsigned int>::iterator it, end;
+  set<unsigned int> cs = ds->channelsWithSpikeThresholds();
+  set<unsigned int>::iterator 
+    cit = cs.begin(),
+    cend = cs.end();
 
   order.clear();
+  first = 0; last = 0;
 
-  cs = ds->channelsWithSpikeThresholds();
-  for (it = cs.begin(), end = cs.end(); it != end; it++)  
-    spikeSet(*it, 0);
-
+  Order inverted;
+  Order::const_iterator it, end;
+  
+  for (it = master_order.begin(), end = master_order.end(); it != end; it++) {
+    if ( (cit = cs.find(it->first)) != cend)
+      inverted[it->second] = it->first;
+  }
+    
+  uint i;
+  bool nofirst = true;
+  for (i = 0, it=inverted.begin(), end=inverted.end(); it != end; it++, i++) {
+    if (nofirst) { nofirst = false; first = it->second; }
+    order[it->second] = i;  
+    last = it->second;
+  }
+    
+  emit orderChanged(orderString());
 }
 
 void APDMonitor::gotAPD(MCSnapShot *m)
@@ -1268,57 +1313,41 @@ uint APDMonitor::orderOf(uint chan, bool *found) const
   return it->second;
 }
 
-void APDMonitor::spikeSet(uint ch, double d)
-{
-  (void)d;
-  Order::iterator it;
-
-  if ( (it = master_order.find(ch)) != master_order.end()) {
-    uint o = it->second;
-    uint firstOrder = orderOf(first), lastOrder = orderOf(last);
-    order[ch] = o;
-
-    if (o <= firstOrder)    first = ch;
-    if (o >= lastOrder)     last = ch;
-  }
-}
-
-void APDMonitor::spikeOff(uint ch) 
-{
-  order.erase(ch);
-
-  uint firstOrder = orderOf(first), lastOrder = orderOf(last);
-
-  Order::iterator it, end;
-  for (it = order.begin(), end = order.end(); it != end; it++) {
-    // re-scan order list to see if first/last need updating
-    if (it->second <= firstOrder) { 
-      first = it->first; 
-      firstOrder = it->second; 
-    }
-    if (it->second >= lastOrder)   {
-      last = it->first;
-      lastOrder = it->second;
-    }
-  }    
-}
-
 void APDMonitor::setMasterOrder(const QString & order)
 {
   if (!order.contains(ELECTRODE_ORDER_RE)) return;
 
   QStringList strings = QStringList::split(',', order);
 
-  Order inverted;
-
   QStringList::iterator it = strings.begin(), end = strings.end();
   uint i;
 
   master_order.clear();
-  for (i = 0; it != end; it++, i++) 
-    master_order[(*it).toUInt()] = i;
+  set<uint> chans;
+  for (i = 0; i < NumAPDGraphs; i++) // chanset for chans not in master_order
+    chans.insert(i);
   
 
+  uint chan;
+  bool ok;
+  for (i = 0; it != end; it++, i++) {
+    chan = (*it).toUInt(&ok);
+    if (chan < NumAPDGraphs 
+        && ok 
+        && master_order.find(chan) == master_order.end()) {
+      master_order[chan] = i;
+      chans.erase(chan); // remove from  chanset
+    }
+  }
+  uint l = i;
+  for(i = 0; i < NumAPDGraphs; i++) {
+    if (chans.find(i) != chans.end()) { // now give remaining channels default
+      master_order[i] = l++;
+      chans.erase(i);
+    }
+  }
+
+  emit masterOrderChanged(masterOrder());
   rebuildOrder();
 }
 
@@ -1338,8 +1367,9 @@ QString APDMonitor::masterOrder() const
   }
 
   for (uint i = 0; i < v.size(); i++) {
-    ret += v[i] + ",";
+    ret += QString::number(v[i]) + ",";
   }
-  ret.truncate(ret.length()-1);
+  if (ret.length())
+    ret.truncate(ret.length()-1);
   return ret;
 }
