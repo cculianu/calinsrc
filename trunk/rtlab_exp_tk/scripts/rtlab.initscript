@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Some defaults, these get overridden by /etc/rtlab
+RTLAB_LOCATION=/opt/rtlab
+COMEDI_DEVICE=/dev/comedi0
+COMEDI_DRIVER=comedi_test
+COMEDI_BOARD=comedi_test
+COMEDI_PARAMS=""
+RTOS=RTLinux
+LMODULES="rtlab"
+UMODULES="rtlab"
+ 
+if [ -e /etc/rtlab ]; then
+        . /etc/rtlab
+else
+    # create a dummy file for next time?
+    /bin/echo "RTLAB_LOCATION=${RTLAB_LOCATION}" > /etc/rtlab
+    /bin/echo "COMEDI_DEVICE=${COMEDI_DEVICE}" >> /etc/rtlab
+    /bin/echo "COMEDI_DRIVER=${COMEDI_DRIVER}" >> /etc/rtlab
+    /bin/echo "COMEDI_BOARD=${COMEDI_BOARD}" >> /etc/rtlab
+    /bin/echo "COMEDI_PARAMS=${COMEDI_PARAMS}" >> /etc/rtlab
+    /bin/echo "RTOS=${RTOS}" >> /etc/rtlab    
+    /bin/echo "LMODULES=${LMODULES}" >> /etc/rtlab
+    /bin/echo "UMODULES=${UMODULES}" >> /etc/rtlab
+fi
+
+
+if [ -e /proc/rtai -o "$RTOS" = "RTAI" ]; then # RTAI
+
+        URTMODULES="${COMEDI_DRIVER} rtai_pthread rtai_utils rtai_sched rtai_fifos rtai_shm rt_mem_mgr kcomedilib comedi rtai"
+        LRTMODULES="rtai comedi kcomedilib rt_mem_mgr rtai_shm rtai_fifos rtai_sched rtai_utils rtai_pthread ${COMEDI_DRIVER}"
+
+else # RTLinux
+
+        URTMODULES="${COMEDI_DRIVER} rtl_sched rtl_fifo rtl_posixio rtl_time mbuff kcomedilib comedi rtl"
+        LRTMODULES="rtl comedi kcomedilib mbuff rtl_time rtl_posixio rtl_fifo rtl_sched ${COMEDI_DRIVER}"
+
+fi
+
+ 
+COMEDI_CONFIG_CMD="/usr/sbin/comedi_config ${COMEDI_DEVICE} ${COMEDI_BOARD} ${COMEDI_PARAMS}"
+ 
+case "$1" in
+ 
+ 
+        start)
+                for module in $LRTMODULES; do
+                        /sbin/modprobe $module
+                done
+ 
+                $COMEDI_CONFIG_CMD
+
+                for module in $LMODULES; do
+                        /sbin/modprobe $module 2> /dev/null  || \
+                          /sbin/insmod "${RTLAB_LOCATION}/${module}.o"
+                done
+ 
+                touch /var/lock/subsys/rtlab
+                ;;
+ 
+ 
+        stop)
+                if [ -d /var/lock/subsys -a ! -e /var/lock/subsys/rtlab ]; then
+                    echo && \
+                    echo "  ***  Warning: RTLab may not be running..." && echo
+                fi
+
+                for module in $UMODULES; do
+                        /sbin/rmmod "$module"
+                done
+
+                for module in $URTMODULES; do
+                        /sbin/rmmod "$module"
+                done
+ 
+                rm /var/lock/subsys/rtlab
+                ;;
+ 
+        restart)
+                $0 stop
+                $0 start
+                ;;
+
+        *)
+                echo "Usage: rtlab {start|stop|restart}"
+                ;;
+
+esac
