@@ -90,7 +90,7 @@ indexHelpText =
 "This Real-Time Linux based system can be used for acquisition of analog "
 "voltage signals. The graphical user interface uses the Qt graphical library."
 "<p align=center><b>DAQ System Components</b></p>"
-"<p><a href=\"" + configWindow       + "\">Configurating DAQ System</a>"
+"<p><a href=\"" + configWindow       + "\">Configuring DAQ System</a>"
 "<p><a href=\"" + record       + "\">Recording</a>"
 "<p><a href=\"" + addChannel       +"\">Adding A Channel</a>"
 "<p><a href=\"" + pause       + "\">Pausing the Display</a>"
