@@ -36,7 +36,7 @@
 
 
 SimpleTextEditor::
-SimpleTextEditor(QWidget * p = 0, const char * n = 0) 
+SimpleTextEditor(QWidget * p, const char * n) 
   : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
   init();
@@ -44,8 +44,8 @@ SimpleTextEditor(QWidget * p = 0, const char * n = 0)
 }
 
 SimpleTextEditor::
-SimpleTextEditor (const QString & f, const QString & t = QString::null, 
-               QWidget * p = 0, const char * n = 0)
+SimpleTextEditor (const QString & f, const QString & t, QWidget * p, 
+		  const char * n)
   : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
   init();
