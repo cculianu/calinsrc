@@ -52,7 +52,7 @@ typedef comedi_t* COMEDI_T;
 # define BILLION (1000000000)
 # define MILLION (1000000)
 
-# define RT_PROCESS_MODULE_NAME "rt_process"
+# define RT_PROCESS_MODULE_NAME "rtlab"
 
 # define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
 # define INITIAL_SAMPLING_RATE_HZ 1000
@@ -71,6 +71,10 @@ typedef struct {
                                         samples array */
   SampleStruct samples[SHD_MAX_CHANNELS];
 } MultiSampleStruct;
+
+/** For a given channel id and MultiSampleStruct, gives you the voltage
+    for that channel.  If the channel is not on, returns 0. */
+extern double voltage_at(unsigned int channel_id, const MultiSampleStruct *m);
 
 typedef void (*rtfunction_t)(MultiSampleStruct *);
 
