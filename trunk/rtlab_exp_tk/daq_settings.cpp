@@ -26,6 +26,7 @@
 #include <qregexp.h>
 #include <stdlib.h>
 #include "daq_settings.h"
+#include "rtlab_defaults.h"
 
 const QString DAQSettings::defaultConfigFileName 
   = DAQ_SYSTEM_USER_DIR + "/config.ini";
@@ -46,25 +47,32 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
      Setup the master settings map for the daq_system-specific class
      this map also has default settings in case they aren't found in the 
      config file */
-  me [SECTION_NAME][ KEY_TEMPLATE_FILE_NAME ]
-    = QString(DAQ_LOG_TEMPLATES_PREFIX) + "/default.log";
-  me [SECTION_NAME][ KEY_DEVICE ] = "/dev/comedi0";
-  me [SECTION_NAME][ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
-  me [SECTION_NAME][ KEY_DEFAULT_INPUT_SOURCE ] = QString::number((int)Comedi);
-  me [SECTION_NAME][ KEY_SHOW_CONFIG_ON_STARTUP ] = QString::number((int)true);
-  me [SECTION_NAME][ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.nds";
-  me [SECTION_NAME][ KEY_DATA_FORMAT ] = QString::number((int)Binary);
+  me [GLOBAL_SECTION][ KEY_TEMPLATE_FILE_NAME ]
+    = QString(DAQ_LOG_TEMPLATES_PREFIX) + "/" + DEFAULT_LOG_FILE;
+  /** From rtlab_defaults.h */
+  me [GLOBAL_SECTION][ KEY_DEVICE ] = DEFAULT_COMEDI_DEVICE; 
+  me [GLOBAL_SECTION][ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
+  me [GLOBAL_SECTION][ KEY_DEFAULT_INPUT_SOURCE ] = QString::number((int)Comedi);
+  me [GLOBAL_SECTION][ KEY_SHOW_CONFIG_ON_STARTUP ] = QString::number((int)true);
+  me [GLOBAL_SECTION][ KEY_DATA_FILE ] = 
+    QString(DAQ_DATA_PREFIX) + DEFAULT_NDS_FILE; // from rtlab_defaults.h
+  me [GLOBAL_SECTION][ KEY_DATA_FORMAT ] = QString::number((int)Binary);
 
   /* the following is a  'special' setting.  It is basically
      a special-format list of the format: 
      [channel-id:x,y,width,height[{;}...]] */
-  me [SECTION_NAME][ KEY_CHAN_WIN_SETTINGS ] = "0:0,0,300,400;";
+  me [GLOBAL_SECTION][ KEY_CHAN_WIN_SETTINGS ] = "0:0,0,300,400;";
 
   /* channel params settings */
-  me [SECTION_NAME][ KEY_CHANNEL_PARAMS ] = "";
+  me [GLOBAL_SECTION][ KEY_CHANNEL_PARAMS ] = "";
 
   /* paper size settings */
-  me [SECTION_NAME][ KEY_PAGE_SIZE ] = QString::number(static_cast<int>(QPrinter::Letter));
+  me [GLOBAL_SECTION][ KEY_PAGE_SIZE ] 
+    = QString::number(static_cast<int>(QPrinter::Letter)),
+
+  /** Sampling Rate Settings  -- from rtlab_defaults.h */
+  me [GLOBAL_SECTION][ KEY_SAMPLING_RATE_HZ ] 
+    = QString::number((sampling_rate_t)INITIAL_SAMPLING_RATE_HZ);
 }
 
 DAQSettings::DAQSettings(const char *filename = 0)
@@ -84,42 +92,42 @@ DAQSettings::DAQSettings(const char *filename = 0)
 const QString &
 DAQSettings::getDevice() const
 {
-  return settingsMap.find(SECTION_NAME)->second.find(KEY_DEVICE)->second;
+  return settingsMap.find(GLOBAL_SECTION)->second.find(KEY_DEVICE)->second;
 }
 
 
 void
 DAQSettings::setDevice(const QString & dev)
 {
-  settingsMap[SECTION_NAME][KEY_DEVICE] = dev;
-  dirtySettings[SECTION_NAME].insert(KEY_DEVICE);
+  settingsMap[GLOBAL_SECTION][KEY_DEVICE] = dev;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_DEVICE);
 }
 
 const QString &
 DAQSettings::getTemplateFileName() const
 {
-  return settingsMap.find(SECTION_NAME)->second.find(KEY_TEMPLATE_FILE_NAME)->second;
+  return settingsMap.find(GLOBAL_SECTION)->second.find(KEY_TEMPLATE_FILE_NAME)->second;
 }
 
 void
 DAQSettings::setTemplateFileName(const QString & fileName) 
 {
-  settingsMap[SECTION_NAME][KEY_TEMPLATE_FILE_NAME] = fileName;
-  dirtySettings[SECTION_NAME].insert(KEY_TEMPLATE_FILE_NAME);
+  settingsMap[GLOBAL_SECTION][KEY_TEMPLATE_FILE_NAME] = fileName;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_TEMPLATE_FILE_NAME);
 }
 
 const QString & 
 DAQSettings::getFileSourceFileName() const
 {
-  return settingsMap.find(SECTION_NAME)->second.find(KEY_FILE_SOURCE_FILE_NAME)->second;
+  return settingsMap.find(GLOBAL_SECTION)->second.find(KEY_FILE_SOURCE_FILE_NAME)->second;
 }
 
 
 void 
 DAQSettings::setFileSourceFileName(const QString & fileName)
 {
-  settingsMap[SECTION_NAME][KEY_FILE_SOURCE_FILE_NAME] = fileName;
-  dirtySettings[SECTION_NAME].insert(KEY_FILE_SOURCE_FILE_NAME);
+  settingsMap[GLOBAL_SECTION][KEY_FILE_SOURCE_FILE_NAME] = fileName;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_FILE_SOURCE_FILE_NAME);
 }
 
 
@@ -128,7 +136,7 @@ DAQSettings::getInputSource() const
 {
   InputSource ret = Comedi;
   bool ok;
-  int val = settingsMap.find(SECTION_NAME)->second.find(KEY_DEFAULT_INPUT_SOURCE)->second.toInt(&ok);
+  int val = settingsMap.find(GLOBAL_SECTION)->second.find(KEY_DEFAULT_INPUT_SOURCE)->second.toInt(&ok);
 
   if (ok && val > invalid_source_low && val < invalid_source_high)
     ret = (InputSource)val;
@@ -139,34 +147,34 @@ DAQSettings::getInputSource() const
 void 
 DAQSettings::setInputSource(InputSource source)
 {  
-  settingsMap[SECTION_NAME][KEY_DEFAULT_INPUT_SOURCE] = QString().setNum((int)source);
-  dirtySettings[SECTION_NAME].insert(KEY_DEFAULT_INPUT_SOURCE);
+  settingsMap[GLOBAL_SECTION][KEY_DEFAULT_INPUT_SOURCE] = QString().setNum((int)source);
+  dirtySettings[GLOBAL_SECTION].insert(KEY_DEFAULT_INPUT_SOURCE);
 }
 
 bool
 DAQSettings::getShowConfigOnStartup() const
 {
-  return (settingsMap.find(SECTION_NAME)->second.find(KEY_SHOW_CONFIG_ON_STARTUP)->second.toShort() != 0);
+  return (settingsMap.find(GLOBAL_SECTION)->second.find(KEY_SHOW_CONFIG_ON_STARTUP)->second.toShort() != 0);
 }
 
 void 
 DAQSettings::setShowConfigOnStartup(bool yesorno)
 {
-  settingsMap[SECTION_NAME][KEY_SHOW_CONFIG_ON_STARTUP] = QString().setNum((short)yesorno);
-  dirtySettings[SECTION_NAME].insert(KEY_SHOW_CONFIG_ON_STARTUP);
+  settingsMap[GLOBAL_SECTION][KEY_SHOW_CONFIG_ON_STARTUP] = QString().setNum((short)yesorno);
+  dirtySettings[GLOBAL_SECTION].insert(KEY_SHOW_CONFIG_ON_STARTUP);
 }
 
 const QString &
 DAQSettings::getDataFile() const
 {
-  return settingsMap.find(SECTION_NAME)->second.find(KEY_DATA_FILE)->second;
+  return settingsMap.find(GLOBAL_SECTION)->second.find(KEY_DATA_FILE)->second;
 }
 
 void 
 DAQSettings::setDataFile(const QString & fileName)
 {
-  settingsMap[SECTION_NAME][KEY_DATA_FILE] = fileName;
-  dirtySettings[SECTION_NAME].insert(KEY_DATA_FILE);
+  settingsMap[GLOBAL_SECTION][KEY_DATA_FILE] = fileName;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_DATA_FILE);
 }
 
 DAQSettings::DataFileFormat
@@ -174,7 +182,7 @@ DAQSettings::getDataFileFormat() const
 {
   DataFileFormat ret = Binary;
   bool ok;
-  int val = settingsMap.find(SECTION_NAME)->second.find(KEY_DATA_FORMAT)->second.toInt(&ok);
+  int val = settingsMap.find(GLOBAL_SECTION)->second.find(KEY_DATA_FORMAT)->second.toInt(&ok);
 
   if (ok && val > invalid_format_low && val < invalid_format_high)
     ret = (DataFileFormat)val;
@@ -185,8 +193,8 @@ DAQSettings::getDataFileFormat() const
 void 
 DAQSettings::setDataFileFormat(DataFileFormat format)
 {  
-  settingsMap[SECTION_NAME][KEY_DATA_FORMAT] = QString::number((int)format);
-  dirtySettings[SECTION_NAME].insert(KEY_DATA_FORMAT);
+  settingsMap[GLOBAL_SECTION][KEY_DATA_FORMAT] = QString::number((int)format);
+  dirtySettings[GLOBAL_SECTION].insert(KEY_DATA_FORMAT);
 }
 
 const
@@ -365,11 +373,33 @@ void DAQSettings::currentToProfile(QString name)
   setWindowSettingProfile(p);
 }
 
+sampling_rate_t DAQSettings::samplingRateHz() const
+{
+  bool ok;
+  uint rate;
+  /* avoid const warning and/or mutable keyword on settingsMap which 
+     can be dangerous... */
+  DAQSettings * const self = const_cast<DAQSettings *>(this);
+
+  do {
+    rate = self->settingsMap[GLOBAL_SECTION][KEY_SAMPLING_RATE_HZ].toUInt(&ok);
+    if (!ok) self->setSamplingRateHz(INITIAL_SAMPLING_RATE_HZ);
+  } while (!ok);
+
+  return rate;
+}
+
+void DAQSettings::setSamplingRateHz(sampling_rate_t rate)
+{
+  settingsMap [ GLOBAL_SECTION ] [ KEY_SAMPLING_RATE_HZ ] . setNum ( rate );
+  dirtySettings[GLOBAL_SECTION].insert(KEY_SAMPLING_RATE_HZ);
+}
+
 void
 DAQSettings::parseWindowSettings()
 {
   windowSettings.clear(); /* empty it out */
-  windowSettings = parseWindowSettings(settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ]);
+  windowSettings = parseWindowSettings(settingsMap [GLOBAL_SECTION] [ KEY_CHAN_WIN_SETTINGS ]);
 }
 
 map<uint, QRect>
@@ -403,8 +433,8 @@ DAQSettings::generateWindowSettingsString()
 {
   QString out(generateWindowSettingsString(windowSettings));
 
-  settingsMap [SECTION_NAME] [ KEY_CHAN_WIN_SETTINGS ] = out;
-  dirtySettings[SECTION_NAME].insert(KEY_CHAN_WIN_SETTINGS);
+  settingsMap [GLOBAL_SECTION] [ KEY_CHAN_WIN_SETTINGS ] = out;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_CHAN_WIN_SETTINGS);
 }
 
 QString
@@ -430,7 +460,8 @@ void
 DAQSettings::parseChannelParameters()
 {
   channelParams.clear(); /* empty it out */
-  channelParams = parseChannelParameters(settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ]);
+  channelParams 
+    = parseChannelParameters(settingsMap[GLOBAL_SECTION][KEY_CHANNEL_PARAMS]);
 }
 
 map<uint, DAQChannelParams>
@@ -471,8 +502,8 @@ DAQSettings::generateChannelParametersString()
 {
   QString out(generateChannelParametersString(channelParams));
 
-  settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ] = out;
-  dirtySettings[SECTION_NAME].insert(KEY_CHANNEL_PARAMS);
+  settingsMap [GLOBAL_SECTION] [ KEY_CHANNEL_PARAMS ] = out;
+  dirtySettings[GLOBAL_SECTION].insert(KEY_CHANNEL_PARAMS);
 }
 
 QString
@@ -502,13 +533,16 @@ generateChannelParametersString(const map<uint, DAQChannelParams> & cp)
 QPrinter::PageSize 
 DAQSettings::getPageSize() const
 {
-  return static_cast<QPrinter::PageSize>(settingsMap.find(SECTION_NAME)->second.find(KEY_PAGE_SIZE)->second.toInt());
+  return static_cast<QPrinter::PageSize>(settingsMap.find(GLOBAL_SECTION)
+                                         ->second.find(KEY_PAGE_SIZE)
+                                         ->second.toInt());
 }
 
 void DAQSettings::setPageSize(QPrinter::PageSize pagesize)
 {
-  settingsMap[SECTION_NAME][KEY_PAGE_SIZE] = QString::number(static_cast<int>(pagesize));
-  dirtySettings[SECTION_NAME].insert(KEY_PAGE_SIZE);  
+  settingsMap [GLOBAL_SECTION][KEY_PAGE_SIZE] 
+    = QString::number(static_cast<int>(pagesize));
+  dirtySettings[GLOBAL_SECTION].insert(KEY_PAGE_SIZE);  
 }
 
 void DAQSettings::parseAllWindowProfiles()

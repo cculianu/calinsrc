@@ -72,7 +72,6 @@ class ComediCoprocess : public SharedMemStruct
   */
   static void *pthread_friendly_threadLoop_wrapper(void *arg);
 
-  static const int INITIAL_SAMPLING_RATE_HZ, INITIAL_CHANNEL_GAIN;
   ComediDevice device;
   comedi_t *ai_dev, *ao_dev;
   int pipe[2]; /* [0] is for reading, [1] is for writing */

@@ -141,6 +141,12 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   last_secs_vis_they_picked(0),
   last_range_they_picked(0)
 {
+
+  /* First thing's first.. set the sampling rate -- *GULP* */
+  shmCtl.setSamplingRateHz(settings.samplingRateHz());
+  // now update it back since rtlab normalizes the value to something it likes
+  settings.setSamplingRateHz(shmCtl.samplingRateHz());
+
   setIcon(QPixmap(DAQImages::daq_system_img));
 
   log = new ExperimentLog(*this, 0, "Log Window");
@@ -275,7 +281,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   for (set<uint>::iterator i = s.begin(); i != s.end();  i++) 
     if (*i < n_chans_this_device) /* ignore non-existant channels in
                                      case we just changed boards */
-      openChannelWindow(*i, 0, 10); /* modify this to read other defaults too*/
+      openChannelWindow(*i); /* Open with defaults or stuff from config file
+                                modify this to read other defaults too */
     
   /* KLUDGE -- due to implementation quirks in QWorkspace, a resynch() must
      be called on a non-hidden DAQSystem.. */
@@ -586,9 +593,12 @@ DAQSystem::queryOpen(uint & chan, uint & range,
 }
 
 void
-DAQSystem::openChannelWindow(uint chan, uint range, 
-                             uint n_secs)
+DAQSystem::openChannelWindow(uint chan, int range, int n_secs)
 {
+
+  if (range < 0) range = INITIAL_CHANNEL_GAIN;
+  if (n_secs < 1) n_secs = INITIAL_SECONDS_VISIBLE;
+
   const QString graphName = QString("Channel %1").arg(chan);
 
   QRect pos(settings.getWindowSetting(chan)); /* grab window pos from file */
@@ -635,12 +645,15 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   chanParams.label = graphName;
   chanParams.id = chan;
   chanParams.buildRangeStrings(&currentDevice().find());
+  chanParams.spikeOn = false;  // force no spikes  
 
   if ( chanParams.isNull() ) { /* means we had no config.ini settings */
     chanParams.secondsVisible = n_secs;
     chanParams.rangeSetting = range;
-    chanParams.spikeOn = false;    
   }
+   
+  if ( chanParams.rangeSetting >= currentDevice().find().ranges().size() )
+    chanParams.rangeSetting = INITIAL_CHANNEL_GAIN;
   
   graphControls->addGraph(gcont, chanParams);
 
@@ -649,12 +662,14 @@ DAQSystem::openChannelWindow(uint chan, uint range,
     gcont->move(pos.x(), pos.y());
     gcont->show();
   }
-   
+  
   resynch(); /* synchronize all the graph displays */
 
   /* ladies and gentlemen, start your samplings!! */
   shmCtl.setChannel(ComediSubDevice::AnalogInput, chan, true);
-  shmCtl.setSpikeEnabled(chan, false);
+  shmCtl.setSpikeEnabled(chan, chanParams.spikeOn);
+  shmCtl.setChannelRange(ComediSubDevice::AnalogInput, chan, 
+                         chanParams.rangeSetting);
   emit channelOpened(chan);
 
 }

@@ -268,7 +268,7 @@ class DAQSystem : public QMainWindow
   void changeAREFDialog();  /* brings up the change aref dialog box */
   void changeAREF(ComediChannel::AnalogRef); /* applies the aref change 
                                                to all channels */
-  void openChannelWindow(uint chan, uint range, uint n_secs);
+  void openChannelWindow(uint chan, int range = -1, int n_secs = -1);
   /* if graph is null, save them all */
   void saveGraphSettings(const ECGGraphContainer *graph = 0);
   /* if graph is null, remove them all */

@@ -215,7 +215,7 @@ void DAQGraphControls::setRange( int index )
   uint r = static_cast<uint>(index);
 
   /* invalid range check */
-  if ( r >= graphs[current].rangeSettings.size() ) return;
+  if ( r > graphs[current].rangeSettings.size() ) return;
 
   graphs[current].rangeSetting = r;
   double min, max;

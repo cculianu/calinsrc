@@ -604,7 +604,7 @@ void apd_control_cleanup (void)
 {
   rtp_deactivate_function(do_apd_control_stuff);
   rtp_unregister_function(do_apd_control_stuff);
-  if (shm && shm->fifo_minor >= 0)  rtf_destroy(shm->fifo_minor);
+  if (shm && shm->fifo_minor >= 0)  rtos_fifo_destroy(shm->fifo_minor);
   if (shm && shm->ao_chan >= 0)
     /* indicate that now this channel is free */
     _set_bit(shm->ao_chan, rtp_shm->ao_chans_in_use, 0);

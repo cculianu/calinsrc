@@ -51,26 +51,8 @@ typedef comedi_t* COMEDI_T;
 # include "rtos_middleman.h"
 # include "shared_stuff.h" /* for SampleStruct type */
 
-
-# define BILLION (1000000000)
-# define MILLION (1000000)
-
-# define RT_PROCESS_MODULE_NAME "rtlab"
-
-# define INITIAL_CHANNEL_GAIN 0  /*initial channel gain (COMEDI)*/
-# define INITIAL_SAMPLING_RATE_HZ 1000
-# define DEFAULT_SETTLING_TIME_ns 0
-/* initial interval for disabling
-   v_spike detect ... i.e. 10ms */
-# define INITIAL_SPIKE_BLANKING (10) 
-
-
-#define DEFAULT_COMEDI_DEVICE "/dev/comedi0"
-
-/* The number of full scans (if all channels were turned on) to
-   use in the AO and AI RT-Fifos -- defaults to 10 seconds worth 
-   of scans! */
-#define DEFAULT_FIFO_SECS 5
+/** Some global defaults */
+# include "rtlab_defaults.h"
 
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
@@ -168,8 +150,8 @@ extern COMEDI_T rtp_comedi_ai_dev_handle, rtp_comedi_ao_dev_handle;
 /* Run-time spike information exported to the outside world. */
 extern struct spike_info spike_info;
 
-/* helper rounding function */
-static inline int round (double d) { return (int)(d + (d >= 0 ? 0.5 : -0.5)); }
+/* for round(), et al */
+#include "kmath.h"
 
 /* the proc dir root for rtlab -- in case additional modules want to add
    themselves to the proc fs */

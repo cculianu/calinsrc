@@ -141,6 +141,9 @@ class DAQSettings: public Settings
                                      puts them in a named profile -- 
                                      overwrites if profile name exists... */
 
+  sampling_rate_t samplingRateHz() const;
+  void  setSamplingRateHz(sampling_rate_t);
+
  private:
 
   map<uint, QRect> windowSettings;
@@ -173,7 +176,7 @@ class DAQSettings: public Settings
   static const QString defaultConfigFileName;
 
   static const char
-    * const SECTION_NAME = "DAQ System Settings",
+    * const GLOBAL_SECTION = "DAQ System Settings",
     * const KEY_TEMPLATE_FILE_NAME = "templateFileName",
     * const KEY_DEVICE = "device",
     * const KEY_FILE_SOURCE_FILE_NAME = "fileSourceFileName",
@@ -188,7 +191,8 @@ class DAQSettings: public Settings
     /* Window Profile section... */
     * const WP_SECTION_NAME_PREFIX = "Window Setting Profile - ",
     * const KEY_WP_CHANNEL_PARAMS = KEY_CHANNEL_PARAMS,
-    * const KEY_WP_CHAN_WIN_SETTINGS = KEY_CHAN_WIN_SETTINGS;
+    * const KEY_WP_CHAN_WIN_SETTINGS = KEY_CHAN_WIN_SETTINGS,
+    * const KEY_SAMPLING_RATE_HZ     = "samplingRateHz";
 
 };
 

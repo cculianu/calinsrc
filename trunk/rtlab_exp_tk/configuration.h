@@ -59,6 +59,8 @@ class DAQSettings;
    2) Figure out a better way of making the Settings class more maintainable
    and have fewer lines of code.
 */
+class AdvancedOptionsWindow;
+
 class ConfigurationWindow : public QDialog 
 {
   Q_OBJECT  
@@ -84,9 +86,10 @@ class ConfigurationWindow : public QDialog
  public slots:
   void askUserForInputFilename();
   void askUserForTemplateFilename();
-  void toSettings(); // merges state of dialog box into the settings
-  void fromSettings(); // sets state of dialog box from the settings
-  void configHelp();   //opens up help window
+  void toSettings(); //< merges state of dialog box into the settings
+  void fromSettings(); //< sets state of dialog box from the settings
+  void configHelp();   //< opens up help window
+  void advancedDialog(); // opens up the advanced options dialog box
 
  protected slots:
   void accept();
@@ -115,6 +118,9 @@ class ConfigurationWindow : public QDialog
 
   };
 
+  /** Populates the widgets with tooltips */
+  void addToolTipsAndWhatsThis();
+
   /* validates this form and returns false if form failed */
   bool validate();
 
@@ -142,6 +148,8 @@ class ConfigurationWindow : public QDialog
   QHBox bottomButtons;
   QPushButton OK;
   QPushButton helpButton;
+  QPushButton advancedButton;
+  AdvancedOptionsWindow *adv;
 
   //HelpBrowser *helpBrowser;
 #ifdef TEST_CW

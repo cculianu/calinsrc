@@ -41,6 +41,7 @@
 static int check_basic_sanity(int count, const struct rtfifo_cmd *cmd);
 static void dispatch_command(const struct rtfifo_cmd *cmd, SharedMemStruct *);
 static int read_fifo(int fifo, void *buf, unsigned int count);
+static int write_fifo(int fifo, const void *buf, unsigned int count);
 
 void do_user_commands(SharedMemStruct *rtp_shm)
 {
@@ -171,10 +172,12 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
   case RTLAB_SET_ATTACHED_PID:
     rtp_shm->attached_pid = ( cmd->u.pid <= 0 ? 0 : cmd->u.pid );
     break;
-  case RTLAB_SET_SAMPLING_RATE:
-    rtp_shm->sampling_rate_hz = cmd->u.sampling_rate_hz;
-    /* NB: This gets re-adjusted later inside rtlab.o's rt-loop so that
-       it's a multiple of 500Hz or so */
+  case RTLAB_SET_SAMPLING_RATE:   
+    /* Actually do the command.
+       NB: This gets normalized here (and inside rtlab.o's rt-loop) so that
+       it's a multiple of 1000Hz or an even factor of 1000Hz 
+       ex: 231Hz becomes 250Hz, 1733 Hz becomes 2000Hz, etc.. */
+    rtp_shm->sampling_rate_hz = normalizeSamplingRate(cmd->u.sampling_rate_hz);
     break;
   case RTLAB_SET_SCAN_INDEX:
     ERROR("user_cmd.c: Scan Index change unimplemented!!");
@@ -185,8 +188,9 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
     ERROR("user_cmd.c: Unknown user command encountered!\n");
     break;
   }
+
   /* synchronous reply is always 1 for now... */
-  rtf_put(rtp_shm->reply_fifo, (void *)&reply, sizeof(reply));
+  write_fifo(rtp_shm->reply_fifo, (void *)&reply, sizeof(reply));
 #undef CHKCHAN
 }
 
@@ -195,9 +199,17 @@ static int read_fifo(int fifo, void *buf, unsigned int count)
 {
   return rtos_fifo_get(fifo, buf, count);
 }
+static int write_fifo(int fifo, const void *buf, unsigned int count)
+{
+  return rtos_fifo_put(fifo, (void *)buf, count);
+}
 #else
 static int read_fifo(int fifo, void *buf, unsigned int count)
 {
   return read(fifo, buf, count);
+}
+static int write_fifo(int fifo, const void *buf, unsigned int count)
+{
+  return write(fifo, (void *)buf, count);
 }
 #endif

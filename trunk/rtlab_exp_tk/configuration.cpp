@@ -27,6 +27,8 @@
 #include <qfiledialog.h>
 #include <qsize.h>
 #include <qgroupbox.h>
+#include <qvgroupbox.h>
+#include <qhgroupbox.h>
 #include <qhbox.h>
 #include <qbuttongroup.h>
 #include <qcheckbox.h>
@@ -34,6 +36,9 @@
 #include <qtable.h>
 #include <qheader.h>
 #include <qmessagebox.h> 
+#include <qspinbox.h>
+#include <qtooltip.h>
+#include <qwhatsthis.h>
 #include <iostream>
 #include <vector>
 #include <comedi.h>
@@ -74,11 +79,64 @@ main(int argc, char *argv[], char *envp[])
 
 #endif
 
+class AdvancedOptionsWindow : public QDialog
+{ 
+    typedef class ConfigurationWindow PARENTCLASS;
+    friend PARENTCLASS;
+    AdvancedOptionsWindow (PARENTCLASS *parent);
+     
+    QSpinBox *samplingRateSpinner;    
+
+    void addToolTipsAndWhatsThis();
+
+};
+
+AdvancedOptionsWindow::AdvancedOptionsWindow(PARENTCLASS *parent)
+  : QDialog(parent, "Advanced Options Window", true)
+{
+  hide();
+  setCaption("Advanced Options");
+  QGridLayout *lo = new QGridLayout(this, 2, 1);
+  QVGroupBox *gbox = 
+    new QVGroupBox(caption(), this, "Advanced Options QVGroupBox");
+  lo->addWidget(gbox, 0, 0);
+
+  QHBox * tmphbox = new QHBox(gbox, "Adv. Opts HBox 0");
+
+  (void)new QLabel("Sampling rate (Hz): ", tmphbox);
+  
+  samplingRateSpinner 
+    = new QSpinBox(MIN_SAMPLING_RATE_HZ, MAX_SAMPLING_RATE_HZ, 1, tmphbox,
+                   "Advanced Options Window Sampling Rate Spinbox");
+
+  tmphbox = new QHBox(this, "Adv. Opts ButtonBox");
+  lo->addWidget(tmphbox, 1, 0);
+  
+  QPushButton *ok, *cancel;
+
+  ok = new QPushButton("Ok", tmphbox);
+  cancel = new QPushButton("Cancel", tmphbox);
+  ok->setMaximumSize(ok->sizeHint());
+  cancel->setMaximumSize(cancel->sizeHint());
+
+  connect(ok, SIGNAL(clicked(void)), this, SLOT(accept(void)));
+  connect(cancel, SIGNAL(clicked(void)), this, SLOT(reject(void)));
+
+  addToolTipsAndWhatsThis();
+}
+
+
+void AdvancedOptionsWindow::addToolTipsAndWhatsThis() 
+{
+  // TODO Add more tooltips/whatsthis here
+}
+
 ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
-					  DAQSettings &settings,
-					  QWidget *parent = 0, 
-					  const char *name = 0, 
-					  WFlags f = 0) : 
+                                          DAQSettings &settings,
+                                          QWidget *parent = 0, 
+                                          const char *name = 0, 
+                                          WFlags f = 0) 
+  : 
   QDialog(parent, name, f), 
 
   startupScreenSemantics(false),
@@ -105,9 +163,11 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   showDialogOnStartupChk(this),
   bottomButtons(this),
   OK("Ok", &bottomButtons),
-  helpButton("Help", &bottomButtons)
-
+  helpButton("Help", &bottomButtons),
+  advancedButton("Advanced...", &bottomButtons),
+  adv(new AdvancedOptionsWindow(this))
 {
+   
   setIcon(QPixmap(DAQImages::configuration_img));
   setSizeGripEnabled(true);
   setMinimumSize(QSize(150,100));
@@ -153,7 +213,7 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   templateFile.setReadOnly(true);
   templateSelectionGrid.addWidget(&browseLogTemplates, 0, 1);
   connect(&browseLogTemplates, SIGNAL(clicked(void)),
-	  this, SLOT(askUserForTemplateFilename(void)));
+          this, SLOT(askUserForTemplateFilename(void)));
 
   templateSelectionGrid.addMultiCellWidget(&logPreviewerLabel, 1, 1, 0, 1);
   templateSelectionGrid.addMultiCellWidget(&logPreviewer, 2, 2, 0, 1); 
@@ -162,17 +222,31 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   masterGrid.addWidget(&bottomButtons, 4, 0);
   //masterGrid.addWidget(&OK, 4, 0);
   showDialogOnStartupChk.setText("Always show this configuration window on "
-				 "application startup");
+                                 "application startup");
   OK.setAutoDefault(true);
   OK.setMaximumSize(OK.sizeHint());
   connect(&OK, SIGNAL(clicked(void)),
-	  this, SLOT(accept(void)));
+          this, SLOT(accept(void)));
   
   helpButton.setMaximumSize( helpButton.sizeHint() );
   connect(&helpButton, SIGNAL(clicked(void)),
-	  this, SLOT(configHelp(void)));
+          this, SLOT(configHelp(void)));
+
+  advancedButton.setMaximumSize( advancedButton.sizeHint() );
+  connect(&advancedButton, SIGNAL(clicked(void)),
+          this, SLOT(advancedDialog(void)));
 
   fromSettings();
+
+  addToolTipsAndWhatsThis();
+}
+
+void ConfigurationWindow::addToolTipsAndWhatsThis()
+{
+  QToolTip::add(&advancedButton,"Open advanced options (sampling rate, etc.)");
+  QWhatsThis::add(&advancedButton, 
+                  "Opens the advanced options window.  "
+                  "Not recommended for beginners!");
 }
 
 void
@@ -210,6 +284,8 @@ ConfigurationWindow::fromSettings()
   }
   
   showDialogOnStartupChk.setChecked(settings.getShowConfigOnStartup());
+
+  adv->samplingRateSpinner->setValue(settings.samplingRateHz());
 
 }
 
@@ -263,7 +339,7 @@ ConfigurationWindow::toSettings()
   settings.setDevice(deviceTable.selectedDevice().filename);
   settings.setTemplateFileName(templateFile.text());
   settings.setFileSourceFileName(inputFile.text());
-
+  
   { 
     DAQSettings::InputSource is = DAQSettings::File;
     if (deviceRadio.isChecked()) {
@@ -279,6 +355,8 @@ ConfigurationWindow::toSettings()
   outputFileGroupContainer.toSettings();
 
   settings.setShowConfigOnStartup(showDialogOnStartupChk.isChecked()); 
+
+  settings.setSamplingRateHz(adv->samplingRateSpinner->value());
 }
 
 void
@@ -295,6 +373,15 @@ ConfigurationWindow::configHelp()
 {
   DAQHelpBrowser::getDefaultBrowser()->
     openPage( DAQMimeSources::HTML::configWindow );
+}
+
+void
+ConfigurationWindow::advancedDialog()
+{
+  sampling_rate_t saved_rate = settings.samplingRateHz();
+
+  if (adv->exec() != QDialog::Accepted)
+    adv->samplingRateSpinner->setValue(saved_rate);
 }
 
 bool

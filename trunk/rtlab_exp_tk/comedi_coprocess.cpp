@@ -43,9 +43,6 @@
 
 static inline void microsleep(long time_us);
 
-const int ComediCoprocess::INITIAL_SAMPLING_RATE_HZ = 1000,
-          ComediCoprocess::INITIAL_CHANNEL_GAIN = 0;
-
 ComediCoprocess::ComediCoprocess() { init(Probe::probeDevices()[0]); }
 ComediCoprocess::ComediCoprocess(const ComediDevice & d) { init(d); }
 
