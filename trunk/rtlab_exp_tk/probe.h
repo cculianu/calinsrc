@@ -57,13 +57,17 @@ class Probe
      found */
   const ComediDevice & find(const QString & dev) const;
 
+  /* Static convenience method that creates an instance of Probe then probes, 
+     and returns the probed_devices member */
+  static vector<ComediDevice> probeDevices();  
+
  private:  
   void do_probe(const QString & filename); /* throws NoComediDeviceException
-					      if filename is not a comedi dev, 
-					      or no driver for filename */
+                                              if filename is not a comedi dev, 
+                                              or no driver for filename */
   void validate() const; /* throws NoComediDeviceException
-			    if this object is in a state that indicates comedi 
-			    devices are  busy/unusable/nonexistant */
+                            if this object is in a state that indicates comedi 
+                            devices are  busy/unusable/nonexistant */
 
 
   void attach_to_shm_and_stuff(); /* called from init. */

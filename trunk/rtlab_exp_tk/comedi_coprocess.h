@@ -51,6 +51,7 @@
 class ComediCoprocess : public SharedMemStruct
 {
  public:
+  ComediCoprocess (); /* implicitly probes! Calls Probe::probeDevices() */
   ComediCoprocess (const ComediDevice & d);
   ~ComediCoprocess();
   void start();
@@ -58,6 +59,7 @@ class ComediCoprocess : public SharedMemStruct
   int fifoFd() { return ai_fifo_minor; /* ai_fifo_minor == pipe[0] */ }
 
  private:
+  void init (const ComediDevice & d);
   void threadLoop(); /*  do *not* call this from the main thread, EVER, as
                          it contains essentially a periodic, non-terminating
                          while(1) ! */

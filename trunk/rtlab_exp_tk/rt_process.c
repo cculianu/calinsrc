@@ -729,7 +729,6 @@ static void cleanup_fifos (void)
 static void cleanup_comedi_stuff (void) 
 {
   if (((int)rtp_comedi_ai_dev_handle) != -1 && ai_subdev >= 0) {
-    printk( __FILE__":%d\n", __LINE__);
     /*  cancel any pending ai operation */
     comedi_cancel(rtp_comedi_ai_dev_handle, ai_subdev);
 
@@ -738,7 +737,6 @@ static void cleanup_comedi_stuff (void)
   }
 
   if (((int)rtp_comedi_ao_dev_handle) != -1 && ao_subdev >= 0) {
-    printk( __FILE__":%d\n", __LINE__);
     /*  cancel any pending ai operation */
     comedi_cancel(rtp_comedi_ao_dev_handle, ao_subdev);
 
@@ -748,13 +746,11 @@ static void cleanup_comedi_stuff (void)
 
     /* close the analog input minor device */
   if (((int)rtp_comedi_ai_dev_handle) != -1) {
-    printk( __FILE__":%d\n", __LINE__);
 
     comedi_close(rtp_comedi_ai_dev_handle);
   }  
     /* close the analog output minor device (if not already closed) */
   if (((int)rtp_comedi_ao_dev_handle) != ((int)rtp_comedi_ai_dev_handle) ) {
-    printk( __FILE__":%d\n", __LINE__);
     comedi_close(rtp_comedi_ao_dev_handle);
   }
 }
