@@ -20,14 +20,28 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#ifndef _SAMPLE_CONSUMER_H
-# define _SAMPLE_CONSUMER_H
 
-#include "common.h"
-#include "producer_consumer.h"
+#ifndef __PLUGIN_H
+#define __PLUGIN_H
 
-struct SampleStruct;
+#include <qobject.h>
 
-typedef Consumer<const SampleStruct *> SampleConsumer;
+class DAQSystem;
+
+/* The plugin interface is minimalist. Just so that we can say that all
+   plugins can/should be deleted by daq_system. */
+class Plugin
+{
+public:
+  virtual ~Plugin() {};
+  virtual const char *name() const = 0; /* returns the plugin's name */
+  virtual const char *description() const = 0; /* returns the description */
+
+private:
+  DAQSystem *daqSystem;
+};
+
+/* all entry functions throw an Exception if they cannot be started */
+typedef Plugin * (*plugin_entry_fn_t)(DAQSystem *);
 
 #endif

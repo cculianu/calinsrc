@@ -33,28 +33,40 @@
 #include <qspinbox.h>
 #include <qbuttongroup.h>
 #include <qradiobutton.h>
+#include <qstatusbar.h>
+#include "common.h"
 #include "ecggraph.h"
+#include "sample_consumer.h"
+#include "shared_stuff.h"
 
-
-class ECGGraphContainer : public QFrame {
+class ECGGraphContainer : public QFrame, public SampleConsumer {
   Q_OBJECT
+
 public:
 
   /** Pass in a graph to become the container of.  Graph gets reparented
       to be a child of this class! */
   ECGGraphContainer(ECGGraph *graph, 
-		    QWidget *parent = 0, 
-		    const char *name = 0, 
-		    WFlags flags = 0);
+                    uint channelId,
+                    QWidget *parent = 0, 
+                    const char *name = 0, 
+                    WFlags flags = 0,
+                    scan_index_t scanIndexStatusIncrement = 1000,
+                    uint seconds_visible_step = 5);
   
   virtual ~ECGGraphContainer();
 
   ECGGraph *graph;
+  uint channelId;
 
   enum RangeUnit { /* units used in addRangeSetting */
     Volts,
     MilliVolts
   };
+
+  /* as per the SampleConsumer 'interface' */
+  void consume(const SampleStruct *);
+
   /** this populates the combobox with a string of the right
       format and the correct units */
   int addRangeSetting(double min, double max, RangeUnit unit);
@@ -76,10 +88,25 @@ public:
       Ex. usage: QString volts = ECGGraphContainer::unitStrings[Volts]; */
   static const QString unitStrings[];
 
-  typedef ECGGraph::SpikePolarity SpikePolarity; // Qt signal/slot workaround
-
+  uint secondsVisibleStepping() const { return seconds_visible_step; }
+  void setSecondsVisibleStepping(uint s) { 
+    if (s) {
+      seconds_visible_step = s;
+      setSecondsVisible(static_cast<uint>(secondsVisibleBox->value()));
+    }
+  }
+  
  signals:
-  void rangeChanged( int newIndex );
+  /* Emitted whenever the range changes on the graph this container 
+     contains.  Range is the index of the range in this container's 
+     private combo box.  Channelid comed fros the ECGGraph */
+  void rangeChanged( uint channelId, int newIndex );
+  void spikePolarityChanged(SpikePolarity);
+  void spikeBlankingChanged(uint);
+
+  /* So that we can tell inquiring minds that want to know we are gone */
+  void closing(ECGGraphContainer *self);
+  void closing(const ECGGraphContainer *self);
 
 public slots:
   /** Custom slot...
@@ -96,25 +123,54 @@ public slots:
       signal in the ECGGraph instance bound to this object instance */
   void updateYAxisLabels(double rangeMin, double rangeMax);
 
-  void spikePolaritySet(SpikePolarity p)
+  void setSpikePolarity(SpikePolarity p)
     {spikePolarityButtons->setButton(p);};
+
+  void setSpikeBlanking(int b)
+    {spikeBlanking->setValue(b);}
+
+  void setSecondsVisible(int);
+
+  /** needed to update labels */
+  void spikeDetected(const SampleStruct *);
+
+ /* so that the status bar can let the user know what scan index
+    this channel is up to */
+  void setCurrentIndexStatus(scan_index_t index);
+
+  /* Slot for updating the 'Mouse pos' status bar line.
+     The 'index' we get here (from the ECGGraph class) is inaccurate
+     as dropped samples can lead to de-synchronization between
+     the graph and the actual sample's scan index.
+     In addition we may also have ab O.B.1 (Obi-Wan) error here -- I didn't 
+     check since I will re-write this mechanism soon.  --Calin */
+  void setMouseVectorStatus(double voltage, scan_index_t index);
+
+  void setSpikeThresholdStatus(double voltage);
+  void unsetSpikeThresholdStatus();
 
  protected:
 
-  QGridLayout *layout;
+  virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
- protected slots:
+ private slots:
   void mouseUpInGraph();
   void mouseDownInGraph();
 
+  void emitSpikeBlanking(int i) { emit spikeBlankingChanged(static_cast<uint>(i)); }
+  void emitSpikePolarity(int i) 
+    { emit spikePolarityChanged(static_cast<SpikePolarity>(i)); }
+
  private:
   
+  QGridLayout *layout;
+
   /* parses 'string' for range settings and puts the results
      inside rangeMin, rangeMax, and units */
   bool parseRangeString(const QString &string, 
-			double & rangeMin, 
-			double & rangeMax, 
-			RangeUnit & units);
+                        double & rangeMin, 
+                        double & rangeMax, 
+                        RangeUnit & units);
  
 
   QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel;
@@ -125,10 +181,21 @@ public slots:
 
   QComboBox *rangeComboBox;  // holds range labels
   QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
+  uint seconds_visible_step; /* defaults to 5 */
   QLabel *spikePolarityLabel;
   QButtonGroup *spikePolarityButtons;
   QRadioButton *polarityPlusButton, *polarityMinusButton;
   QSpinBox *spikeBlanking;
+
+  /* status bar related stuff */
+ QStatusBar *statusBar;
+ QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
+         *spikeFrequency;
+
+  const scan_index_t scan_index_threshold; // internal
+  scan_index_t last_scan_index, 
+               last_spike_index; /* for computing instantaneous hz */
+
 };
 
 #endif

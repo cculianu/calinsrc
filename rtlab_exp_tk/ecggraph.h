@@ -48,15 +48,15 @@ class ECGGraph : public QWidget {
  public: 
   
   ECGGraph (int sampleRateHz = 1000, /* the sample rate of the graoh */
-	    int secsVisible = 10,    /* number of seconds to fit on the graph 
-					 before plotting wraps around to 
-					 the beginning */
-	    double rangeMin = -1.5,  /* the amplitude of the bottom of graph */
-	    double rangeMax = 1.5,   /* the amplitude of the topmost point */
-	    QWidget *parent = 0,     /* inherited constructor from QWidget */
-	    const char *name = 0,    /* " */
-	    WFlags f = 0);           /* " */
-
+            int secsVisible = 10,    /* number of seconds to fit on the graph 
+                                        before plotting wraps around to 
+                                        the beginning */
+            double rangeMin = -1.5,  /* the amplitude of the bottom of graph */
+            double rangeMax = 1.5,   /* the amplitude of the topmost point */
+            QWidget *parent = 0,     /* inherited constructor from QWidget */
+            const char *name = 0,    /* " */
+            WFlags f = 0);           /* " */
+  
   virtual ~ECGGraph();
 
   /*
@@ -92,18 +92,15 @@ class ECGGraph : public QWidget {
   /** The x-axis property: namely number of seconds visible */
   virtual int secondsVisible() const;
 
+  /** The sampling rate this graph thinks we are at */
+  virtual int sampleRateHz() const { return _sampleRateHz; };
+
   /** True if we have spike detection turned on */
   virtual bool spikeMode() const;
 
   /** Returns our spike threshhold.  If spikeMode() is false, this has 
       undefined behavior. */
-  virtual double spikeThreshHold() const;
-
-  enum SpikePolarity { Positive = 0, Negative };
-
-  virtual SpikePolarity spikePolarity() const;
-
-  virtual int spikeBlanking() const;
+  virtual double spikeThreshold() const;
 
   /*
     Method methods
@@ -126,11 +123,6 @@ signals:
 
   void rangeChanged(double newRangeMin, double newRangeMax);
 
-  void spikeDetected(uint64 spikeSampleIndex, 
-		     double spikeAmplitude);
-
-  void spikeDetected(ECGPoint p);
-
   /** used to indicate that the mouse is currently at
       a certain Y value (amplitude).  Useful for
       implementing the spike detection control.
@@ -149,30 +141,25 @@ signals:
   void rightReleased(); void leftReleased(); void eitherReleased();
 
   void secondsVisibleChanged(int seconds);
-  void spikeThreshHoldSet(double amplitude);
-  void spikeThreshHoldUnset(void);
-  void spikePolaritySet(SpikePolarity p);
-  void spikeBlankingSet(int sb);
+  void spikeThresholdSet(double amplitude);
+  void spikeThresholdUnset(void);
 
  public slots:
  
   virtual void setRange(double newRangeMin, double newRangeMax);
 
   /* sets the spike threshhold to value 'amplitude'. */
-  virtual void setSpikeThreshHold (double amplitude);
+  virtual void setSpikeThreshold (double amplitude);
 
   /* clears the spike threshhold */
-  virtual void unsetSpikeThreshHold ();
+  virtual void unsetSpikeThreshold ();
 
   /* redraws the graph and resizes its internal data structures to fit
      a new number of seconds setting */
   virtual void setSecondsVisible(int seconds);
   
-  virtual void setSpikePolarity(SpikePolarity p);
-  virtual void setSpikePolarity(int p) 
-    { setSpikePolarity( (p == Positive) ? Positive : Negative); }
-
-  virtual void setSpikeBlanking(int sb);
+  /* resets this graph to start plotting at the leftmost position */
+  virtual void reset(); 
 
  protected:
 
@@ -195,7 +182,7 @@ signals:
 
   int     numSamples,          // the number of samples this graph supports
           currentSampleIndex,
-          sampleRateHz,
+          _sampleRateHz,
           secsVisible;
 
 
@@ -204,11 +191,11 @@ signals:
            *samples;             // array of size numSamples 
 
   long long  _totalSampleCount; /* tells us how many samples 
-					    we have plotted in total */
+                                   we have plotted in total */
 
   QPointArray *points;          /* a cache of all the points written 
                                    (size is numSamples) */  
-  QPixmap  _buffer, _background, _threshHoldLine;
+  QPixmap  _buffer, _background, _thresholdLine;
 
   QPainter devicePainter;
 
@@ -223,17 +210,12 @@ signals:
 
   QPoint spikeTHoldPoints[2], lastBlip;
 
-  ECGPoint lastSpike;
-  int _spikeBlanking;
-
-  SpikePolarity _spikePolarity;
-
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
   virtual void plotLines (int firstIndex, 
-			  int lastIndex, 
-			  QPaintDevice *device);
+                          int lastIndex, 
+                          QPaintDevice *device);
 
   virtual void deletePlotsBetween (int firstIndex, int secondIndex);
 
@@ -269,8 +251,6 @@ signals:
   /** draws that little blip artifact at the current position */
   virtual void drawLittleBlip ();
 
- private:
-  void detectSpike(double amplitude);
 };
 
 

@@ -87,8 +87,10 @@ main(int argc, char *argv[])
     goto try_again;
   } catch (const Exception & e) {
     e.showError();
-    settings->setShowConfigOnStartup(true); // force this for next time 
-    settings->saveSettings();
+    if (settings) {
+      settings->setShowConfigOnStartup(true); // force this for next time 
+      settings->saveSettings();
+    }
     retval = 1;
   }
   uninit();

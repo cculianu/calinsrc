@@ -1,3 +1,25 @@
+/*
+ * This file is part of the RT-Linux Multichannel Data Acquisition System
+ *
+ * Copyright (C) 1999,2000 David Christini
+ * Copyright (C) 2001 David Christini, Lyuba Golub, Calin Culianu
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program (see COPYRIGHT file); if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA, or go to their website at
+ * http://www.gnu.org.
+ */
 #include <qframe.h>
 #include <qlayout.h>
 #include <qvbox.h>
@@ -12,21 +34,41 @@
 
 #include "ecggraphcontainer.h"
 
+
+/* ugly non-class-specific static constants but this saves needing to 
+   duplicate this work in the .h file */
+static const QString 
+  MOUSE_POS_FORMAT("Mouse pos: %1 V at scan %2"),
+  CURRENT_INDEX_FORMAT("Scan Index: %1"),
+  SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
+  LAST_SPIKE_FORMAT("Last Spike %1 V at %2"),
+  SPIKE_FREQUENCY_FORMAT ("Spike Frequency: %1 BPM (%2 hz)");
+
 /* used for string parsing and building in the combo box
    see also enum RangeUnit */
 const QString ECGGraphContainer::unitStrings[3] =  { "V", "mV" };
 
   /** Pass in a graph to become the container of.  Graph gets reparented
       to be a child of this class! */
-ECGGraphContainer::ECGGraphContainer(ECGGraph *graph, 			     
-				     QWidget *parent = 0, 
-				     const char *name = 0, 
-				     WFlags flags = 0) 
+ECGGraphContainer::ECGGraphContainer(ECGGraph *graph, 	
+                                     uint channelId,
+                                     QWidget *parent, 
+                                     const char *name, 
+                                     WFlags flags,
+                                     scan_index_t scanIndexStatusIncrement, 
+                                     uint seconds_visible_step) 
   : 
-    QFrame (parent, name, flags), 
-    graph(graph)
+    QFrame (parent, name, flags | WDestructiveClose), 
+    graph(graph),
+    channelId(channelId),
+    seconds_visible_step(seconds_visible_step),
+    scan_index_threshold(scanIndexStatusIncrement), 
+    last_scan_index((scan_index_t)-scan_index_threshold),
+    last_spike_index(0)
     
 {  
+  if (seconds_visible_step == 0) seconds_visible_step = 1;
+
   static const QString yAxisLabelFormat( "%1 V" );
   QHBox *tmpBox;
   
@@ -56,7 +98,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 
   QLabel *tmpLabel = new QLabel ("Change Scale: ", tmpBox);  
   rangeComboBox = new QComboBox(tmpBox, 
-				QString("%1 Scale Box").arg(graph->name()));
+                                QString("%1 Scale Box").arg(graph->name()));
   QToolTip::add(rangeComboBox, "Use this to change graph scale (Y Axis Range).");
   QToolTip::add(tmpLabel, "Use this to change graph scale (Y Axis Range).");
 
@@ -68,9 +110,6 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
           this, 
           SLOT (rangeChange(const QString &))); 
 
-  // add the current range setting (from the graph) to the combo box
-  addRangeSetting(graph->rangeMin(), graph->rangeMax(), Volts);
-
   // the number of seconds visible spin box up top
   tmpBox = new QHBox(controlsBox);
   tmpBox->setFrameStyle(StyledPanel | Raised);
@@ -80,14 +119,14 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   tmpLabel = 
     new QLabel("Secs. Visible", tmpBox); 
   /* we can do the above because of qt's 'quasi-garbage collection'  */
-  secondsVisibleBox = new QSpinBox(0, 100, 1, tmpBox);
+  secondsVisibleBox = new QSpinBox(0, 100, seconds_visible_step, tmpBox);
   secondsVisibleBox->setValue(graph->secondsVisible());
   QToolTip::add(tmpLabel, "Use this to change the number of seconds visible "
 		          "in your graph (X Axis Scale).");
   QToolTip::add(secondsVisibleBox, "Use this to change the number of seconds "
 		                   "visible in your graph (X Axis Scale).");
   connect(secondsVisibleBox, SIGNAL(valueChanged ( int )),
-	  graph, SLOT(setSecondsVisible(int)));
+          this, SLOT(setSecondsVisible(int)));
   
 
   // the spike polarity box
@@ -102,38 +141,36 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   spikePolarityButtons->hide();
   polarityPlusButton = new QRadioButton("Positive", tmpBox);
   polarityMinusButton = new QRadioButton("Negative", tmpBox);
-  spikePolarityButtons->insert(polarityPlusButton, ECGGraph::Positive);
-  spikePolarityButtons->insert(polarityMinusButton, ECGGraph::Negative);
+  spikePolarityButtons->insert(polarityPlusButton, Positive);
+  spikePolarityButtons->insert(polarityMinusButton, Negative);
 
   QToolTip::add(spikePolarityLabel, 
-		"Set the spike polarity by selecting either positive or "
-		"negative spike polarity.");
+                "Set the spike polarity by selecting either positive or "
+                "negative spike polarity.");
   QToolTip::add(polarityPlusButton,
-		"A positive spike polarity means that a spike is detected if "
-		"the amplitude is greater than or equal to the spike "
-		"threshhold.");
+                "A positive spike polarity means that a spike is detected if "
+                "the amplitude is greater than or equal to the spike "
+                "threshold.");
   QToolTip::add(polarityMinusButton,
-		"A negative spike polarity means that a spike is detected if "
-		"the amplitude is less than or equal to the spike "
-		"threshhold.");
-  spikePolarityButtons->setButton(graph->spikePolarity());
+                "A negative spike polarity means that a spike is detected if "
+                "the amplitude is less than or equal to the spike "
+                "threshold.");
   connect(spikePolarityButtons, SIGNAL(clicked(int)), 
-	  graph, SLOT(setSpikePolarity(int)));
+          this, SLOT(emitSpikePolarity(int)));
   
   QString tmpStr("Set the spike blanking, which is defined as the number of\n"
-		 "samples to wait before detecting a new spike.  If this is\n"
-		 "set too low and you are constantly getting spikes, you may\n"
-		 "not be able to keep track of them as they will come in too\n"
-		 "fast.  If this is set too high you may lose some spikes\n"
-		 "you would have otherwise been interested in.");
+                 "milliseconds to wait before detecting a new spike.  If\n"
+                 "this is set too low and you are constantly getting spikes,\n"
+                 "you may not be able to keep track of them as they will\n"
+                 "come in too fast.  If this is set too high you may lose\n"
+                 "some spikes you would have otherwise been interested in.");
 
-  tmpLabel = new QLabel("   Spike Blanking: ", tmpBox);
-  spikeBlanking = new QSpinBox(0, 100000, 1, tmpBox);
+  tmpLabel = new QLabel("  Spike Blanking (ms):", tmpBox);
+  spikeBlanking = new QSpinBox(10, 1000000, 10, tmpBox);
   QToolTip::add(tmpLabel, tmpStr);
   QToolTip::add(spikeBlanking, tmpStr);
-  spikeBlanking->setValue(graph->spikeBlanking());
   connect(spikeBlanking, SIGNAL(valueChanged(int)), 
-	  graph, SLOT (setSpikeBlanking(int))); 
+          this, SLOT (emitSpikeBlanking(int))); 
   
   /* y axis labels -- these get auto-updated whenever the graph emits signal 
      rangeChanged */
@@ -165,16 +202,8 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   connect (graph,
            SIGNAL(eitherClicked(void)),
            graph,
-           SLOT(unsetSpikeThreshHold(void)));
+           SLOT(unsetSpikeThreshold(void)));
 
-  connect (graph,
-           SIGNAL(spikeBlankingSet(int)),
-           spikeBlanking,
-           SLOT(setValue(int)));
-  connect (graph,
-           SIGNAL(spikePolaritySet(SpikePolarity)),
-           this,
-           SLOT(spikePolaritySet(SpikePolarity)));
   connect (graph,
            SIGNAL(secondsVisibleChanged(int)),
            secondsVisibleBox,
@@ -193,6 +222,49 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   layout->setColStretch(1,1); // make the graph the only stretchable thing
   layout->setRowStretch(1,1);
 
+  if (name)  this->setCaption(name);
+
+  { /* status bar related stuff */
+    // for the status bar..
+    statusBar = new QStatusBar( this );
+    statusBar->setSizeGripEnabled( false );
+
+    /* this _tries_ to add the status bar to the bottom... 
+       not elegant design but what he hey?? */
+    layout->addMultiCellWidget( statusBar, 
+                                layout->numRows(), layout->numRows(),
+                                0, layout->numCols()-1 );
+    
+  /* populate that status bar with them gosh-darned labels and signal/slot
+     connections */
+    
+    currentIndex = new QLabel(CURRENT_INDEX_FORMAT.arg("-"), statusBar);
+    mouseOverVector = new QLabel(MOUSE_POS_FORMAT.arg("-").arg("-"),statusBar);
+    spikeThreshold = new QLabel(statusBar);       
+    lastSpike = new QLabel(LAST_SPIKE_FORMAT.arg("-").arg("-"), statusBar);
+    spikeFrequency = new QLabel(SPIKE_FREQUENCY_FORMAT.arg("-"). arg("-"), 
+                                statusBar);
+  
+    if ( graph->spikeMode() ) {
+      setSpikeThresholdStatus(graph->spikeThreshold());
+    } else {
+      unsetSpikeThresholdStatus();
+    }
+    
+    statusBar->addWidget(currentIndex);
+    statusBar->addWidget(mouseOverVector);
+    statusBar->addWidget(spikeThreshold);
+    statusBar->addWidget(lastSpike);
+    statusBar->addWidget(spikeFrequency);
+    
+    connect(graph, SIGNAL(mouseOverVector(double, uint64)),
+            this, SLOT(setMouseVectorStatus(double, scan_index_t)));
+    connect(graph, SIGNAL(spikeThresholdSet(double)),
+            this, SLOT(setSpikeThresholdStatus(double)));      
+    connect(graph, SIGNAL(spikeThresholdUnset()),
+            this, SLOT(unsetSpikeThresholdStatus()));
+  }
+
 }
   
 ECGGraphContainer::~ECGGraphContainer() {
@@ -203,6 +275,13 @@ ECGGraphContainer::~ECGGraphContainer() {
   }    
 }
 
+void
+ECGGraphContainer::
+consume(const SampleStruct *sample)
+{
+  graph->plot(sample->data, sample->scan_index);
+  setCurrentIndexStatus(sample->scan_index);
+}
 
 /** RangeChange slot to be used in conjunction
     with a combobox.  The rangeString should be of the form
@@ -216,8 +295,8 @@ ECGGraphContainer::rangeChange( const QString &rangeString ) {
   if ( parseRangeString(rangeString, newRangeMin, newRangeMax, unit) ) {
     if ( unit == MilliVolts ) {
       /* for notifying anyone interested in range changes on the 
-	 container-level */
-      emit rangeChanged ( findRangeSetting(newRangeMin, newRangeMax, unit) );
+         container-level */
+      emit rangeChanged(channelId, findRangeSetting(newRangeMin, newRangeMax, unit));
 
       newRangeMin /= 1000.0; /* convert the millivolts range settings into 
 			      Volts, which is done so that we can always rely
@@ -314,13 +393,88 @@ ECGGraphContainer::updateYAxisLabels(double rangeMin, double rangeMax) {
 
 }
 
+inline int roundit(int n, uint step)
+{ return n + ( step - n % step < n % step ? (step - n % step) : -(n % step)); }
+
+void
+ECGGraphContainer::setSecondsVisible(int secs)
+{
+  if (!secs) 
+    secondsVisibleBox->setValue(graph->secondsVisible()); // recurse back
+  else if (secs % seconds_visible_step)  // round it to step, recurse back
+    secondsVisibleBox->setValue(roundit(secs, seconds_visible_step));
+  else // propagate it down to the graph since it's a multiple of step
+    graph->setSecondsVisible(secs);
+}
+
+void
+ECGGraphContainer::
+spikeDetected(const SampleStruct *s)
+{
+  if (s->channel_id == channelId) {
+    /* compute instantaneous spike freq. */
+    float freq = ( graph->sampleRateHz()                    
+                   ? ( (s->scan_index - last_spike_index) 
+                       / ((float)graph->sampleRateHz()) ) * 1000.0
+                   : 0.0 ),
+          bpm  = (freq ? 60 / (freq / 1000.0) : 0.0);
+      
+    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm).arg(freq));
+
+    /* update last spike label .. */
+    lastSpike->setText(LAST_SPIKE_FORMAT.arg(s->data)
+                       .arg(static_cast<ulong>(last_spike_index 
+                                               = s->scan_index)));    
+  }
+}
+
+void
+ECGGraphContainer::
+setCurrentIndexStatus(scan_index_t index)
+{
+  if (index - last_scan_index >= scan_index_threshold) {
+    last_scan_index = index;
+    currentIndex->setText(CURRENT_INDEX_FORMAT.arg((ulong) index));
+  }
+}
+
+/* Slot for updating the 'Mouse pos' status bar line.
+   The 'index' we get here (from the ECGGraph class) is inaccurate
+   as dropped samples can lead to de-synchronization between
+   the graph and the actual sample's scan index.
+   In addition we may also have O.B.1 (Obi-Wan) error here -- I didn't 
+   check since I will re-write this mechanism soon.  
+
+   TODO: Rethink scan index strategy  --Calin */
+void
+ECGGraphContainer::
+setMouseVectorStatus(double voltage, scan_index_t index)
+{   
+  mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage).arg((long int)index));
+}
+
+void
+ECGGraphContainer::
+setSpikeThresholdStatus(double voltage)
+{
+  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg(voltage));
+}
+
+void
+ECGGraphContainer::
+unsetSpikeThresholdStatus()
+{
+  spikeThreshold->setText(SPIKE_THOLD_FORMAT.arg("-"));
+}
+
+
 void
 ECGGraphContainer::mouseUpInGraph()
 {
   disconnect (graph,
-	      SIGNAL(mouseOverAmplitude(double)),
-	      graph,
-	      SLOT (setSpikeThreshHold(double)));
+              SIGNAL(mouseOverAmplitude(double)),
+              graph,
+              SLOT (setSpikeThreshold(double)));
 
 }
 
@@ -328,22 +482,34 @@ void
 ECGGraphContainer::mouseDownInGraph()
 {
   connect (graph,
-	   SIGNAL(mouseOverAmplitude(double)),
-	   graph,
-	   SLOT (setSpikeThreshHold(double)));
+           SIGNAL(mouseOverAmplitude(double)),
+           graph,
+           SLOT (setSpikeThreshold(double)));
+}
+
+
+void
+ECGGraphContainer::
+closeEvent (QCloseEvent *e)
+{
+  emit closing(this); /* This tells daqsystem to remove us from
+                         the channel list */
+  emit closing(const_cast<const ECGGraphContainer *>(this));
+  
+  QWidget::closeEvent(e);
 }
 
 /** parses the range setting string and places its components in
     the provided reference parameters */
 bool
 ECGGraphContainer::parseRangeString (const QString & rangeString, 
-				     double & rangeMin, 
-				     double & rangeMax, 
-				     RangeUnit & units) 
+                                     double & rangeMin, 
+                                     double & rangeMax, 
+                                     RangeUnit & units) 
 {
   static QRegExp regexp("-?[0-9]+\\.?-?[0-9]*");
   int index=0,len=0;
-
+  
   if ( (index = regexp.match(rangeString, 0, &len)) != -1
        && sscanf(rangeString.mid(index,len), "%lf", &rangeMin) 
        && (index = regexp.match(rangeString, index+len, &len)) != -1

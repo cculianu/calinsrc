@@ -40,8 +40,8 @@ struct ChannelMask : public Serializeable {
     virtual void serialize (Settings & settings, const QString & section_name) const;
     virtual void unserialize (const Settings & settings, const QString & section_name) ;
     // the following two are needed by class DSDStream for doing the MASK_CHANGED_INSN
-    size_t serialize(DSDStream & s) const throw (Exception);
-    size_t unserialize(DSDStream &s) throw (Exception);
+    size_t serialize(DSDStream & s) const ;//throw (Exception);
+    size_t unserialize(DSDStream &s) ;//throw (Exception);
 
     bool isOn(uint chan) const      { return mask[chan]; };
 

@@ -28,6 +28,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <asm/semaphore.h> /* for synchronizing the exported functions */
+#include <asm/bitops.h>    /* for set/clear bit                        */
 #include <linux/malloc.h>
 #include <linux/string.h> /* some memory copyage */
 
@@ -64,27 +65,33 @@ MODULE_PARM_DESC(ai_comedi_device, "The comedi device minor number to use for an
 MODULE_PARM(ao_comedi_device, "i");
 MODULE_PARM_DESC(ao_comedi_device, "The comedi device minor number to use for analog output. Defaults to 0.");
 
+MODULE_PARM(spike_fifo, "i");
+MODULE_PARM_DESC(spike_fifo, "The /dev/rtfXX device number to use for echoing spike detection information. Defaults to 2.");
+
 EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
 EXPORT_SYMBOL_NOVERS(rtp_deactivate_function);
 EXPORT_SYMBOL_NOVERS(rtp_activate_function);
+EXPORT_SYMBOL_NOVERS(spike_info);
 
 int init_module(void);        /* set up RT stuff */
 void cleanup_module(void);    /* clean up RT stuff */
 
 /* sets up RT shared memory */
 static int init_shared_mem(int ai_minor, int ai_subdev, int ai_fifo,
-			   int ao_minor, int ao_subdev, int ao_fifo);   
+                           int ao_minor, int ao_subdev, int ao_fifo, 
+                           int spike_fifo);   
 /* sets up the krange cache */
 static int build_krange_cache(void);
 
 static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
-static void grabScanOffBoard (SharedMemStruct *s,
-			      MultiSampleStruct *m);  /* internal */
-static void putFullScanIntoAIFifo (SharedMemStruct *s, 
-				   MultiSampleStruct *m);
+/* RTP Registered functions... */
+static void grabScanOffBoard (SharedMemStruct *s,MultiSampleStruct *m);  
+static void putFullScanIntoAIFifo (SharedMemStruct *s, MultiSampleStruct *m); 
+static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m); 
+/* /RTP Registered */
 static int __rtp_set_f_active(rtfunction_t f, char v); /* internal */
 static int __rtp_register_function(rtfunction_t function); /* internal */
 static int __rtp_unregister_function(rtfunction_t function); /* internal */
@@ -122,17 +129,20 @@ DECLARE_MUTEX(rt_functions_sem);
 int ai_fifo = DEFAULT_AI_FIFO, 
     ao_fifo = DEFAULT_AO_FIFO, 
     ai_comedi_device = DEFAULT_COMEDI_MINOR,
-    ao_comedi_device = DEFAULT_COMEDI_MINOR;
+    ao_comedi_device = DEFAULT_COMEDI_MINOR,
+    spike_fifo = DEFAULT_SPIKE_FIFO;
 
+/* Exported spike information */
+struct spike_info spike_info;
 
 /* this task reads data from the DAQ board, then calls 
    all of the functions registered in rt_functions linked list */
 static void *daq_rt_task (void *arg) 
 {
   static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
-					     modules */
+                                             modules */
   register hrtime_t loopstart = 0;    /* used to calibrate timing on
-					 sampling rate changes            */
+                                         sampling rate changes            */
   register long nanos_to_sleep;
 
   /* below is used to put upper limit on the array in one_full_scan */
@@ -158,8 +168,8 @@ static void *daq_rt_task (void *arg)
     if (atomic_read(&rt_functions_sem.count) > 0) {
       /* iterate through all custom functions and run them now... 
          two functions are always present as they are 'hard coded':
-           1) grabScanOffBoard()
-	   2) putFullScanIntoAIFifo()
+         1) grabScanOffBoard()
+         2) putFullScanIntoAIFifo()
       */
       for (curr = rt_functions; curr != &__end_of_func_list; curr=curr->next) {
 	if (curr->active_flag)
@@ -206,11 +216,15 @@ static void *daq_rt_task (void *arg)
 int init_module(void) 
 {
   pthread_attr_t attr;
-  int error = -EBUSY, ai_subdev = -1, ao_subdev = -1;
+  int error = -EBUSY, ai_subdev = -1, ao_subdev = -1, i;
 
   struct sched_param sched_param;
   const char *errorMessage = "Success";
 
+
+  /* initialize the array of last spikes encountered */
+  for (i = 0; i < SHD_MAX_CHANNELS; i++)  spike_info.last_spike_time[i] = 0;
+  memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
 
   /* initialize the function linked list */
   rt_functions = __end_of_func_list.next = &__end_of_func_list;
@@ -218,13 +232,15 @@ int init_module(void)
   /* note that order of registrations is important.. the function list is 
      FIFO ordered */
   if ( (error = __rtp_register_function(grabScanOffBoard)) ||
-       (error = __rtp_register_function(putFullScanIntoAIFifo)) ) {
+       (error = __rtp_register_function(putFullScanIntoAIFifo)) ||
+       (error = __rtp_register_function(detectSpikes)) ) {
     errorMessage = "Internal error: Cannot register a required function onto the dynamic function list! Out of memory?";
     goto init_error;
   }
     
   __rtp_set_f_active(grabScanOffBoard, 1);
   __rtp_set_f_active(putFullScanIntoAIFifo, 1);
+  __rtp_set_f_active(detectSpikes, 1);
 
   /* find a subdevice of type COMEDI_SUBD_AI */
   if ( (
@@ -271,7 +287,7 @@ int init_module(void)
   }   
 
   if (!init_shared_mem(ai_comedi_device, ai_subdev, ai_fifo,
-		       ao_comedi_device, ao_subdev, ao_fifo))  {  
+                       ao_comedi_device, ao_subdev, ao_fifo, spike_fifo))  {  
     /* error initializing shared memory */
     errorMessage = "Cannot allocate mbuff shared memory.  Did you create the "
                    "device node? Are you low on memory?";
@@ -294,6 +310,11 @@ int init_module(void)
 
   if ( (error = rtf_create(sh_mem->ao_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
+    goto init_error;
+  }
+
+  if ( (error = rtf_create(sh_mem->spike_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
+    errorMessage = "Cannot create a fifo for communicating spike detection to userland!";     
     goto init_error;
   }
   
@@ -323,15 +344,15 @@ int init_module(void)
 
 /*  Initializes the rtlinux shared memory 
     returns 1 on success, 0 on failure */
-static int init_shared_mem(int im, int is, int iF, int om, int os, int oF) 
+static int 
+init_shared_mem(int im, int is, int iF, int om, int os, int oF, int sF) 
 { 
-
   uint i;
 
   /* Open mbuff Shared Memory structure */
   sh_mem = 
     (SharedMemStruct *) mbuff_alloc (SHARED_MEM_NAME,
-				     sizeof(SharedMemStruct));
+                                     sizeof(SharedMemStruct));
   
   if (! sh_mem) { /* means there was some sort of error allocating mbuff */
     return 0;
@@ -345,12 +366,16 @@ static int init_shared_mem(int im, int is, int iF, int om, int os, int oF)
   sh_mem->ao_subdev = os;
   sh_mem->ai_fifo_minor = iF;
   sh_mem->ao_fifo_minor = oF;
+  sh_mem->spike_fifo_minor = sF;
   /* num AI channels in use */
   sh_mem->n_ai_chans = comedi_get_n_channels(sh_mem->ai_minor, 0); 
   sh_mem->n_ao_chans = comedi_get_n_channels(sh_mem->ao_minor, 0);
   sh_mem->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
   sh_mem->scan_index = 0;
 
+  /* initialize the spike_params member */
+  init_spike_params(&sh_mem->spike_params);
+  
   for (i = 0; i < sh_mem->n_ai_chans || i < sh_mem->n_ao_chans; i++) { 
     /* set channel parameters */   
     if (i < sh_mem->n_ai_chans) {
@@ -432,7 +457,9 @@ void cleanup_module(void)
       printk (RT_PROCESS_MODULE_NAME": cannot find RT task (it died?).\n");
   }
 
+  __rtp_unregister_function(detectSpikes);
   __rtp_unregister_function(putFullScanIntoAIFifo);
+  __rtp_unregister_function(grabScanOffBoard);
 
   /* NB: clearing out of all of the other functions from the function linked 
      list is not required since if we were called here the function linked list
@@ -458,11 +485,13 @@ static void cleanup_fifos (void)
   if (! sh_mem) return;
 
   do {
-    int i, fifos[2] = {sh_mem->ai_fifo_minor, sh_mem->ao_fifo_minor};
+    int i, fifos[3] = {sh_mem->ai_fifo_minor, 
+                       sh_mem->ao_fifo_minor, 
+                       sh_mem->spike_fifo_minor};
     
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < 3; i++)
       if (fifos[i] >= 0)
-	rtf_destroy(fifos[i]);
+        rtf_destroy(fifos[i]);
   
   } while (0);
 }
@@ -549,7 +578,7 @@ static void grabScanOffBoard (SharedMemStruct *s,
 		       CR_CHAN(packed_param),CR_RANGE(packed_param), 
 		       CR_AREF(packed_param),&samp);      
       m->samples[m->n_samples].data = 
-	sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
+        sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
       m->samples[m->n_samples].scan_index = s->scan_index;
       m->samples[m->n_samples].channel_id = i;
       m->n_samples++;
@@ -601,6 +630,43 @@ static void putFullScanIntoAIFifo (SharedMemStruct *s,
   }
 #endif
 
+}
+
+static void detectSpikes (SharedMemStruct *s, MultiSampleStruct *m)
+{
+  register char have_spike;
+  register uint chan, i;
+  register const uint avg_chan_time =
+    ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
+  register hrtime_t this_chan_time;
+  
+  for (i = 0; i < m->n_samples; i++) {
+    chan = m->samples[i].channel_id;
+    this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
+    have_spike = 0;
+    if (_test_bit(chan, s->spike_params.enabled_mask) 
+        &&  (this_chan_time - spike_info.last_spike_time[chan]
+            >= s->spike_params.blanking[chan] * MILLION) ) {
+      switch ((SpikePolarity)_test_bit(chan, s->spike_params.polarity_mask)) {
+      case Positive: /* from enum SpikePolarity */
+        have_spike = s->spike_params.threshold[chan] <= m->samples[i].data;
+        break;
+      case Negative: 
+        have_spike = s->spike_params.threshold[chan] >= m->samples[i].data;
+        break;
+      default:
+        /* this case is not reached, but defensive rtl_printf follows */
+        rtl_printf(MODULE_NAME ": Bug in rt_process.o, channel %u has an "
+                   "illegal spike polarity!\n", chan); 
+        break;
+      }
+      _set_bit(chan, spike_info.spikes_this_scan, have_spike);
+      if (have_spike) {
+        spike_info.last_spike_time[chan] = this_chan_time;
+        rtf_put(s->spike_fifo_minor, m->samples + i, sizeof(SampleStruct));
+      }
+    }
+  }
 }
 
 /* registers a function to be run within the rtf loop

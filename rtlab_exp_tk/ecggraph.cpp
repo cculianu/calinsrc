@@ -42,17 +42,17 @@
 #include "ecggraph.h"
 
  
-ECGGraph::ECGGraph (int sampleRateHz = 1000,
-		    int secsVisible = 10,
-		    double rangeMin = -1.5,
-		    double rangeMax = 1.5,
-		    QWidget *parent = 0, 
-		    const char *name = 0, 
-		    WFlags f = 0) : 
+ECGGraph::ECGGraph (int sampleRateHz,
+                    int secsVisible,
+                    double rangeMin,
+                    double rangeMax,
+                    QWidget *parent, 
+                    const char *name, 
+                    WFlags f) : 
   QWidget (parent, name, f), 
   numSamples(sampleRateHz * secsVisible),
   currentSampleIndex(0),
-  sampleRateHz(sampleRateHz), 
+  _sampleRateHz(sampleRateHz), 
   secsVisible(secsVisible),
   _rangeMin(rangeMin),
   _rangeMax(rangeMax),
@@ -61,9 +61,7 @@ ECGGraph::ECGGraph (int sampleRateHz = 1000,
   _gridColor(black),
   _backgroundColor ("#334535"),
   outside_concept_of_a_sample_index(0),
-  spikeTHoldEnabled(false),
-  _spikeBlanking(100),
-  _spikePolarity(Positive)
+  spikeTHoldEnabled(false)
 {
   samples = new double[numSamples];
   points  = new QPointArray (numSamples);
@@ -141,7 +139,7 @@ bool ECGGraph::spikeMode() const {
 
 /** Returns our spike threshhold.  If spikeMode() is false, this has 
     undefined behavior. */
-double ECGGraph::spikeThreshHold() const {
+double ECGGraph::spikeThreshold() const {
   return spikeTHold;
 }
 
@@ -186,8 +184,6 @@ void ECGGraph::plot (double amplitude) {
   
   currentSampleIndex = ++currentSampleIndex % numSamples;
   _totalSampleCount++;  
-
-  detectSpike(amplitude);
 
 }
 
@@ -305,7 +301,7 @@ void ECGGraph::deletePlotsBetween (int firstIndex, int secondIndex) {
 
   // now, repaint our spike line
   if (spikeTHoldEnabled) {
-    bitBlt(this, p1.x()+1, spikeTHoldPoints[0].y(), &_threshHoldLine, p1.x()+1, 0, p2.x()-p1.x(), spikePen.width(), CopyROP, TRUE);
+    bitBlt(this, p1.x()+1, spikeTHoldPoints[0].y(), &_thresholdLine, p1.x()+1, 0, p2.x()-p1.x(), spikePen.width(), CopyROP, TRUE);
   }
   
 }
@@ -321,7 +317,7 @@ void ECGGraph::initBuffer () {
   this->setBackgroundPixmap (_background); // set the background of the graph 
 
   // add-on for the threshHoldLine buffer...
-  _threshHoldLine.resize(width(), spikePen.width());
+  _thresholdLine.resize(width(), spikePen.width());
 }
 
 
@@ -404,7 +400,7 @@ void ECGGraph::clearSpikeTHoldLine () {
   QRect rect(spikeTHoldPoints[0]-one, spikeTHoldPoints[1]+one);
   bitBlt(this, spikeTHoldPoints[0]-one, &_buffer, rect);
   // clear the back buffer for the line
-  bitBlt(&_threshHoldLine, 0, 0, &_background, 0, spikeTHoldPoints[0].y(), _threshHoldLine.width(), spikePen.width());
+  bitBlt(&_thresholdLine, 0, 0, &_background, 0, spikeTHoldPoints[0].y(), _thresholdLine.width(), spikePen.width());
 }
 
 void ECGGraph::paintSpikeTHoldLine () {
@@ -415,7 +411,7 @@ void ECGGraph::paintSpikeTHoldLine () {
     devicePainter.drawLine(spikeTHoldPoints[0], spikeTHoldPoints[1]);
     devicePainter.end();
     // now duplicate for the backbuffer for this line
-    devicePainter.begin(&_threshHoldLine);
+    devicePainter.begin(&_thresholdLine);
     devicePainter.setPen(spikePen);
     devicePainter.drawLine(QPoint(0,0), QPoint(spikeTHoldPoints[1].x(),0));
     devicePainter.end();
@@ -423,7 +419,7 @@ void ECGGraph::paintSpikeTHoldLine () {
 }
 
 
-void ECGGraph::setSpikeThreshHold(double amplitude) 
+void ECGGraph::setSpikeThreshold(double amplitude) 
 {
   if (spikeTHoldEnabled) {
     clearSpikeTHoldLine();
@@ -432,14 +428,14 @@ void ECGGraph::setSpikeThreshHold(double amplitude)
   spikeTHold = amplitude;
   computeSpikeTHoldPoints();
   paintSpikeTHoldLine();
-  emit spikeThreshHoldSet(amplitude);  
+  emit spikeThresholdSet(amplitude);  
 }
 
-void ECGGraph::unsetSpikeThreshHold() {
+void ECGGraph::unsetSpikeThreshold() {
   spikeTHoldEnabled = false;
   clearSpikeTHoldLine();
   spikeTHoldPoints[0] = spikeTHoldPoints[1] = QPoint (0,0);
-  emit spikeThreshHoldUnset();
+  emit spikeThresholdUnset();
 }
 
 void ECGGraph::setSecondsVisible(int seconds)
@@ -448,7 +444,7 @@ void ECGGraph::setSecondsVisible(int seconds)
 
   int oldNumSamples = numSamples;
   secsVisible = seconds;
-  numSamples = secsVisible * sampleRateHz;
+  numSamples = secsVisible * _sampleRateHz;
 
   // resize the samples array
   double *newSamples = new double[numSamples];
@@ -470,32 +466,17 @@ void ECGGraph::setSecondsVisible(int seconds)
     currentSampleIndex = numSamples - 1;
 
   // now redraw the graph with the new grid and x-axis scale
-  initBuffer();
   remakeAllPoints();
   emit secondsVisibleChanged(seconds);
 }
 
-ECGGraph::SpikePolarity
-ECGGraph::spikePolarity() const
-{
-  return _spikePolarity;
-}
-
 void
-ECGGraph::setSpikePolarity(SpikePolarity p)
+ECGGraph::reset() 
 {
-  _spikePolarity = p;
-  emit spikePolaritySet(p);
+  currentSampleIndex = 0;
+  _totalSampleCount = 0;
+  remakeAllPoints();
 }
-
-int
-ECGGraph::spikeBlanking () const 
-{ return _spikeBlanking; }
-
-void
-ECGGraph::setSpikeBlanking(int sb)
-{ _spikeBlanking = sb; emit spikeBlankingSet(sb); }
-
 
 void ECGGraph::drawLittleBlip () {
   static const int blipsize = 4; /* in pixels */
@@ -525,29 +506,4 @@ void ECGGraph::drawLittleBlip () {
   lastBlip = here;
 }
 
-/* super internal helper for plot() ... should be called every
-   time plot() is called */
-void
-ECGGraph::detectSpike(double amplitude) {
-  /*
-  if (currentSampleIndex < 1) return;
-  */
-  // spike blanking? if so do nothing and return
-  if ( !spikeTHoldEnabled || 
-       (outside_concept_of_a_sample_index && 
-        ((int64)outside_concept_of_a_sample_index) - lastSpike.index < _spikeBlanking) 
-       || (!outside_concept_of_a_sample_index &&
-           _totalSampleCount - lastSpike.index < _spikeBlanking) ) return;
- 
-  if ( ( _spikePolarity == Positive && amplitude >= spikeTHold)
-       || ( _spikePolarity == Negative && amplitude <= spikeTHold) ) {
-    lastSpike.index = (outside_concept_of_a_sample_index 
-                       ? outside_concept_of_a_sample_index
-                       : _totalSampleCount);
-    lastSpike.amplitude = amplitude;
-    emit spikeDetected(lastSpike);    
-    emit spikeDetected(lastSpike.index, lastSpike.amplitude);
-  }
-  
-}
 
