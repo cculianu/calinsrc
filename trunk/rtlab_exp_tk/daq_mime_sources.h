@@ -48,7 +48,14 @@ namespace DAQMimeSources {
                               spikeMinus,
                               spikePlus,
                               synch,
-                              timeStamp;
+                              timeStamp,
+                              log,
+                              print,
+                              plugins,
+                              quit,
+                              channel, // the graph windows
+                              daqSystem, // main icon for application
+                              configuration; // icon for config screen
     };
 
   /* grabs the default, registered factory */

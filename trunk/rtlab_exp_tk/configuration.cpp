@@ -45,6 +45,7 @@
 #include "output_file_w.h"
 #include "daq_help_browser.h"
 #include "daq_mime_sources.h"
+#include "daq_images.h"
 
 #ifdef TEST_CW
 #include <qapplication.h>
@@ -107,6 +108,7 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   helpButton("Help", &bottomButtons)
 
 {
+  setIcon(QPixmap(DAQImages::configuration_img));
   setSizeGripEnabled(true);
   setMinimumSize(QSize(150,100));
   

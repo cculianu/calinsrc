@@ -69,8 +69,12 @@ init() /* initialization routine shared by constructors */
   mle.setHScrollBarMode(QScrollView::Auto);
   connect (&mle, SIGNAL(textChanged()), this, SLOT(changed()));
 
-  fileNameLabel.setFont(QFont("Helvetica", 8));
-  changedLabel.setFont(QFont("Helvetica", 8));
+  QFont labelFont;
+  labelFont.setStyleHint(QFont::Helvetica);
+  labelFont.setPointSize(8);
+
+  fileNameLabel.setFont(labelFont);
+  changedLabel.setFont(labelFont);
 
   layout.setRowStretch(1,1);
   layout.setColStretch(0,1);

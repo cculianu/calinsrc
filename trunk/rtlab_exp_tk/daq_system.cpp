@@ -24,6 +24,7 @@
 #include <qmainwindow.h>
 #include <qworkspace.h>
 #include <qbuttongroup.h>
+#include <qhbuttongroup.h>
 #include <qvbuttongroup.h>
 #include <qtoolbar.h>
 #include <qlistbox.h>
@@ -104,6 +105,7 @@ private:
 
 void ExperimentLog::init()
 {
+  setIcon(QPixmap(DAQImages::log_img));
   accel = new QAccel(this); /* to be auto-deleted since it's a child of ours */
   int id = accel->insertItem(CTRL + Key_T);
   accel->connectItem( id, &daqSystem, SLOT(logTimeStamp()) );
@@ -130,6 +132,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu")
 {
+  setIcon(QPixmap(DAQImages::daq_system_img));
+
   log = new ExperimentLog(*this, 0, "Log Window");
 
 
@@ -147,17 +151,27 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   configWindow.startupScreenSemantics = false;
 
   { /* build menus */
-    fileMenu.insertItem("&Plugins...", &plugin_menu, SLOT(raisenShow() ) );
+    fileMenu.insertItem(QIconSet(QPixmap(DAQImages::plugins_img)),
+                        "&Plugins...", &plugin_menu, SLOT(raisenShow() ) );
     fileMenu.insertSeparator(); /* ---- */
-    fileMenu.insertItem("P&rint...", this, SLOT(printDialog()));
-    fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
+    fileMenu.insertItem(QIconSet(QPixmap(DAQImages::print_img)),
+                        "P&rint...", this, SLOT(printDialog()));
+    fileMenu.insertItem(QIconSet(QPixmap(DAQImages::configuration_img)),
+                        "&Options", &configWindow, SLOT ( show() ) );
     fileMenu.insertSeparator(); /* ---- */
-    fileMenu.insertItem("&Quit", this, SLOT( close() ) );
+    fileMenu.insertItem(QIconSet(QPixmap(DAQImages::quit_img)),
+                        "&Quit", this, SLOT( close() ) );
 
-    logMenu.insertItem("Show &Log Window", this, SLOT (showLogWindow()), CTRL + Key_L);
+    logMenu.insertItem(QIconSet(QPixmap(DAQImages::log_img)),
+                       "Show &Log Window", this, SLOT (showLogWindow()), 
+                       CTRL + Key_L);
     logMenu.insertSeparator(); /* ---- */
-    logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
-    channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
+    logMenu.insertItem(QIconSet(QPixmap(DAQImages::timestamp_img)),
+                       "Insert &Timestamp", this, SLOT (logTimeStamp()), 
+                       CTRL + Key_T);
+    channelsMenu.insertItem(QIconSet(QPixmap(DAQImages::add_channel_img)), 
+                            "&Add Channel...", this, SLOT( addChannel() ), 
+                            CTRL + Key_A );
     channelsMenu.insertItem("Set Analog Input &Reference Mode...", this, SLOT( changeAREFDialog() ), CTRL + Key_R );
     
     windowMenu.insertItem("&Window Templates...", this, SLOT ( showWindowTemplateDialog() ));
@@ -205,7 +219,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
   { /* add toolbar */
 
-    addChannelB.setPixmap( DAQImages::plus_img );
+    addChannelB.setPixmap( DAQImages::add_channel_img );
     QToolTip::add( &addChannelB, "Add Channel..." );
     connect(&addChannelB, SIGNAL(clicked()), this, SLOT (addChannel()));
     
@@ -556,6 +570,8 @@ DAQSystem::openChannelWindow(uint chan, uint range,
     new ECGGraphContainer(graph, chan, &ws, 
                              QString("Channel %1").arg(chan).latin1());
 
+  gcont->setIcon(QPixmap(DAQImages::channel_img));
+
   buildRangeSettings(gcont);
 
   windowMenuAddWindow(gcont); /* add this window to the 
@@ -771,10 +787,17 @@ void DAQSystem::spikeThresholdOff()
 int /* returns the window id */
 DAQSystem::windowMenuAddWindow(QWidget *w)
 {
-  int ret = 0;
+  int ret = ( 
+    
+               w->icon() 
+               ?   windowMenu.insertItem(QIconSet(*w->icon()), w->name())
+               :   windowMenu.insertItem(w->name()) 
 
+            );
+
+  
   /* now add this window to our 'Window' QPopupMenu */
-  menuIdToWindowMap [ (ret = windowMenu.insertItem(w->name())) ] = w;
+  menuIdToWindowMap [ ret ] = w;
   /* /add window */
  
   return ret;
@@ -1272,7 +1295,8 @@ PluginMenu::PluginMenu(DAQSystem * ds,
     daqSystem(ds)
 
 {
-   
+  setIcon(QPixmap(DAQImages::plugins_img));
+
   plugin_cmenu = new QPopupMenu(this, QString(name) + " - Plugin Menu Context");
   plugin_cmenu->insertItem("Show Window", this, SLOT(showSelectedWindow()));
   plugin_cmenu->insertItem("Load", this, SLOT(carefullyLoadSelected()));
@@ -1618,6 +1642,9 @@ WindowTemplateDialog::WindowTemplateDialog(DAQSystem *parent,
 
   QToolTip::add(templateNames, "Right click to create/delete/apply a profile");
   templateNames->setSelectionMode(QListBox::Single);
+
+  connect(templateNames, SIGNAL(selectionChanged()), this, SLOT(autoEnableDisableButtonsAndMenuStuff()));
+
   connect(templateNames, SIGNAL(selectionChanged()), this, SLOT(updateDetails()));
   layout->addWidget(templateNames->parentWidget(), 1, 0);
 
@@ -1640,11 +1667,32 @@ WindowTemplateDialog::WindowTemplateDialog(DAQSystem *parent,
   connect (templateNames, SIGNAL(contextMenuRequested ( QListBoxItem *, const QPoint & )), this, SLOT(contextRequest(QListBoxItem *, const QPoint &)));
 
   
+  QHButtonGroup * hbg = new QHButtonGroup ("Operations", this, "Operations");
+  layout->addWidget(hbg, 3, 0);
+
+  QPushButton 
+    *createBut = new QPushButton("Create New...", hbg, "Create New Button"),
+    *closeBut;
+
+
+
+  useBut = new QPushButton("Apply", hbg, "Apply Button");
+  renameBut = new QPushButton("Rename", hbg, "Rename Button");
+  deleteBut = new QPushButton("Delete", hbg, "Delete Button");
+  closeBut = new QPushButton("Close", hbg, "Close Button");
+
+  connect(createBut, SIGNAL(clicked()), this, SLOT(createNew()));
+  connect(useBut, SIGNAL(clicked()), this, SLOT(useSelected()));
+  connect(renameBut, SIGNAL(clicked()), this, SLOT(renameSelected()));
+  connect(deleteBut, SIGNAL(clicked()), this, SLOT(deleteSelected()));
+  connect(closeBut, SIGNAL(clicked()), this, SLOT(close()));
+
   refreshContents();
 }
 
 void WindowTemplateDialog::refreshContents()
-{
+{ 
+  QString selectedName = templateNames->currentText(); // remember selected
   vector<QString> profiles = ds->settings.windowSettingProfiles();
   vector<QString>::iterator it;
 
@@ -1654,6 +1702,16 @@ void WindowTemplateDialog::refreshContents()
     templateNames->insertItem(*it);
 
   updateDetails();
+
+  QListBoxItem *l;
+  if (!selectedName.isNull() && (l=templateNames->findItem(selectedName,
+                                                           Qt::ExactMatch))) {
+    // re-enable the old selected item
+    templateNames->setSelected(l, true);
+  } else {
+    // figure out if we still HAVE an item, and if not, disable buttons...
+    autoEnableDisableButtonsAndMenuStuff();
+  }
 }
 
 void WindowTemplateDialog::updateDetails()
@@ -1697,12 +1755,7 @@ void WindowTemplateDialog::updateDetails()
 void
 WindowTemplateDialog::contextRequest(QListBoxItem * lbi, const QPoint & p)
 {
-  bool enabled = lbi && !ds->settings.getWindowSettingProfile(lbi->text()).isNull();
-  cmenu->setItemEnabled(use_id, enabled);
-  cmenu->setItemEnabled(delete_id, enabled);
-  cmenu->setItemEnabled(rename_id, enabled);
-  cmenu->setItemEnabled(overwrite_id, enabled);
-    
+  (void) lbi; // keep compiler happy
   cmenu->popup(p);
 }
 
@@ -1813,4 +1866,20 @@ void WindowTemplateDialog::overwriteSelected()
 
   ds->settings.currentToProfile(templateNames->currentText());
   refreshContents();
+}
+
+void WindowTemplateDialog::autoEnableDisableButtonsAndMenuStuff()
+{
+  QListBoxItem *lbi = templateNames->item(templateNames->currentItem());
+  bool enabled = 
+    lbi && !ds->settings.getWindowSettingProfile(lbi->text()).isNull();
+
+  cmenu->setItemEnabled(use_id, enabled);
+  cmenu->setItemEnabled(delete_id, enabled);
+  cmenu->setItemEnabled(rename_id, enabled);
+  cmenu->setItemEnabled(overwrite_id, enabled);
+
+  deleteBut->setEnabled(enabled);
+  useBut->setEnabled(enabled);
+  renameBut->setEnabled(enabled);
 }

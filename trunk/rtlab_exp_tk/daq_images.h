@@ -27,14 +27,20 @@
 #include <qimage.h>
 namespace DAQImages {
     extern const QImage 
-        plus_img,
+        add_channel_img,
         pause_img,
         play_img,
         spike_minus_img,
         spike_plus_img,
         synch_img,
-        timestamp_img;
-  
+        timestamp_img,
+        log_img, 
+        print_img,
+        plugins_img,
+        daq_system_img,
+        configuration_img,
+        quit_img,
+        channel_img;  
 };
 
 
