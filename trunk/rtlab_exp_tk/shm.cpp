@@ -39,6 +39,8 @@
 
 #include "tweaked_mbuff.h"
 
+#include "user_to_kernel.h"
+
 #define RTO RTLAB_MODULE_NAME ".o" 
 
 const QString ShmController::failureReasons[] = {
@@ -205,9 +207,6 @@ ShmController::attach(ShmType t)
                                  fullErrorMessage + "\n\n" 
                                  + failureReasons[failureReason] );
 
-  /* tell rtlab.o who we are? */
-  shm->attached_pid = getpid();
-
   return shm;                                
 }
 
@@ -221,8 +220,6 @@ ShmController::~ShmController()
 void 
 ShmController::detach (SharedMemStruct *shm, ShmType t)
 {
-  shm->attached_pid = 0;
-
   switch (t) {
   case MBuff:
     mbuff_detach(SHARED_MEM_NAME, shm);
@@ -302,29 +299,63 @@ bool ShmController::haveRTLabDotO()
 }
 
 
-
-void ShmControllerNoFifo::clearSpikeSettings()
+ShmControllerWithFifo::ShmControllerWithFifo()
+  : rtlab(0)
 {
-  init_spike_params(&shm->spike_params);
+  rtlab = new RTLabKernelNotifier(shm->control_fifo);
+  /* tell rtlab.o who we are? */
+  rtlab->setAttachedPid(getpid());
 }
 
-void ShmControllerNoFifo::setSpikePolarity(uint chan, SpikePolarity p) 
+ShmControllerWithFifo::~ShmControllerWithFifo()
 {
-  _set_bit(chan, shm->spike_params.polarity_mask, p);
+  rtlab->setAttachedPid(-1);
+  if (rtlab) { delete rtlab; rtlab = 0; }
 }
 
-void ShmControllerNoFifo::setSpikeEnabled(uint chan, bool onoroff)
+
+
+void ShmControllerWithFifo::setChannel(int t, uint chan, bool onoroff)
 {
-  _set_bit(chan, shm->spike_params.enabled_mask, onoroff);
+  (void)t;
+  rtlab->setChan(chan, onoroff);
 }
 
-void ShmControllerNoFifo::setSpikeThreshold(uint chan, double d)
+void ShmControllerWithFifo::setChannelRange(int subdevtype, uint chan, uint r)
 {
-  shm->spike_params.threshold[chan] = d;
+  rtlab->setChanspec(CR_PACK(chan, r, channelAREF(subdevtype, chan)));
 }
 
-void ShmControllerNoFifo::setSpikeBlanking(uint chan, uint msec)
+void ShmControllerWithFifo::setChannelAREF(int subdevtype, uint chan, uint a)
 {
-  shm->spike_params.blanking[chan] = msec;
+  rtlab->setChanspec(CR_PACK(chan, channelRange(subdevtype,chan), a));
+}
+
+void ShmControllerWithFifo::clearSpikeSettings()
+{
+  rtlab->setAllSpikes(false);
+  rtlab->setAllSpikePolarities(Negative);
+  rtlab->setAllSpikeBlankings(DEFAULT_SPIKE_BLANKING);
+  rtlab->setAllSpikeThresholds(0.0);
+}
+
+void ShmControllerWithFifo::setSpikePolarity(uint chan, SpikePolarity p) 
+{
+  rtlab->setSpikePolarity(chan, p);
+}
+
+void ShmControllerWithFifo::setSpikeEnabled(uint chan, bool onoroff)
+{
+  rtlab->setSpike(chan, onoroff);
+}
+
+void ShmControllerWithFifo::setSpikeThreshold(uint chan, double d)
+{
+  rtlab->setSpikeThreshold(chan, d);
+}
+
+void ShmControllerWithFifo::setSpikeBlanking(uint chan, uint msec)
+{
+  rtlab->setSpikeBlanking(chan, msec);
 }
 
