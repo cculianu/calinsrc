@@ -28,12 +28,12 @@
 #ifndef _SHARED_MEMORY_DOT_H
 # define _SHARED_MEMORY_DOT_H
 
-/* dconst, or dummy const is a hackish way to enforce the fact that userland
+/* uconst, or user const is a hackish way to enforce the fact that userland
    should NOT modify certain key shared memory struct members */
 # if defined(MODULE) || defined (SHARED_MEM_STRUCT_SUBCLASS)
-#  define dconst /* */ /* dconst is nothing in kernel land.. so we can write */
+#  define uconst /* */ /* uconst is nothing in kernel land.. so we can write */
 # else
-#  define dconst const /* dconst is const in userland (enforce read-only) */
+#  define uconst const /* uconst is const in userland (enforce read-only) */
 # endif
 
 #ifdef __cplusplus
@@ -87,14 +87,14 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 62      /* test this against the below 
+# define SHD_SHM_STRUCT_VERSION 63      /* test this against the below 
                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
 /* prevent compiler errors due to consts below */
   SharedMemStruct(): struct_version(SHD_SHM_STRUCT_VERSION)  {}
 #endif
-  dconst int struct_version;             /* magic number used to make sure
+  uconst int struct_version;             /* magic number used to make sure
                                             this structure version is synch'd
                                             between userland and kernel land 
                                             kernel sets this to 
@@ -118,14 +118,14 @@ struct SharedMemStruct {
      this directly affects the period of the rt loop.  
      Initialized at rtlab.o module insertion time to a configurable 
      default of 1000  */
-  dconst sampling_rate_t sampling_rate_hz; 
+  uconst sampling_rate_t sampling_rate_hz; 
   
   volatile scan_index_t scan_index; /* index of current analog input scan --   
                                        notice how this property is writable..
                                        we can reset this at any time from the 
                                        user process so as to allow the ability
                                        to reset the scan index               */
-  volatile dconst unsigned int nanos_per_scan; /* Basically the number of 
+  volatile uconst unsigned int nanos_per_scan; /* Basically the number of 
                                                   nanoseconds  per scan.  This
                                                   is a trivial function
                                                   of BILLION / sampling rate */
@@ -135,22 +135,24 @@ struct SharedMemStruct {
                            daq_system's can forget to clean up after themselves
                            here! */
   /* read-only struct members for userland, read/write for kernel            */
-  dconst int ai_minor;                   /* /dev/comediX                     */
-  dconst int ao_minor;                   /* /dev/comediX (currently unused)  */
-  dconst int ai_subdev;                  /* the comedi subdevice index fr ai */
-  dconst int ao_subdev;                  /* comedi ao subdevice index        */
-  dconst int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
-  dconst int ao_fifo_minor;              /* (currently unused)               */
-  dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
-  dconst unsigned int n_ao_chans;        /* ditto                            */
-  volatile dconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
-  dconst unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
+  uconst int ai_minor;                   /* /dev/comediX                     */
+  uconst int ao_minor;                   /* /dev/comediX (currently unused)  */
+  uconst int ai_subdev;                  /* the comedi subdevice index fr ai */
+  uconst int ao_subdev;                  /* comedi ao subdevice index        */
+  uconst int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
+  uconst int ao_fifo_minor;              /* (currently unused)               */
+  uconst int control_fifo;               /* The RT-FIFO rtlab.o listens on
+					    for control commands..
+					    (unimplemented) */
+  uconst unsigned int n_ai_chans;        /* the number of channels in subdev */
+  uconst unsigned int n_ao_chans;        /* ditto                            */
+  volatile uconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
+  uconst unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
                                             of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                             units */
-  dconst unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
+  uconst unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
                                             of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                             units */
-
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;
@@ -263,7 +265,7 @@ inline bool operator==(const SampleStruct &s1, const SampleStruct &s2)
   return (s1.channel_id == s2.channel_id && s1.scan_index == s2.scan_index && s1.data == s2.data);
 }
 #endif
-# undef dconst
+# undef uconst
 
 #ifdef __cplusplus
 }

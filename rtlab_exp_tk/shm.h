@@ -38,23 +38,23 @@ class ShmController
 
   enum ShmType { MBuff, IPC, RTAI_Shm, NotSharedOrUnknown = 0 };
 
-  /* probes for the right shm type then calls attach() with that type 
-     behaves just like below constructor except t is auto-detected */
-  ShmController() throw (ShmException, IllegalStateException);
-
-  ShmController(ShmType t) throw(ShmException, /* if cannot attach to type */
-                                 IllegalStateException /* if t is Unknown */
-                                );
-  ShmController(SharedMemStruct *shm); /* if you already have the shm.. this 
-                                          means our shm is not owned by this 
-                                          instance */
-  ~ShmController();
+ protected:
+  /* if shm is NULL, 
+     probes for the right shm type then calls attach() with that type 
+     otherwise if shm is not NULL, takes shm as an already attached
+     shm and doesn't detatch it upon class destruction
+   */
+  ShmController(SharedMemStruct *shm = 0) 
+    throw(ShmException, /* if cannot attach to type */
+	  IllegalStateException /* if t is Unknown */
+	  );
+ public:
+  virtual ~ShmController();
 
   static SharedMemStruct *attach(ShmType t = MBuff);
   static void detach(SharedMemStruct *, ShmType t = MBuff);
 
-  static bool haveRTProcess(); /* true iff a module named rt_process is 
-                                  loaded */
+  /* GETTERS */
 
   /* channel-specific stuff--basically wrappers to CR_PACK */
 
@@ -65,39 +65,15 @@ class ShmController
   uint channelAREF(ComediSubDevice::SubdevType t, uint chan) const;
   uint channelAREF(int subdevtype, uint chan) const;
 
-  void setChannelRange(ComediSubDevice::SubdevType t, uint chan, 
-                       uint r); 
-  void setChannelRange(int subdevtype, uint chan, uint r);
-
-  /* AREF values should come from comedi.h as the AREF_* set of #defines */
-  void setChannelAREF(ComediSubDevice::SubdevType s, uint chan, uint aref);
-  void setChannelAREF(int subdevtype, uint chan, uint aref);
-  void setAREFAll(ComediSubDevice::SubdevType s, uint aref);
-  void setAREFAll(int subdevtype, uint aref);
-
   /* is channel controls */
   bool isChanOn(ComediSubDevice::SubdevType t, uint chan) const;
   bool isChanOn(int t, uint chan) const; 
-  void setChannel (ComediSubDevice::SubdevType t, uint chan, 
-                   bool onoroff);
-  void setChannel (int t, uint chan, bool onoroff);  
+
   uint numChannels (ComediSubDevice::SubdevType t) const;
   uint numChannels (int subdevtype) const;
   uint numChannelsInUse (ComediSubDevice::SubdevType t) const;
   uint numChannelsInUse (int subdevtype) const;
 
-  /* return the right array for this type */
-  volatile uint *chanArray(ComediSubDevice::SubdevType t);
-  volatile uint *chanArray(int subdevtype);
-  volatile char *chanUseArray(ComediSubDevice::SubdevType t);
-  volatile char *chanUseArray(int t);
-
-
-  void clearSpikeSettings();
-  void setSpikePolarity(uint chan, SpikePolarity polarity);
-  void setSpikeEnabled(uint chan, bool onoroff);
-  void setSpikeThreshold(uint chan, double threshold);  
-  void setSpikeBlanking(uint chan, uint milliseconds);
   SpikePolarity spikePolarity(uint chan) const; 
   bool spikeEnabled(uint chan) const;
   double spikeThreshold(uint chan) const;
@@ -108,12 +84,48 @@ class ShmController
   scan_index_t scanIndex() const;  
   uint aiFifoMinor() const; /* not meaningful in all contexts */
 
+  /* SETTERS */
+
+  virtual void setChannel (ComediSubDevice::SubdevType t, uint chan, 
+			   bool onoroff);
+  virtual void setChannel (int t, uint chan, bool onoroff) = 0;  
+
+  virtual void setChannelRange(ComediSubDevice::SubdevType t, uint chan, 
+			       uint r); 
+  virtual void setChannelRange(int subdevtype, uint chan, uint r) = 0;
+  
+  /* AREF values should come from comedi.h as the AREF_* set of #defines */
+  virtual void setChannelAREF(ComediSubDevice::SubdevType s, uint chan, 
+			      uint aref);
+  virtual void setChannelAREF(int subdevtype, uint chan, uint aref) = 0;
+  virtual void setAREFAll(ComediSubDevice::SubdevType s, uint aref);
+  virtual void setAREFAll(int subdevtype, uint aref);
+
+  /* Spikes.. */
+  virtual void clearSpikeSettings() = 0;
+  virtual void setSpikePolarity(uint chan, SpikePolarity polarity) = 0;
+  virtual void setSpikeEnabled(uint chan, bool onoroff) = 0;
+  virtual void setSpikeThreshold(uint chan, double threshold) = 0;  
+  virtual void setSpikeBlanking(uint chan, uint milliseconds) = 0;
+
+
+ protected:
+
+  /* return the right array for this type */
+  volatile uint *chanArray(ComediSubDevice::SubdevType t);
+  volatile uint *chanArray(int subdevtype);
+  volatile char *chanUseArray(ComediSubDevice::SubdevType t);
+  volatile char *chanUseArray(int t);
+
+  SharedMemStruct *shm; /* the actual shared memory region */
+
  private:
   
+  static bool haveRTLabDotO(); /* true iff a module named rt_process is 
+                                  loaded */
   static bool mbuffDevFileIsValid();
   static bool rtaiShmDevFileIsValid();
 
-  SharedMemStruct *shm; /* the actual shared memory region */
   ShmType shmType;
 
   enum FailureReason {
@@ -127,6 +139,53 @@ class ShmController
   
   /* above enum is index into this array */
   static const QString failureReasons[];
+
+};
+
+class ShmControllerNoFifo : public ShmController
+{
+ public:
+  ShmControllerNoFifo(){};
+  ~ShmControllerNoFifo(){};
+
+  /* SETTERS */
+
+  void setChannel (int t, uint chan, bool onoroff);  
+  void setChannelRange(int subdevtype, uint chan, uint r);
+  
+  /* AREF values should come from comedi.h as the AREF_* set of #defines */
+  void setChannelAREF(int subdevtype, uint chan, uint aref);
+
+  /* Spikes.. */
+  void clearSpikeSettings();
+  void setSpikePolarity(uint chan, SpikePolarity polarity);
+  void setSpikeEnabled(uint chan, bool onoroff);
+  void setSpikeThreshold(uint chan, double threshold);  
+  void setSpikeBlanking(uint chan, uint milliseconds);
+};
+
+class ShmControllerWithFifo : public ShmController
+{
+ public:
+  ShmControllerWithFifo(){};
+  ~ShmControllerWithFifo(){};
+
+  /* SETTERS */
+
+  void setChannel (int t, uint chan, bool onoroff);  
+  void setChannelRange(int subdevtype, uint chan, uint r);
+  
+  /* AREF values should come from comedi.h as the AREF_* set of #defines */
+  void setChannelAREF(int subdevtype, uint chan, uint aref);
+
+  /* Spikes.. */
+  void clearSpikeSettings();
+  void setSpikePolarity(uint chan, SpikePolarity polarity);
+  void setSpikeEnabled(uint chan, bool onoroff);
+  void setSpikeThreshold(uint chan, double threshold);  
+  void setSpikeBlanking(uint chan, uint milliseconds);
+
+  uint controlFifo() const; /* minor of the control fifo */
 
 };
 
@@ -195,10 +254,11 @@ ShmController::setChannelRange(ComediSubDevice::SubdevType s, uint c,
                                uint r)
 {setChannelRange(ComediSubDevice::sd2int(s), c, r);}
 
+
  
 inline
 void 
-ShmController::setChannelRange(int s, uint c, uint r)
+ShmControllerNoFifo::setChannelRange(int s, uint c, uint r)
 {
   volatile uint *arr = chanArray(s);
   arr[c] = CR_PACK(CR_CHAN(arr[c]), r, CR_AREF(arr[c]));
@@ -212,13 +272,15 @@ ShmController::setChannelAREF(ComediSubDevice::SubdevType s, uint c, uint a)
   setChannelAREF(ComediSubDevice::sd2int(s), c, a);
 }
 
+
 inline
 void 
-ShmController::setChannelAREF(int s, uint c, uint a)
+ShmControllerNoFifo::setChannelAREF(int s, uint c, uint a)
 {
   volatile uint *arr = chanArray(s);
   arr[c] = CR_PACK(CR_CHAN(arr[c]), CR_RANGE(arr[c]), a);
 }
+
 
 inline
 void 
@@ -256,10 +318,12 @@ ShmController::setChannel(ComediSubDevice::SubdevType t,  uint c, bool onoff)
 { setChannel(ComediSubDevice::sd2int(t), c, onoff); }
 
 
+
 inline
 void
-ShmController::setChannel(int t,  uint c, bool onoff)
+ShmControllerNoFifo::setChannel(int t,  uint c, bool onoff)
 { set_chan ( c, chanUseArray(t), onoff ); }
+
 
 inline
 uint
@@ -317,6 +381,13 @@ uint
 ShmController::aiFifoMinor() const
 { 
   return shm->ai_fifo_minor; 
+}
+
+inline
+uint 
+ShmControllerWithFifo::controlFifo() const /* minor of the control fifo */
+{
+  return shm->control_fifo;
 }
 
 #endif
