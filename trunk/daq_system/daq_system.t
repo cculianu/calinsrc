@@ -71,7 +71,15 @@ Bogus defines in rtl.mk??
   }
   AddIncludePath($rtl_dir . "/include");  
   Project("TMAKE_APP_FLAG = 1");
-
+  open OFH, '>' . "./Makefile.rtl_dir" || die q|
+------------------------------------------------------------------------------
+ABORTING TMAKE
+**************
+Cannot open ./Makefile.rtl_dir for writing
+------------------------------------------------------------------------------
+|;
+  print OFH "include " . $project{'RTL_MK'} . "\n";
+  close OFH;
   undef $rtl_dir; undef $rtlinux_dir;
 
 #$}
