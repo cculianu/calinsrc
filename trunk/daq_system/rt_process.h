@@ -22,10 +22,14 @@
 
 #ifndef _RT_PROCESS_H 
 #define _RT_PROCESS_H
+#define _COMEDILIB_DEPRECATED 
 
 #include "hardware_specific.h" //system specific info (e.g. DAQ board, RAM)
-#include <mbuff.h> // make sure a directory like /usr/src/rtl is in your include path, and that you have the mbuff driver!
-#include <comedi.h>            //comedi header file
+#include <mbuff.h> 
+
+#ifndef _LINUX_COMEDILIB_H
+#include <comedilib.h>         //comedi header file
+#endif
 
 //#define NUM_AD_CHANNELS_TO_USE NUM_AD_CHANNELS    //# analog input channels 
 #define NUM_AD_CHANNELS_TO_USE 8  //# analog input channels 
@@ -47,7 +51,11 @@ typedef unsigned long int scan_index_t;
    checksum - a checksum for data.  Currently this is unused
 */
 typedef struct {  
+#ifndef FANCYPANTS_READ_METHOD
+  lsampl_t data[NUM_AD_CHANNELS_TO_USE];   /* samples for all channels        */
+#else
   sampl_t data[NUM_AD_CHANNELS_TO_USE];   /* samples for all channels        */
+#endif
   unsigned long checksum;                 /* for checking integrity data     */
 } FIFO_struct;
 

@@ -2,8 +2,36 @@
 #!Some code to intelligently read rtl.mk
 #!
 #${
-  if (! -f $project{RTL_MK}) {
-    __daq_system_commonDeath:
+  if (! defined $ENV{'QTDIR'} ) {
+    die q|
+------------------------------------------------------------------------------
+ABORTING TMAKE
+**************
+The 'QTDIR' environment variable was not found.
+
+Since this is a QT Project, this environment variable needs to be defined
+and should point to your QT directory.  This is often (but not necessarily)
+something like '/usr/lib/qt2', '/usr/local/lib/qt2' or '/usr/local/qt2'. 
+------------------------------------------------------------------------------
+|;		
+  }
+  if (! -r '/usr/include/comedi.h' || ! -r '/usr/include/comedilib.h' ) {
+    die q|
+------------------------------------------------------------------------------
+ABORTING TMAKE
+**************
+The required comedi header files were not found.  When comedi is properly 
+installed, it copies two header files into /usr/include. They are 'comedi.h' 
+and 'comedilib.h'.
+
+These files need to be present for this build to succeed.  Please either
+put these files in /usr/include or re-install comedi.  (Run 'make install' in 
+the comedi and comedilib source directories).
+------------------------------------------------------------------------------
+|;
+  }
+  if (! -f $project{'RTL_MK'}) {
+    __daq_system_no_rtl_mk_Death:
     die q|
 ------------------------------------------------------------------------------
 ABORTING TMAKE
@@ -21,7 +49,7 @@ installed comedi.
 |;
   }
 
-  open FH, '<' . $project{RTL_MK}  || goto __daq_system_commonDeath;
+  open FH, '<' . $project{'RTL_MK'}  || goto __daq_system_no_rtl_mk_Death;
   while (<FH>) {
     if (/\s*RTL_DIR\s*=\s*(\S*)\s*$/) {
       $rtl_dir = $1;
@@ -41,7 +69,7 @@ Bogus defines in rtl.mk??
 ------------------------------------------------------------------------------
 |;
   }
-  AddIncludePath($rtl_dir . "/drivers/mbuff");  
+  AddIncludePath($rtl_dir . "/include");  
   Project("TMAKE_APP_FLAG = 1");
 
   undef $rtl_dir; undef $rtlinux_dir;

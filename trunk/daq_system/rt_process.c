@@ -20,7 +20,9 @@
  * http://www.gnu.org.
  */
 
-#include <linux/module.h>
+
+
+#include <linux/module.h> 
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/errno.h>
@@ -29,26 +31,47 @@
 #include <rtl_fifo.h>
 #include <rtl_sched.h>
 #include <rtl_sync.h>
-#include <rtl_debug.h>
 
-#include <comedi.h>           /* main comedi header file */
+#ifdef TIME_RT_LOOP
+#  include <rtl_time.h>
+#endif
+
+#include <linux/comedilib.h>
+
+/* define the below if you are feeling lucky, punk 
+   otherwise undef it for a more reliable but slower read method in source */  
+//#define FANCYPANTS_READ_METHOD
 
 #include "rt_process.h"       /* header file specific to this program */
 
+MODULE_AUTHOR("David Christini and Calin Culianu");
+MODULE_DESCRIPTION("A Real-Time Sampling Task for use with kcomedilib");
+
+
 int init_module(void);        /* set up RT stuff */
 void cleanup_module(void);    /* clean up RT stuff */
-void init_shared_mem(void);   /* set up RT shared memory */
+static int init_shared_mem(void);   /* set up RT shared memory */
+static void cleanup_fifos(void);
+static void cleanup_comedi_stuff(void);
 
-pthread_t daq_task;        /* main RT task */
-volatile SharedMemStruct *sh_mem; /* define mbuff shared memory */
+static pthread_t daq_task = 0;        /* main RT task */
+static volatile SharedMemStruct *sh_mem = 0; /* define mbuff shared memory */
 
-comedi_trig ai_trig;          /* main comedi trigger structure */
+static int        it;                /* our comedi device */
+
+#ifdef FANCYPANTS_DATA_READ_METHOD 
+static comedi_trig ai_trig;          /* main comedi trigger structure */
+#endif
 static FIFO_struct ai_fifo_struct; /* holds data array scanned from DAQ card */
                                    /* all channels scanned at once then placed */
                                    /* onto one FIFO in one rtf_put */
-int channel_index,
+static int
+#ifdef FANCYPANTS_DATA_READ_METHOD 
   ioctl_check=0,         /* flag variable to check comedi_trig_ioctl success */
-  ret;
+#endif
+  ret, 
+  numGetFifos,   /* Represents the number of successfully opened fifos */
+  numPutFifos;
 
 static const unsigned int
        getFifos[NUM_GET_FIFOS] = GET_FIFOS, /* Our set of get fifos*/
@@ -60,115 +83,159 @@ long time_tick_check[2][NUM_TIME_CHECK]; /* check time first 10 times through */
 void *daq(void *arg) { /* this task reads and writes data to a DAQ board */
   int i; /*  loop index */
 
+#ifndef FANCYPANTS_READ_METHOD
+  register unsigned int packed_param; /* temp var from sh_mem->ai_chan[i] */
+#endif
+
+#ifdef TIME_RT_LOOP
+  register hrtime_t loopstart = gethrtime();
+  register int already_got_time = 0;
+#endif
+
   while (1) { /* must loop, b/c it is a periodic task */
-      
-      sh_mem->scan_index++; /* increment scan_index counter */
 
-      /* Analog Input ... all channels in one ioctl call */
+   
+    sh_mem->scan_index++; /* increment scan_index counter */
+    /* Analog Input ... all channels in one ioctl call */
+    
+    /* gain of ai_trig is changed via sh_mem->ai_chan in non-rt-process */
+    /*   __comedi_trig_ioctl instead of comedi_trig_ioctl b/c  */
+    /*   it doesn't have as much overhead and is therefore faster */
+    /*   doesn't initialize the board every time */
 
-      /* gain of ai_trig is changed via sh_mem->ai_chan in non-rt-process */
-      /*   __comedi_trig_ioctl instead of comedi_trig_ioctl b/c  */
-      /*   it doesn't have as much overhead and is therefore faster */
-      /*   doesn't initialize the board every time */
-
-      ioctl_check = __comedi_trig_ioctl(AI_DEV,AI_SUBDEV,&ai_trig);
-      
-      /* Place the ai_fifo_struct data into each of the 'Get' fifos
-         so that our Non-RT process(es) can pick them up */
-      for (i = 0; i < NUM_GET_FIFOS; i++) {
-	/* Note: error checking is not done here.  The fifo must meet
-	   the following three conditions:
-	   1) Tt must have been created with a call to rtf_create
-	   2) It must be a fifo that is less than RTF_NO
-	   3) It must have sufficient space for ai_fifo_struct
-	   Otherwise, this put will fail! */
-	rtf_put(getFifos[i], &ai_fifo_struct, sizeof(ai_fifo_struct));
-      }
-
-      /* End of Analog Input */
-
-      ret=SpikeDetect();
-
-      pthread_wait_np();             /* wait until beginning of next period */
-
+    /* doesn't work in new comedi.. at least not until i mess with it :( -cc  */
+#ifdef FANCYPANTS_READ_METHOD    
+    ioctl_check = comedi_trigger(AI_DEV,AI_SUBDEV,&ai_trig);
+#else
+    /* cheap hack to get this working with new comedi.. 
+       this may be SLOW and may break timing! */
+    for (i = 0; i < NUM_AD_CHANNELS_TO_USE; i++) {
+      packed_param = sh_mem->ai_chan[i]; /* for shorter line length below... */
+      comedi_data_read(AI_DEV, AI_SUBDEV, CR_CHAN(packed_param), CR_RANGE(packed_param), CR_AREF(packed_param), ai_fifo_struct.data + i ); 
     }
+#endif      
+    /* Place the ai_fifo_struct data into each of the 'Get' fifos
+       so that our Non-RT process(es) can pick them up */
+    for (i = 0; i < NUM_GET_FIFOS; i++) {
+      /* Note: error checking is not done here.  The fifo must meet
+	 the following three conditions:
+	 1) Tt must have been created with a call to rtf_create
+	 2) It must be a fifo that is less than RTF_NO
+	 3) It must have sufficient space for ai_fifo_struct
+	 Otherwise, this put will fail! */
+      rtf_put(getFifos[i], &ai_fifo_struct, sizeof(ai_fifo_struct));
+    }
+    
+    /* End of Analog Input */
+    ret=SpikeDetect();
+
+#ifdef TIME_RT_LOOP
+    if (!already_got_time) {
+      rtl_printf("Main rt thread takes %d nanoseconds to iterate once.\n",
+		 gethrtime() - loopstart);
+      already_got_time = 1;
+    }
+#endif
+
+    pthread_wait_np();             /* wait until beginning of next period */
+
+  }
   return (void *)0;
 }
 
 int init_module(void) {
-  unsigned int getIndex, putIndex;      /*  for initializing FIFOs */
   pthread_attr_t attr;
+  int error = -EBUSY;
   struct sched_param sched_param;
   const char *errorMessage = "Success";
 
-  if ( comedi_lock_ioctl(AI_DEV,AI_SUBDEV)    /* lock subdevice  */
-       || comedi_lock_ioctl(AO_DEV,AO_SUBDEV) /* lock subdevice  */
+  if ( (error = comedi_lock(AI_DEV,AI_SUBDEV)) < 0     /* lock subdevice  */
+       || (error = comedi_lock(AO_DEV,AO_SUBDEV)) < 0  /* lock subdevice  */
        ) {
-    errorMessage = "Error locking subdevice on comedi_lock_ioctl";
+    errorMessage = "Cannot lock comedi subdevice";
     goto init_error;
   }
-     
- 
-  init_shared_mem();                        /* initialize shared memory */
 
+  if ( (it = comedi_open(AI_DEV)) < 0 ) {
+    error = it;
+    errorMessage = "Error opening comedi device";
+    goto init_error;
+  }   
+
+ 
+  if (!init_shared_mem())  {  
+    /* error initializing shared memory */
+    errorMessage = "Cannot allocate mbuff shared memory.  Did you create the device node? Are you asking for too much memory?";
+    error = -ENOMEM;
+    goto init_error;
+  }
+
+  /*  creates rt FIFOs as defined in rt_process.h */
+  for (numGetFifos = 0, numPutFifos = 0; 
+       numGetFifos < NUM_GET_FIFOS || numPutFifos < NUM_PUT_FIFOS ; 
+       numGetFifos++, numPutFifos++) {
+
+    if ( (numGetFifos < NUM_GET_FIFOS) 
+	 && (error = rtf_create(getFifos[numGetFifos], RT_QUEUE_SIZE))
+       ) {
+      errorMessage = "Cannot create a get fifo!";     
+      goto init_error;
+    }
+    if ( (numPutFifos < NUM_PUT_FIFOS) 
+	 && (error = rtf_create(putFifos[numPutFifos], RT_QUEUE_SIZE))
+       ) { 
+      errorMessage = "Cannot create a put fifo!";
+      goto init_error;
+    }
+  }
+#ifdef FANCYPANTS_READ_METHOD
   /* set up trigger structure for ai ... see comedi documentation for specifics */
   ai_trig.subdev = AI_SUBDEV;
   ai_trig.mode = 0;
-  ai_trig.flags = 0;
+  ai_trig.flags = 0;  /* used to be TRIG_RT -cc */
   ai_trig.n_chan = sh_mem->num_ai_chan_in_use;  /* # chans to scan each ioctl() */
   ai_trig.chanlist = (int *)sh_mem->ai_chan; /* use sh_mem so non RT process can  */
                                         /* change channel gain via CR_PACK */
   ai_trig.data=ai_fifo_struct.data;     /* array scans are placed into */
   ai_trig.n=1;
   ai_trig.data_len = ai_trig.n_chan * ai_trig.n * sizeof(sampl_t);
-  ai_trig.trigsrc=0;
+  ai_trig.trigsrc=0; /* used to be TRIG_NONE -cc */
   ai_trig.trigvar=0;
   ai_trig.trigvar1=0;
-
-  /*  creates rt FIFOs as defined in rt_process.h */
-  for (getIndex = 0, putIndex = 0; 
-       getIndex < NUM_GET_FIFOS || putIndex < NUM_PUT_FIFOS ; 
-       getIndex++, putIndex++) {
-
-    if ( (getIndex < NUM_GET_FIFOS) 
-	&& rtf_create(getFifos[getIndex], RT_QUEUE_SIZE)
-       ) {
-      errorMessage = "Cannot create a get fifo!";
-      goto init_error;
-    }
-    if ( (putIndex < NUM_PUT_FIFOS) 
-	 && rtf_create(putFifos[putIndex], RT_QUEUE_SIZE)
-       ) { 
-      errorMessage = "Cannot create a put fifo!";
-      goto init_error;
-    }
-  }
-
+#endif
   /* create the realtime task */
   pthread_attr_init(&attr);
-  sched_param.sched_priority = 1;
+  sched_param.sched_priority = SCHED_RR; // realtime scheduling
+  sched_param.sched_priority = SCHED_OTHER; // debug without realtime 
+
   pthread_attr_setschedparam(&attr, &sched_param);
-  if ( pthread_create(&daq_task, &attr, daq, (void *)0) ) {
+  if ( (error = pthread_create(&daq_task, &attr, daq, (void *)0) ) ) {
     errorMessage = "Cannot create the daq pthread";
     goto init_error;
   }
 
   /* make task periodic: run at a rate of RT_HZ */
-  if (pthread_make_periodic_np(daq_task, gethrtime(), NSECS_PER_SEC/RT_HZ)) {
+  if ( (error = 
+	pthread_make_periodic_np(daq_task, 
+				 gethrtime(), NSECS_PER_SEC/RT_HZ) ) ) {
     errorMessage = "Cannot make daq thread periodic";
     goto init_error;
   }
+
   rtl_printf(RT_PROCESS_ID ": acquisition started at %d Hz (%s)\n", 
-	 RT_HZ, errorMessage);
+	     RT_HZ, 
+	     errorMessage);
   return 0;
 
  init_error:
+  cleanup_module(); 
   rtl_printf (RT_PROCESS_ID ": Failure -- can't initalize RT task (%s)\n", 
 	      errorMessage);
-  return 1;
+  return error;
 }
 
-void init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
+/* returns 1 on success, 0 on failure */
+static int init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
 
   int i;
 
@@ -176,6 +243,10 @@ void init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
   sh_mem = 
     (volatile SharedMemStruct*) mbuff_alloc (RT_PROCESS_ID,
 					     sizeof(SharedMemStruct));
+  
+  if (! sh_mem) { /* means there was some sort of error allocating mbuff */
+    return 0;
+  }
 
   /* initialize shared memory variables ... see rt_process.h for definitions */
   sh_mem->scan_index = 0;
@@ -193,41 +264,29 @@ void init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
 
     sh_mem->ai_chan[i] = CR_PACK(i,INITIAL_CHANNEL_GAIN,AREF_GROUND);
   }
+  return 1;
 }
 
 void cleanup_module(void) {
-  int ret;
-  unsigned int getIndex, putIndex;
 
-  /*  destroys rt FIFOs as defined in rt_process.h */
-  for (getIndex = 0, putIndex = 0; 
-       getIndex < NUM_GET_FIFOS || putIndex < NUM_PUT_FIFOS ; 
-       getIndex++, putIndex++) {
-    if (getIndex < NUM_GET_FIFOS) {
-      rtf_destroy(getFifos[getIndex]);
-    }
-    if (putIndex < NUM_GET_FIFOS) {
-      rtf_destroy(putFifos[putIndex]);
-    }
-  }
+  /* close all successfully opened fifos */
+  cleanup_fifos();
 
-
-  /*  cancel any pending ai operation */
-  ret = comedi_cancel_ioctl(AI_DEV,AI_SUBDEV);
-
-  /* unlock subdevice so other comedi programs can use */
-  ret=comedi_unlock_ioctl(AI_DEV,AI_SUBDEV);
-
-  /* unlock subdevice so other comedi programs can use */
-  ret=comedi_unlock_ioctl(AO_DEV,AO_SUBDEV);
+  /* release comedi-related resources */
+  cleanup_comedi_stuff();
 
   /* delete daq_task */
-  ret= pthread_delete_np(daq_task);
-  rtl_printf(RT_PROCESS_ID ": deleted RT task (status %d) after %d cycles (~%d seconds).\n",
-	 ret, sh_mem->scan_index, sh_mem->scan_index/RT_HZ);
+  if (daq_task) {
+    pthread_delete_np(daq_task);
+    rtl_printf(RT_PROCESS_ID ": deleted RT task after %d cycles (~%d seconds).\n",
+	       (sh_mem ? sh_mem->scan_index : 0), 
+	       (sh_mem ? sh_mem->scan_index/RT_HZ: 0));
+  }
 
-  /* free up shared memory */
-  mbuff_free(RT_PROCESS_ID,(void *)sh_mem);
+  if (sh_mem) {
+    /* free up shared memory */
+    mbuff_free(RT_PROCESS_ID,(void *)sh_mem);
+  }
 
 }
 
@@ -289,5 +348,34 @@ void PrintkTimeCheckStats (void) { /* func for printk jitter & task rate stats *
 	   time_usec_check[1][jjj]-time_usec_check[0][jjj]
 	   );
   }
+
+}
+
+static void cleanup_fifos (void) {
+
+  /*  destroys rt FIFOs as defined in rt_process.h */
+  while (numGetFifos > 0) {
+    numGetFifos--;
+    rtf_destroy(getFifos[numGetFifos]);
+  }
+
+  while (numPutFifos > 0) {
+    numPutFifos--;
+    rtf_destroy(putFifos[numPutFifos]);
+  }
+ 
+}
+
+static void cleanup_comedi_stuff (void) {
+  /*  cancel any pending ai operation */
+  comedi_cancel(AI_DEV,AI_SUBDEV);
+
+  /* unlock subdevice so other comedi programs can use */
+  comedi_unlock(AI_DEV,AI_SUBDEV);
+
+  /* unlock subdevice so other comedi programs can use */
+  comedi_unlock(AO_DEV,AO_SUBDEV);
+
+  comedi_close(AI_DEV);
 
 }

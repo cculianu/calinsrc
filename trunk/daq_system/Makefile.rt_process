@@ -6,15 +6,30 @@
 #
 #######################################################################
 
-#rtl.mk is automatically generated during rtlinux install. 
-# modify this to suit your system!
+# rtl.mk is automatically generated during rtlinux install. 
+# modify this to suit your system!  
 include /usr/src/rtlinux/rtl.mk
 
+# These are the headers that go with comedi.  They are kernel headers for
+# kcomedilib stuff and don't get installed in the usual /usr/include.
+# Please point this define to your comedi source directory in the include/
+# subdirectory.
+COMEDI_DEVEL_HEADERS = /usr/src/comedi/include
 
 rt_process.o: rt_process.c
-	$(CC) ${INCLUDE} ${CFLAGS} -c -o rt_process_tmp.o rt_process.c
-	ld -r -static rt_process_tmp.o -o rt_process.o -L/usr/lib -lm 
-	rm -f rt_process_tmp.o
+# Some checks are on the next line
+	@( [ -d "${COMEDI_DEVEL_HEADERS}" ] && [ -r "${COMEDI_DEVEL_HEADERS}/linux/comedilib.h" ] || ( \
+	echo "***************************************************************************"; \
+	echo "ERROR: Cannot find the comedi kernel headers. "; \
+	echo "       These are usually in your comedi source dirctory in the include/ "; \
+	echo "       subdirectory. Please set these in Makefile.rt_process!"; \
+	echo "       (COMEDI_DEVEL_HEADERS = /path/to/comedi/src/include)" ; \
+	echo "***************************************************************************"; \
+	exit 1 ) ) 
+	@echo "***************************************************************************"
+	@echo "              Compiling The RT-Process RealTime Kernel Module"
+	@echo "***************************************************************************"
+	$(CC) ${INCLUDE} ${CFLAGS} -I ${COMEDI_DEVEL_HEADERS} -c -o rt_process_tmp.o rt_process.c
 
 clean:
 	-rm -f *.o 
