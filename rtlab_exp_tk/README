@@ -6,27 +6,54 @@ BEFORE YOU COMPILE
 Currently the makefiles build the "daq_system" application.  In order to get
 this to compile properly you must do the following:
 
-1. Make sure you have a Realtime Linux variant.  Either RT-Linux (http://www.rtlinux.com) v 3.1 or RTAI 24.1.9 needs to be installed.  Earlier versions should probably work too, but your mileage may vary.
+1. Make sure you have a Realtime Linux variant.  Either RT-Linux
+ (http://www.rtlinux.com) v 3.1 or RTAI 24.1.9 needs to be installed.  Earlier
+ versions should probably work too, but your mileage may vary.
 
-2. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
+2. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib
+ and kcomedilib are installed.
 
-3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  Be sure you know WHERE Qt is installed as the configure script asks you for this information.
+3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.
+ Be sure you know WHERE Qt is installed as the configure script asks you for
+ this information.
 
 
-Next, you must run the following command from WITHIN the source tree to configure the build system:
+Next, you must run the following command from WITHIN the source tree to
+configure the build system:
 
 	./configure
 
-Follow the on-screen prompts and input the required information.  If you correctly installed comedi, kcomedilib, RTAI/RTLinux, and you have a valid kernel source tree, everything should build just fine.
+Follow the on-screen prompts and input the required information.  If you
+correctly installed comedi, kcomedilib, RTAI/RTLinux, and you have a valid
+kernel source tree, everything should build just fine.
 
 COMPILING
 ---------
-Now that the above is done, type 'make' and hope for the best.  The binary that will be built will be "daq_system" which is the user-level program for just displaying some graphs that come from your DAQ board.
+Now that the above is done, type 'make' and hope for the best.  The binary that
+will be built will be "daq_system" which is the user-level program for just
+displaying some graphs that come from your DAQ board.
+
+
+NOTE ABOUT COMPILERS:
+
+For best results, due to C++ idiocies in g++-2.95, you should use GNU g++-2.96
+as the C++ compiler.  The regular C compiler doesn't matter too much, but you may
+have trouble with gcc-2.96 in building the rtlab.o kernel module _if_ you are using
+RTAI. (Since RTAI requires gcc 2.95).  So if you are using RTAI, you *may* need to
+mix your gcc and g++ versions.  Use g++ 2.96 and gcc 2.95 with RTAI.  (With
+RTLinux you should be find using version 2.96 of both g++ and gcc.)
+
+If you end up using g++-2.95 as the C++ compiler, you may get weird SIGABRT program
+terminations.  This is due to some strange behavior with respect to exceptions
+and how they propagate through different dynamically linked objects. (I *think*).
 
 
 RUNNING
 -------
-In order for this sample program to even run, you need to insmod the real-time part of this application, "rlab.o", which is also built into the current directory.  Before rlab.o will work, however, you have to make sure the following criteria are met:
+In order for this sample program to even run, you need to insmod the real-time
+ part of this application, "rlab.o", which is also built into the current
+ directory.  Before rlab.o will work, however, you have to make sure the
+ following criteria are met:
 
 1) You have the following modules installed:
 
@@ -38,15 +65,21 @@ In order for this sample program to even run, you need to insmod the real-time p
 			rtai rtai_sched rtai_pthread rtai_fifos rtai_shm comedi kcomedilib
 
 
-2) Also make sure your comedi device is /dev/comedi0 and that its driver is loaded and correctly configured/working.
+2) Also make sure your comedi device is /dev/comedi0 and that its driver is
+loaded and correctly configured/working.
 
 
 COMING SOON
 -----------
-More in the way of an actual toolkit.  Including documentation, more C++ classes and templates, and more development to the core architecture. Also more applications will be built as reference implementations of software that uses the toolkit.
+More in the way of an actual toolkit.  Including documentation, more C++ classes
+and templates, and more development to the core architecture. Also more
+applications will be built as reference implementations of software that uses
+the toolkit.
 
 
-Please come back to http://www.rtlab.org soon to check for changes.  Also if you are interested in updates, please suubscribe to the mailing list.  We hope this software will grow very much in the coming months!
+Please come back to http://www.rtlab.org soon to check for changes.  Also if you
+are interested in updates, please suubscribe to the mailing list.  We hope this
+software will grow very much in the coming months!
 
 
 Calin A. Culianu
