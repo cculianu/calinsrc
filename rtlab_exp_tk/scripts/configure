@@ -1,31 +1,32 @@
 #!/bin/bash
 
 # the list of variables we are concerned with
-VARS="LINUXDIR RTOSDIR RTOS CFLAGS CPPFLAGS CC LD MODULE_COMPILE_FLAGS COMEDI_DEVEL_INCLUDE QTDIR"
+VARS="LINUXDIR RTOSDIR RTOS CC LD LDFLAGS MODULE_COMPILE_FLAGS COMEDI_DEVEL_INCLUDE QTDIR QMAKESPEC"
+LOADVARS="LINUXDIR RTOSDIR RTOS COMEDI_DEVEL_INCLUDE QTDIR QMAKESPEC"
+VARSFILE=".buildvars"
 
 # ============================================================================
 # FUNCTIONS
 # ============================================================================
 function save () {
-	(rm $1; touch $1) || (echo "Could not save to '$1'" && exit 1)
+	(touch $1; rm $1; touch $1) || (echo "Could not save to '$1'" && exit 1)
 	for var in $VARS; do
 		eval "echo ${var}=$"${var}" >> $1"
 	done
 }
 
+function load () {
+	for var in $LOADVARS; do
+		eval "$var='"`grep ^${var}= $1 | cut -f 2- -d '='`"'"
+	done
+}
+
 function setDefaults {
-	if [ -z "$QTDIR" ]; then
-		QTDIR="/usr/local/qt"
-	fi
 
-	if [ -z "$LINUXDIR" ]; then
-		LINUXDIR="/usr/src/linux"
-	fi
-
-	if [ -z "${COMEDI_DEVEL_INCLUDE}" ]; then
-		COMEDI_DEVEL_INCLUDE=/usr/src/comedi/include
-	fi
-
+	QTDIR=${QTDIR:-"/usr/local/qt"}
+	QMAKESPEC=${QMAKESPEC:-"linux-g++"}
+	LINUXDIR=${LINUXDIR:-"/usr/src/linux"}
+	COMEDI_DEVEL_INCLUDE=${COMEDI_DEVEL_INCLUDE:-"/usr/src/comedi/include"}
 }
 
 function defaultifyRTOSDIRIntelligently {
@@ -47,33 +48,31 @@ function saveOldVars {
 # ============================================================================
 # MAIN PROGRAM
 # ============================================================================
-if [ -z "${DEVEL}" ]; then
-	cat <<EOF
-  *** The configure script is not working yet!
-EOF
-	exit 1
-fi
-
-if [ -e ".config" ]; then
-	. .config
+if [ -e "$VARSFILE" ]; then
+	load $VARSFILE
 fi
 
 saveOldVars
 setDefaults
 
+#LINUXDIR
 read -p "Please enter the location of your linux source directory [${LINUXDIR}]: "
 if [ -n "${REPLY}" ]; then
 	LINUXDIR="$REPLY"
 fi
 
 . scripts/check_kernel
+#END LINUXDIR
 
+# RTOS
 . scripts/check_rtos # populates RTOS variable
 
 
 echo
 echo "You appear to be running an ${RTOS}-patched kernel"
+# END RTOS
 
+# RTOSDIR
 defaultifyRTOSDIRIntelligently
 
 echo
@@ -83,7 +82,10 @@ if [ -n "${REPLY}" ]; then
 fi
 
 . scripts/check_rtosdir
+# END RTOSDIR
 
+
+# COMEDI_DEVEL_INCLUDE
 echo
 read -p "Please enter the location of your Comedi development headers (must contain linux/comedilib.h) [${COMEDI_DEVEL_INCLUDE}]: "
 if [ -n "${REPLY}" ]; then
@@ -91,7 +93,9 @@ if [ -n "${REPLY}" ]; then
 fi
 
 . scripts/check_comedi
+# END COMEDI_DEVEL_INCLUDE
 
+# QTDIR
 echo
 read -p "Please enter the location of your Qt 3.x directory [${QTDIR}]: "
 if [ -n "${REPLY}" ]; then
@@ -99,10 +103,45 @@ if [ -n "${REPLY}" ]; then
 fi
 
 . scripts/check_qtdir
+#END QTDIR
+
+# QMAKESPEC
+imdone=""
+
+while [ -z "${imdone}" ]; do
+	echo
+	read -p "Please specify a QMAKESPEC value (most people use linux-g++) [${QMAKESPEC}]: "
+	if [ -n "${REPLY}" ]; then
+		QMAKESPEC=$REPLY
+	fi
+	if [ -d "${QTDIR}/mkspecs/${QMAKESPEC}" ]; then
+		imdone=1
+	else
+		dirs=`/bin/ls -C $QTDIR/mkspecs/`
+		cat <<EOF
+  *****    ERROR!!!
+  *****
+  *****    $QMAKESPEC is an invalid QMAKESPEC directory.  Enter one of:
+  *****
+$dirs
+EOF
+	fi
+done
+# END QMAKESPEC
 
 . scripts/set_compile_vars
 
-save .config
+save $VARSFILE
+
+# NOT NEEDED AS MAKE SCRIPT AUTO-POPULATES QTDIR FROM .buildvars FILE
+#if [ -z "$QTDIR" ]; then
+#	cat <<EOF
+# *****    WARNING!!!
+# *****
+# *****    You must set the QTDIR environment variable to point to your
+# *****    QT 3.x directory before you can run 'make'.
+#EOF
+#fi
 
 echo
-echo "Generated .config, next run 'make' to build RTLab"
+echo "Generated ${VARSFILE}, next run 'make' to build RTLab"
