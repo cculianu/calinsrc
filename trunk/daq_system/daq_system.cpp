@@ -1331,6 +1331,7 @@ void DAQSystem::WhatsThis()
 }
 
 void DAQSystem::QuitDAQSystem() {
+  SaveLog();
   f_out.close();
 
 #ifdef DAQ_DEBUG_FLAG
