@@ -24,9 +24,9 @@ class SampleStructSource {
 
  protected:
   SampleStructSource(); /* abstract class.. no public constructors */
-  size_t num_bytes_last_read, max_read_memory;
+  size_t num_bytes_last_read, read_memory_sz;
   SampleStruct *read_memory; /* dyn. alloc array of SampleStructs 
-				from last read */
+                                from last read */
 };
 
 class SampleStructFileSource : public SampleStructSource {

@@ -24,10 +24,12 @@
 # define _RT_PROCESS_H
 
 # include <mbuff.h> 
+# include <rtl_time.h>
 # include "shared_stuff.h" /* for SampleStruct type */
 
 
 # define BILLION ((long int)1000000000)
+# define MILLION (1000000)
 
 # define RT_PROCESS_MODULE_NAME "rt_process"
 
@@ -36,27 +38,31 @@
 # define INITIAL_A_CHANNEL 1     //initial channel for A signal
 # define INITIAL_SAMPLING_RATE_HZ 1000
 # define INITIAL_SPIKE_BLANKING INITIAL_SAMPLING_RATE_HZ/20 
-                                   /* initial interval for disabling
-                                      v_spike detect ... i.e. 1/20 sec, 50ms */
+/* initial interval for disabling
+   v_spike detect ... i.e. 1/20 sec, 50ms */
 
 
 # define DEFAULT_COMEDI_MINOR   0    /* /dev/comediX device to use: this 
-					should some day come from a config 
-					script?                              */
+                                        should some day come from a config 
+                                        script?                              */
 
 # define DEFAULT_AI_FIFO        0    /* the /dev/rtfX device to use: this 
-					should some day come from a config 
-					script and/or be more dynamic?       */
+                                        should some day come from a config 
+                                        script and/or be more dynamic?       */
 # define DEFAULT_AO_FIFO        1    /* the /dev/rtfX device to use: this 
-					should some day come from a config 
-					script and/or be more dynamic?       */
+                                        should some day come from a config 
+                                        script and/or be more dynamic?       */
 
+# define DEFAULT_SPIKE_FIFO     2    /* the /dev/rtfX device to use: this
+                                        should some day be more dynamic, 
+                                        such as coming from a config
+                                        script.                              */
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
   hrtime_t acq_start; /* hrtime that data acquisition started for first chan.*/
   hrtime_t acq_end;   /* hrtime that data acquisition ended for last channel */
   unsigned int n_samples;            /* the number of valid elements in the 
-					samples array */
+                                        samples array */
   SampleStruct samples[SHD_MAX_CHANNELS];
 } MultiSampleStruct;
 
@@ -70,6 +76,12 @@ struct rt_function_list {
   struct rt_function_list *next;
 };
 
+struct spike_info {
+  /* The last time a spike was encountered in each channel */
+  hrtime_t last_spike_time[SHD_MAX_CHANNELS];
+  /* the set of channels that have spikes */
+  char spikes_this_scan[CHAN_MASK_SIZE];
+};
 
 /* 
    EXPORTED FUNCTIONS
@@ -100,5 +112,15 @@ int rtp_deactivate_function(rtfunction_t function);
    returns 0 on success, EINVAL on error */
 int rtp_activate_function(rtfunction_t function);
 
+
+
+
+/* 
+   EXPORTED VARIABLES:
+   Other variables present in rt_process.o: 
+*/
+
+/* Run-time spike information exported to the outside world. */
+extern struct spike_info spike_info;
 
 #endif 

@@ -20,14 +20,11 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#ifndef _SAMPLE_CONSUMER_H
-# define _SAMPLE_CONSUMER_H
-
-#include "common.h"
-#include "producer_consumer.h"
-
-struct SampleStruct;
-
-typedef Consumer<const SampleStruct *> SampleConsumer;
-
+#ifndef _SPIKE_POLARITY_H
+#define _SPIKE_POLARITY_H
+/* spike detect controls */
+typedef enum {
+    Negative = 0,
+    Positive = 1
+} SpikePolarity;
 #endif

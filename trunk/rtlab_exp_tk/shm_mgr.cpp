@@ -194,3 +194,59 @@ ShmMgr::devFileIsValid()
 }
 
 
+void ShmMgr::clearSpikeSettings()
+{
+  check();
+  init_spike_params(&shm->spike_params);
+}
+
+void ShmMgr::setSpikePolarity(uint chan, SpikePolarity p) 
+{
+  check();
+  _set_bit(chan, shm->spike_params.polarity_mask, p);
+}
+
+void ShmMgr::setSpikeEnabled(uint chan, bool onoroff)
+{
+  check();
+  _set_bit(chan, shm->spike_params.enabled_mask, onoroff);
+}
+
+void ShmMgr::setSpikeThreshold(uint chan, double d)
+{
+  check();
+  shm->spike_params.threshold[chan] = d;
+}
+
+void ShmMgr::setSpikeBlanking(uint chan, uint msec)
+{
+  check();
+  shm->spike_params.blanking[chan] = msec;
+}
+
+SpikePolarity ShmMgr::spikePolarity(uint chan) 
+{
+  check();
+  return (SpikePolarity)_test_bit(chan, shm->spike_params.polarity_mask);
+}
+
+bool ShmMgr::spikeEnabled(uint chan)
+{
+  check();
+  return _test_bit(chan, shm->spike_params.enabled_mask);
+}
+
+double ShmMgr::spikeThreshold(uint chan)
+{
+  check();
+  return shm->spike_params.threshold[chan];
+}
+
+uint ShmMgr::spikeBlanking(uint chan)
+{
+  check();
+  return shm->spike_params.blanking[chan];
+}
+
+
+

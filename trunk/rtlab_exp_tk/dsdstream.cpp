@@ -14,7 +14,7 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef NDEBUG
+#ifdef DEBUG
 #include <string>
 #include <iostream>
 #endif
@@ -37,7 +37,7 @@ DSDStream::DSDStream() : QDataStream(), data_buf(0), data_buf_sz(0)
   init(0);
 }
 
-void DSDStream::init(int mode) throw (FileException)
+void DSDStream::init(int mode)// throw (FileException)
 {
   currentIndex = lastIndex = 0;
 
@@ -55,7 +55,7 @@ void DSDStream::init(int mode) throw (FileException)
   removeChannelQueue.clear();
 }
 
-void DSDStream::init(const QString & outFile, sampling_rate_t rate, FileDataType dataType) throw (FileException)
+void DSDStream::init(const QString & outFile, sampling_rate_t rate, FileDataType dataType)// throw (FileException)
 {
   unsetDevice();
   setDevice(new QFile(outFile));
@@ -65,7 +65,7 @@ void DSDStream::init(const QString & outFile, sampling_rate_t rate, FileDataType
   fileDataType = dataType;
 }
 
-void DSDStream::init(const QString & inFile) throw (FileException)
+void DSDStream::init(const QString & inFile) //throw (FileException)
 {
   unsetDevice();
   setDevice(new QFile(inFile));
@@ -77,7 +77,7 @@ DSDStream::~DSDStream()
   end();
 }
 
-void DSDStream::start() throw (FileException, FileFormatException, IllegalStateException)
+void DSDStream::start() //throw (FileException, FileFormatException, IllegalStateException)
 {
   if (alreadyBegan) return;
 
@@ -92,7 +92,7 @@ void DSDStream::start() throw (FileException, FileFormatException, IllegalStateE
     sampleData.clear();
     uint magic = 0, fdt = 0;
     *this >> magic >> fdt;
-#ifndef NDEBUG
+#ifdef DEBUG
     cerr << "Read magic: " << magic << " Fdt: " << fdt << endl;
 #endif
     Assert<FileFormatException>( magic == MAGIC, "Bad file format", "This file is not a DSD file.");
@@ -113,7 +113,7 @@ void DSDStream::end()
       history.maskStates.push_back(maskState);
       history.rateStates.push_back(rateState);
       serializeHistory();
-    } catch (FileException & e) {  }
+    } catch (Exception & e) {  }
   }
   unsetDevice(); // also deletes .. :)
   if (data_buf) { delete data_buf; data_buf = 0; data_buf_sz = 0; }
@@ -248,7 +248,7 @@ void DSDStream::setSamplingRate ( sampling_rate_t r  )
   rateChangedThisScan = true;
 }
 
-void DSDStream::flush() throw (FileException)
+void DSDStream::flush() //throw (FileException)
 {
   switch(fileDataType) {
   case DOUBLE:
@@ -258,12 +258,12 @@ void DSDStream::flush() throw (FileException)
     flushTempl<float>();
     break;
   default:
-    throw Exception("INTERNAL ERROR", "Unknown file data type specified");
+    throw FileFormatException("INTERNAL ERROR", "Unknown file data type specified");
     break;
   }
 }
 
-template<class T> void DSDStream::flushTempl() throw (FileException)
+template<class T> void DSDStream::flushTempl() //throw (FileException)
 {
   if (!(mode() & IO_WriteOnly) || !isOpen() || !flushPending) return;
 
@@ -284,14 +284,14 @@ template<class T> void DSDStream::flushTempl() throw (FileException)
   lastIndex = scanIndex();
 }
 
-void DSDStream::writeSample ( const SampleStruct * s ) throw (IllegalStateException, FileFormatException, FileException)
+void DSDStream::writeSample ( const SampleStruct * s ) //throw (IllegalStateException, FileException)
 {
   if (!(mode() & (IO_WriteOnly | IO_Truncate)) ) return;
 
   if (!alreadyBegan) { start(); history.scanCount++;/* hack */ }
 
-  Assert(s->scan_index >= scanIndex(),
-         "Illegal DSDStream state.", "Sample encountered out of order!");
+  Assert<IllegalStateException>(s->scan_index >= scanIndex(),
+                               "Illegal DSDStream state.", "Sample encountered out of order!");
 
   if (s->scan_index > scanIndex()) {
     flush();
@@ -310,7 +310,7 @@ void DSDStream::writeSample ( const SampleStruct * s ) throw (IllegalStateExcept
 }
 
 // this seems to be broken in that it always returns true!
-template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) throw (FileException)
+template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) //throw (FileException)
 {
   bool have_insn = false;
 
@@ -359,7 +359,7 @@ template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) throw 
 
 /* reads the next full scan and modifies m to be channel-id -> SampleStruct  */
 bool
-DSDStream::readNextScan (map<uint, SampleStruct> & m) throw (IllegalStateException, FileFormatException, FileException)
+DSDStream::readNextScan (map<uint, SampleStruct> & m) //throw (IllegalStateException, FileFormatException, FileException)
 {
   bool ret = true;
   uint i;
@@ -378,7 +378,7 @@ DSDStream::readNextScan (map<uint, SampleStruct> & m) throw (IllegalStateExcepti
   return ret;
 }
 
-bool DSDStream::readNextSample ( SampleStruct * s ) throw (IllegalStateException, FileFormatException, FileException)
+bool DSDStream::readNextSample ( SampleStruct * s ) //throw (IllegalStateException, FileFormatException, FileException)
 {
   if (!(mode() & (IO_ReadOnly)) ) return false;
 
@@ -392,7 +392,7 @@ bool DSDStream::readNextSample ( SampleStruct * s ) throw (IllegalStateException
     return readNextSampleTempl<float>(s);
     break;
   default:
-    throw Exception("INTERNAL ERROR", "Unknown file data type specified");
+    throw FileFormatException("INTERNAL ERROR", "Unknown file data type specified");
     break;
   }
 }
@@ -406,7 +406,8 @@ void DSDStream::maskChanged()
   maskState.computeChannelsOn();
   sampleData.resize(maskState.mask.numOn());
   for (uint i = 0; i < tempData.size(); i++) {
-     sampleData[maskState.id_to_pos_map[tempchanson[i]]] = tempData[i];
+    if (maskState.id_to_pos_map.find(tempchanson[i]) != maskState.id_to_pos_map.end())
+      sampleData[maskState.id_to_pos_map[tempchanson[i]]] = tempData[i];
   }
 }
 
@@ -479,7 +480,7 @@ void DSDStream::doInsn()
     *this >> maskState.mask;
     maskState.startIndex = currentIndex;
     maskChanged();
-#ifndef NDEBUG
+#ifdef DEBUG
     cerr << (string("Found mask changed instruction in file. Changing mask for index ") + maskState.startIndex) << " total chans: "
          << maskState.mask.numOn() << endl;
 #endif
@@ -487,19 +488,19 @@ void DSDStream::doInsn()
   case RATE_CHANGED_INSN:
     *this >> rateState.rate;
     rateState.startIndex = currentIndex;
-#ifndef NDEBUG
+#ifdef DEBUG
     cerr << (string("Found rate changed instruction in file. Changing rate to ") + rateState.rate) << (string(" for index ") + rateState.startIndex) << endl;
 #endif
     break;
   case INDEX_CHANGED_INSN:
      tmpVal = currentIndex;
     *this >> currentIndex;
-#ifndef NDEBUG
+#ifdef DEBUG
     cerr << ((string("Found index changed instruction in file. Changing index from ") + tmpVal) + (string(" to ") + currentIndex)) << endl;
 #endif
     break;
   default:
-    throw Exception("INTERNAL ERROR", "Unknown instruction encountered in data file!");
+    throw FileFormatException("INTERNAL ERROR", "Unknown instruction encountered in data file!");
     break;
   }
 }
@@ -548,7 +549,7 @@ void DSDStream::putIndexChangedInsn()
 }
 
 
-QDataStream & DSDStream::writeRawBytes (const char * s, uint len) throw (FileException)
+QDataStream & DSDStream::writeRawBytes (const char * s, uint len) //throw (FileException)
 {
       device()->resetStatus();
       QDataStream & ret = QDataStream::writeRawBytes(s, len);
@@ -558,7 +559,7 @@ QDataStream & DSDStream::writeRawBytes (const char * s, uint len) throw (FileExc
       return ret;
 }
 
-QDataStream & DSDStream::readRawBytes ( char * s, uint len ) throw (FileException)
+QDataStream & DSDStream::readRawBytes ( char * s, uint len ) //throw (FileException)
 {
       device()->resetStatus();
       QDataStream & ret = QDataStream::readRawBytes(s, len);
@@ -569,7 +570,7 @@ QDataStream & DSDStream::readRawBytes ( char * s, uint len ) throw (FileExceptio
 }
 
 // only should be called from within end()!
-void DSDStream::serializeHistory() throw (FileException)
+void DSDStream::serializeHistory() //throw (FileException)
 {
   QByteArray byte_arr;
   QBuffer buf(byte_arr);
@@ -584,22 +585,23 @@ void DSDStream::serializeHistory() throw (FileException)
   *this << byte_arr << footerLength << MAGIC;
   device()->flush();
   footerOffset = device()->size() - (footerLength+sizeof(footerLength)+sizeof(MAGIC));
-#ifndef NDEBUG
+#ifdef DEBUG
   cerr << "Footer offset: " << footerOffset << " Footer Length: " << footerLength << " File size: " << device()->size() << endl;
 #endif
 }
 
-void DSDStream::unserializeHistory() throw (FileException)
+void DSDStream::unserializeHistory() //throw (FileException)
 {
   QIODevice::Offset whereWeBegan = device()->at();
 
   device()->at(device()->size() - ( sizeof(footerLength)+sizeof(MAGIC) ) );
   uint magic = 0;
   *this >> footerLength >> magic;
-  Assert( MAGIC == magic,
-          "File format bad", "This file was not properly closed and is missing its metadata! Run the DSD repair tool!");
+  Assert<FileFormatException>( MAGIC == magic,
+                               "File format bad",
+                               "This file was not properly closed and is missing its metadata! Run the DSD repair tool!");
   footerOffset = device()->size() - (footerLength+sizeof(footerLength)+sizeof(MAGIC));
-#ifndef NDEBUG
+#ifdef DEBUG
   cerr << "Footer offset: " << footerOffset << " Footer Length: " << footerLength << " File size: " << device()->size() << endl;
 #endif
   device()->at(footerOffset);
@@ -644,7 +646,7 @@ __setNaN_TEMPL(float, ieee754_float,f)
 __setNaN_TEMPL(double, ieee754_double,d)
 #undef __setNaN_TEMPL
 
-template<> DSDStream & DSDStream::operator>>(char & t) throw(FileException)
+template<> DSDStream & DSDStream::operator>>(char & t) //throw(FileException)
 {
   Q_INT8 q; // prevents some compiler warnings...
   *this >> q;
@@ -653,7 +655,7 @@ template<> DSDStream & DSDStream::operator>>(char & t) throw(FileException)
 };
 
 /* the following specialization is pretty platform-specific -- todo: revice this for 64-bit arch's */
-template<> DSDStream & DSDStream::operator>>(uint64 & t) throw(FileException)
+template<> DSDStream & DSDStream::operator>>(uint64 & t) //throw(FileException)
 {
   Q_UINT8 * a = reinterpret_cast<Q_UINT8 *>(&t);
   uint i;
@@ -661,19 +663,19 @@ template<> DSDStream & DSDStream::operator>>(uint64 & t) throw(FileException)
     *this >> a[i];
   return *this;
 };
-template<> DSDStream & DSDStream::operator>>(int64 & t) throw(FileException)
+template<> DSDStream & DSDStream::operator>>(int64 & t) //throw(FileException)
 {
   *this >> *reinterpret_cast<uint64 *>(&t);
   return *this;
 };
 
-template<> DSDStream & DSDStream::operator<<(const char & t) throw (FileException)
+template<> DSDStream & DSDStream::operator<<(const char & t) //throw (FileException)
 {
   *this<<((Q_UINT8)t);
   return *this;
 };
 
-template<> DSDStream & DSDStream::operator<<(const uint64 & t) throw (FileException)
+template<> DSDStream & DSDStream::operator<<(const uint64 & t) //throw (FileException)
 {
   const Q_UINT8 *a = reinterpret_cast<const Q_UINT8 *>(&t);
   uint i;
@@ -682,7 +684,7 @@ template<> DSDStream & DSDStream::operator<<(const uint64 & t) throw (FileExcept
   return *this;
 };
 
-template<> DSDStream & DSDStream::operator<<(const int64 & t) throw (FileException)
+template<> DSDStream & DSDStream::operator<<(const int64 & t) //throw (FileException)
 {
   *this << *reinterpret_cast<const uint64 *>(&t);
   return *this;

@@ -29,13 +29,13 @@
 
 #include <stdio.h>
 
-template<> DSDStream & DSDStream::operator<<(const ChannelMask & m) throw (FileException)
+template<> DSDStream & DSDStream::operator<<(const ChannelMask & m) //throw (FileException)
 {
   m.serialize(*this);
   return *this;
 }
 
-template<> DSDStream & DSDStream::operator>>(ChannelMask & m) throw (FileException)
+template<> DSDStream & DSDStream::operator>>(ChannelMask & m) //throw (FileException)
 {
   m.unserialize(*this);
   return *this;
@@ -92,7 +92,7 @@ void DSDStream::StateHistory::computeMaxUniqueChannelsUsed()
       if (it->mask.isOn(i) && chans.find(i) == chans.end())
         chans.insert(i);
   max_unique_channels_used = chans.size();
-#ifndef NDEBUG
+#ifdef DEBUG
   cerr << "Unique channels computed: " << max_unique_channels_used << endl;
 #endif
 }
@@ -183,7 +183,7 @@ void DSDStream::ChannelMask::serialize(Settings & settings, const QString & sect
 }
 
 // needed by class DSDStream for doing the MASK_CHANGED_INSN
-size_t DSDStream::ChannelMask::serialize(DSDStream & s) const throw (Exception)
+size_t DSDStream::ChannelMask::serialize(DSDStream & s) const //throw (Exception)
 {
   size_t ret = s.device()->at();
 
@@ -254,7 +254,7 @@ void DSDStream::ChannelMask::unserialize(const Settings & settings, const QStrin
 }
 
 // needed by class DSDStream for doing the MASK_CHANGED_INSN
-size_t DSDStream::ChannelMask::unserialize(DSDStream & s) throw (Exception)
+size_t DSDStream::ChannelMask::unserialize(DSDStream & s) //throw (Exception)
 {
   size_t readLen = s.device()->at();
 

@@ -1,0 +1,10 @@
+
+all: avn_stim.so
+
+avn_stim.so: avn_stim.cpp plugin.h daq_system.h exception.h simple_text_editor.h common.h config.h
+	@echo "***************************************************************************"
+	@echo "                          Compiling AVN Stim Plugin"
+	@echo "***************************************************************************"
+	g++ -L${QTDIR}/lib -I${QTDIR}/include -shared -export-dynamic -lqt -o avn_stim.so avn_stim.cpp
+
+

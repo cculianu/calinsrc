@@ -40,9 +40,8 @@
   *@author Calin Culianu
   */
 
-inline void chkIOErr(const QIODevice * d, const char *msg1 = 0, const char *msg2 = 0) throw (FileException)
+inline void chkIOErr(const QIODevice * d, const char *msg1 = 0, const char *msg2 = 0) //throw (FileException)
 {
-    Assert(d, "INTERNAL ERROR", "chkIOErr() was passed a null device!");
     if (msg1 && msg2)
       Assert<FileException>(d->status() == IO_Ok, msg1, msg2);
     else if (d->mode() & IO_WriteOnly)
@@ -74,7 +73,7 @@ public:
 
   /* call this to setup/compute some stats on a reading stream -- otherwise methods like scanCount() and sampleCount() will be
      innacurate.  Otherwise this is implicityly called by writeSample() and readNextSample() */
-  void start() throw (FileException, FileFormatException, IllegalStateException);
+  void start(); //throw (FileException, FileFormatException, IllegalStateException);
 
   /* call this to close the output file and flush pending writes.  Writing no longer possible after this is called */
   /* on a reading stream, this closes the infile, invalidating all future reads */
@@ -115,19 +114,19 @@ public:
      This generally is a scan index that is lower than the current index.
      Does nothing if d->mode() is not (IO_WriteOnly | IO_Truncate)
   */
-  void writeSample ( const SampleStruct * s) throw (IllegalStateException, FileFormatException, FileException);
+  void writeSample ( const SampleStruct * s); //throw (IllegalStateException, FileException);
 
   /*
      Reads a sample from the device
      Does nothing if d->mode() is not (IO_ReadOnly)
   */
-  bool readNextSample (SampleStruct * s) throw (IllegalStateException, FileFormatException, FileException);
+  bool readNextSample (SampleStruct * s); //throw (IllegalStateException, FileFormatException, FileException);
 
-  bool readNextSample (SampleStruct & s) throw (IllegalStateException, FileFormatException, FileException)
+  bool readNextSample (SampleStruct & s) //throw (IllegalStateException, FileFormatException, FileException)
     { return readNextSample(&s);}
 
   /* reads the next full scan and modifies m to be channel-id -> SampleStruct */
-  bool readNextScan (map<uint, SampleStruct> & m) throw (IllegalStateException, FileFormatException, FileException);
+  bool readNextScan (map<uint, SampleStruct> & m) ;//throw (IllegalStateException, FileFormatException, FileException);
 
   FileDataType dataType() const { return fileDataType; };
 
@@ -141,23 +140,23 @@ public:
 
 
 protected:
-   QDataStream & writeRawBytes (const char * s, uint len) throw (FileException);
+   QDataStream & writeRawBytes (const char * s, uint len); //throw (FileException);
 
-   QDataStream & readRawBytes (char * s, uint len) throw (FileException);
+   QDataStream & readRawBytes (char * s, uint len); //throw (FileException);
 
-   template<class T> DSDStream & operator>>(T & t) throw (FileException) {
+   template<class T> DSDStream & operator>>(T & t) /*throw (FileException)*/ {
       *static_cast<QDataStream *>(this) >> (t);
       chkIOErr(device());
       return *this;
    };
 
-   template<class T> DSDStream & operator<<(const T & t) throw (FileException) {
+   template<class T> DSDStream & operator<<(const T & t) /*throw (FileException)*/ {
       *static_cast<QDataStream *>(this) << (t);
       chkIOErr(device());
       return *this;
    };
 
-   template <class T> DSDStream & operator>>(vector<T> & v) throw (FileException) {
+   template <class T> DSDStream & operator>>(vector<T> & v) /*throw (FileException)*/ {
      size_t size;
      *this >> size;
      v.resize(size);
@@ -165,7 +164,7 @@ protected:
      return *this;
    };
 
-   template <class T> DSDStream & operator<<(const vector<T> & v) throw (FileException) {
+   template <class T> DSDStream & operator<<(const vector<T> & v) /*throw (FileException)*/ {
        *this << v.size(); const T * it;
        for (it = v.begin(); it != v.end(); it++)
          *this <<  *it;
@@ -173,9 +172,9 @@ protected:
    };
 
 
-  void init(int mode) throw (FileException);
-  void init(const QString & outFile, sampling_rate_t rate, FileDataType dataType) throw (FileException);
-  void init(const QString & inFile) throw (FileException);
+  void init(int mode);// throw (FileException);
+  void init(const QString & outFile, sampling_rate_t rate, FileDataType dataType) ;//throw (FileException);
+  void init(const QString & inFile) ;//throw (FileException);
   void unsetDevice() {   QIODevice * d = device(); QDataStream::unsetDevice(); if (d) { d->close(); delete d; } };
 
 private:
@@ -189,9 +188,9 @@ private:
   void setNaN (float * d) const;
   void setNaN (double * d) const;
 
-  template<class T> bool readNextSampleTempl ( SampleStruct * s) throw (FileException);
-  template<class T> void flushTempl() throw (FileException); // it is important to call this before closing your QIODevice!
-  void flush() throw(FileException); // calls above flush with the right template param
+  template<class T> bool readNextSampleTempl ( SampleStruct * s);// throw (FileException);
+  template<class T> void flushTempl();// throw (FileException); // it is important to call this before closing your QIODevice!
+  void flush();// throw(FileException); // calls above flush with the right template param
 
   void resetScanFlags();
 
@@ -214,8 +213,8 @@ private:
   void putIndexChangedInsn();
   void doInsn();
 
-  void serializeHistory() throw (FileException);
-  void unserializeHistory() throw (FileException);
+  void serializeHistory();// throw (FileException);
+  void unserializeHistory();// throw (FileException);
 
   static Instruction uint2insn(uint i)
   {
@@ -283,11 +282,11 @@ class DSDIStream: public DSDStream {
 public:
   /* reading DSDStream constructor */
   DSDIStream() : DSDStream() {};
-  DSDIStream (const QString & inFile) throw (FileException)
+  DSDIStream (const QString & inFile)// throw (FileException)
     { setInFile(inFile); } ;
-  void setInFile(const QString & inFile) throw (FileException)
+  void setInFile(const QString & inFile)// throw (FileException)
     { end(); init(inFile); } ;
-  void jumpToScanIndex(scan_index_t index) throw (IllegalStateException, FileFormatException, FileException)
+  void jumpToScanIndex(scan_index_t index)// throw (IllegalStateException, FileFormatException, FileException)
     { index++;/* stub for now */ };
 
 };
@@ -296,19 +295,19 @@ class DSDOStream: public DSDStream {
 public:
   /* writing DSDStream constructor */
   DSDOStream() : DSDStream() {};
-  DSDOStream( const QString & outFile, sampling_rate_t rate, FileDataType dataType = FLOAT) throw (FileException)
+  DSDOStream( const QString & outFile, sampling_rate_t rate, FileDataType dataType = FLOAT)// throw (FileException)
    { setOutFile(outFile, rate, dataType); };
-  void setOutFile( const QString & outFile, sampling_rate_t rate, FileDataType dataType = FLOAT  ) throw (FileException)
+  void setOutFile( const QString & outFile, sampling_rate_t rate, FileDataType dataType = FLOAT  )// throw (FileException)
    { end(); init(outFile, rate, dataType); };
 };
 
-template<> DSDStream & DSDStream::operator>>(char & t) throw(FileException);
-template<> DSDStream & DSDStream::operator>>(uint64 & t) throw(FileException);
-template<> DSDStream & DSDStream::operator>>(int64 & t) throw(FileException);
-template<> DSDStream & DSDStream::operator<<(const char & t) throw (FileException);
-template<> DSDStream & DSDStream::operator<<(const uint64 & t) throw (FileException);
-template<> DSDStream & DSDStream::operator<<(const int64 & t) throw (FileException);
-template<> DSDStream & DSDStream::operator<<(const ChannelMask & m) throw (FileException); // look in dsdstream_inner.cpp for definition
-template<> DSDStream & DSDStream::operator>>(ChannelMask & m) throw (FileException);       // ''
+template<> DSDStream & DSDStream::operator>>(char & t) ;//throw(FileException);
+template<> DSDStream & DSDStream::operator>>(uint64 & t) ;//throw(FileException);
+template<> DSDStream & DSDStream::operator>>(int64 & t) ;//throw(FileException);
+template<> DSDStream & DSDStream::operator<<(const char & t) ;//throw (FileException);
+template<> DSDStream & DSDStream::operator<<(const uint64 & t);// throw (FileException);
+template<> DSDStream & DSDStream::operator<<(const int64 & t);// throw (FileException);
+template<> DSDStream & DSDStream::operator<<(const ChannelMask & m);// throw (FileException); // look in dsdstream_inner.cpp for definition
+template<> DSDStream & DSDStream::operator>>(ChannelMask & m);// throw (FileException);       // ''
 
 #endif

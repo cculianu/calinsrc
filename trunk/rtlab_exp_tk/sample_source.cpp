@@ -43,7 +43,7 @@
 SampleStructSource::SampleStructSource() 
 { 
   read_memory = NULL;
-  max_read_memory = num_bytes_last_read = 0;
+  read_memory_sz = num_bytes_last_read = 0;
 }
 
 SampleStructSource::~SampleStructSource()
@@ -54,10 +54,10 @@ SampleStructSource::~SampleStructSource()
 size_t
 SampleStructSource::numBytesLastRead() const
 {
-  return num_bytes_last_read; 
+  return num_bytes_last_read;
 }
 
-uint 
+uint
 SampleStructSource::numSamplesLastRead() const
 {
   return numBytesLastRead() / SAMPLE_SOURCE_BLOCK_SZ_BYTES;
@@ -78,16 +78,16 @@ SampleStructFileSource::waitForNewData(int num_secs = -1)
 {
   struct timeval tv;
   fd_set rfds;
-  
+
   tv.tv_usec = 0;
   tv.tv_sec = num_secs;
   FD_ZERO(&rfds);
   FD_SET(fd, &rfds);
 
-  /* block num_secs time waiting for data, or 
+  /* block num_secs time waiting for data, or
      indefinitely if num_secs is less than zero */
   errno = 0;
-  int ret = select (fd+1, &rfds, NULL, NULL, (num_secs < 0 ? NULL : &tv)); 
+  int ret = select (fd+1, &rfds, NULL, NULL, (num_secs < 0 ? NULL : &tv));
 
   if ( ret < 0 && errno != EINTR && errno != ENOMEM && numBytesReady() == 0 ) {
     throw SampleDeviceEOFException(); // dead reader device?
@@ -109,44 +109,45 @@ SampleStructFileSource::numBytesReady() const
 }
 
 int
-SampleStructFileSource::numSamplesReady() const 
+SampleStructFileSource::numSamplesReady() const
 {
   return numBytesReady() / SAMPLE_SOURCE_BLOCK_SZ_BYTES;
 }
 
 const SampleStruct *
-SampleStructFileSource::read(int num_secs_wait = -1) 
+SampleStructFileSource::read(int num_secs_wait = -1)
 {
   int ret;
-  size_t count;
 
-  count = numBytesReady();
+  /* this variable name is a misnomer here since within this method
+     it represents data to be read, that wasn't read yet.. */
+  num_bytes_last_read = numBytesReady();
 
   /* the select() in waitForNewData() seems to hang forever? */
-  if (count == 0) {
+  if (num_bytes_last_read == 0) {
     waitForNewData(num_secs_wait);
     /* the select() inside waitForNewData timed out, so cop out early */
-    if (! (count = numBytesReady())) return  read_memory;
-
+    if (! (num_bytes_last_read = numBytesReady())) return  read_memory;
   }
-  
 
-  if (count > max_read_memory) {
+
+  if (num_bytes_last_read > read_memory_sz) {
     if (read_memory) delete read_memory;
-    max_read_memory = count;
-    read_memory = (SampleStruct *)new char[max_read_memory];
+    read_memory_sz = num_bytes_last_read;
+    read_memory = (SampleStruct *)new char[read_memory_sz];
   }
 
 
   
-  if ( (ret = ::read(fd, read_memory, num_bytes_last_read = count)) < 0) {
+  if ( (ret = ::read(fd, read_memory, num_bytes_last_read)) < 0) {
     int saved_errno = errno;
     switch (saved_errno) {    
-      // maybe some custom errors here?
-      default:
-	throw SampleDeviceException();
+    // maybe some custom errors here?
+    default:
+      throw SampleDeviceException();
+      break;
     }
-  } else if (count != 0 && ret == 0) {
+  } else if (num_bytes_last_read != 0 && ret == 0) {
     throw SampleDeviceEOFException();
   }
 

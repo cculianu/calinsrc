@@ -99,9 +99,22 @@ namespace ShmMgr
   char *chanUseArray(ComediSubDevice::SubdevType t);
   char *chanUseArray(int t);
 
+
+  void clearSpikeSettings();
+  void setSpikePolarity(uint chan, SpikePolarity polarity);
+  void setSpikeEnabled(uint chan, bool onoroff);
+  void setSpikeThreshold(uint chan, double threshold);  
+  void setSpikeBlanking(uint chan, uint milliseconds);
+  SpikePolarity spikePolarity(uint chan); 
+  bool spikeEnabled(uint chan);
+  double spikeThreshold(uint chan);
+  uint spikeBlanking(uint chan);
+
   /* other shared memory wrappers... */
   uint samplingRateHz();
   scan_index_t scanIndex();
+  uint aiFifoMinor();
+  uint spikeFifoMinor();
 };
 
 inline 
@@ -250,5 +263,8 @@ ShmMgr::scanIndex()
   check();
   return shm->scan_index;
 }
+
+inline uint ShmMgr::aiFifoMinor() { check(); return shm->ai_fifo_minor; };
+inline uint ShmMgr::spikeFifoMinor() { check(); return shm->spike_fifo_minor; };
 
 #endif
