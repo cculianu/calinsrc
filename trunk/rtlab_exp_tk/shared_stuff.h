@@ -47,10 +47,7 @@ extern "C" {
 # define CHAN_MASK_SIZE (SHD_MAX_CHANNELS / 8)
 
 
-/* Used in SharedMemStruct                                                   */
-typedef unsigned long long scan_index_t;
-typedef unsigned int sampling_rate_t;
-
+#include "rtlab_types.h"
 
 /* Spike Detection parameters.  This structure exists in the SharedMemStruct
    shared memory area and controls how the kernel module detects/works 
@@ -63,8 +60,8 @@ typedef unsigned int sampling_rate_t;
 
 
 struct SpikeParams {
-  volatile char enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
-  volatile char polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive          */
+  volatile int8 enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
+  volatile int8 polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive          */
   volatile unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds               */
   volatile double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be dangerous!   */
 };
@@ -81,14 +78,14 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 65       /* test this against the below 
-                                            struct_version member            */
+# define SHD_SHM_STRUCT_VERSION 66        /* test this against the below 
+                                             struct_version member           */
 struct SharedMemStruct {
 #ifdef __cplusplus
 /* prevent compiler errors due to consts below */
   SharedMemStruct(): struct_version(SHD_SHM_STRUCT_VERSION)  {}
 #endif
-  int struct_version;             /* magic number used to make sure
+  int struct_version;                    /* magic number used to make sure
                                             this structure version is synch'd
                                             between userland and kernel land 
                                             kernel sets this to 
@@ -97,16 +94,19 @@ struct SharedMemStruct {
                                             define                           */
   
   /* read/write struct memebers for kernel and userland                      */
-  volatile  unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
-                                                       analog channel parameters, use
-                                                       CR_PACK et al to modify this    */
-  volatile  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
+  volatile  unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure
+						       for analog channel 
+						       parameters, use CR_PACK 
+						       et al to modify this  */
+  volatile  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)    */
   
-  volatile  char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
-                                                     process which channels to ignore. 
-                                                     Use inline funcs set_chan() and 
-                                                     is_chan_on() to set this           */
-  volatile  char ao_chans_in_use[CHAN_MASK_SIZE];  
+  volatile  int8 ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the 
+						     kernel  process which 
+						     channels to ignore. 
+                                                     Use inline funcs 
+						     set_chan() and 
+                                                     is_chan_on() to set this*/
+  volatile  int8 ao_chans_in_use[CHAN_MASK_SIZE];  
   
   /* The constant sampling rate --
      this directly affects the period of the rt loop.  
@@ -114,15 +114,15 @@ struct SharedMemStruct {
      default of 1000  */
   sampling_rate_t sampling_rate_hz; 
   
-  volatile  scan_index_t scan_index; /* index of current analog input scan --   
+  volatile  scan_index_t scan_index; /* index of current analog input scan --  
                                         notice how this property is writable..
                                         we can reset this at any time from the 
                                         user process so as to allow the ability
-                                        to reset the scan index               */
+                                        to reset the scan index              */
   volatile  unsigned int nanos_per_scan; /* Basically the number of 
                                             nanoseconds  per scan.  This
                                             is a trivial function
-                                            of BILLION / sampling rate */
+                                            of BILLION / sampling rate       */
   
   SpikeParams spike_params;              /* see struct definition above      */
   int    attached_pid;  /* Normally the PID of daq_system, but crashed
@@ -141,13 +141,20 @@ struct SharedMemStruct {
   int reply_fifo;                 /* Reply FIFO from rtlab.o to user  */
   unsigned int n_ai_chans;        /* the number of channels in subdev */
   unsigned int n_ao_chans;        /* ditto                            */
-  volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
+  volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos      */
   unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
                                             of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                             units */
-   unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
-                                            of SS_RT_QUEUE_BLOCK_SZ_BYTES 
-                                            units */
+  unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
+				     of SS_RT_QUEUE_BLOCK_SZ_BYTES 
+				     units */
+
+  /* Keep track of real wall clock time as scan_index is not monotonically
+     increasing (due to the fact that sampling rate can change)       */
+  uint64 time_ms;                  /* The current relative time in ms. 
+				      This is the monotonically increasing  
+				      number of milliseconds since rtlab.o
+				      was loaded. */
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;
@@ -255,10 +262,10 @@ struct SampleStruct {
 #ifdef __cplusplus
   SampleStruct() : magic_number(SAMPLE_STRUCT_MAGIC) {};
 #endif
-  unsigned char channel_id;
+  uint8 channel_id;
   scan_index_t scan_index;
   double data;         /* the actual sample, in volts */
-  unsigned char spike; /* if nonzero, there is a spike this scan */
+  uint8 spike; /* if nonzero, there is a spike this scan */
   double spike_period; /* in milliseconds */
   int magic_number;    /*if this is wrong userland can throw out this 'sample'
                          this might not be necessary, since kernel will always 

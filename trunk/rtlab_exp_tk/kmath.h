@@ -35,7 +35,10 @@ extern "C" {
     return (int)(d + (d >= 0 ? 0.5 : -0.5)); 
   }
 
-
+  static inline long long int llround(double d)
+  {
+    return (long long)(d + (d >= 0 ? 0.5 : -0.5)); 
+  }
 #ifdef __cplusplus
 }
 #endif

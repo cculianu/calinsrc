@@ -33,6 +33,7 @@ extern "C" {
 
 # define INITIAL_CHANNEL_GAIN 0  /*initial channel gain (COMEDI)*/
 # define INITIAL_SAMPLING_RATE_HZ 1000
+# define THROTTLED_DOWN_SAMPLING_RATE_HZ 10 /* for when rtlab.o is idle */
 # define MAX_SAMPLING_RATE_HZ 25000 //< Dangerous on some hardware!
 # define MIN_SAMPLING_RATE_HZ 1 //< Will anyone _ever_ use this rate? 
 # define DEFAULT_SETTLING_TIME_ns 0

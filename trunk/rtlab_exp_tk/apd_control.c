@@ -40,7 +40,7 @@ MODULE_LICENSE("GPL");
 
 #define MODULE_NAME "MC Stim"
 
-MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
+MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
 
 int apd_control_init(void); 
@@ -60,6 +60,7 @@ static void automatically_adapt_g(int);
 static void out_to_fifo(int,int);
 static int find_free_chan(volatile char *, unsigned int);
 
+
 module_init(apd_control_init);
 module_exit(apd_control_cleanup);
 
@@ -71,6 +72,8 @@ static int          last_ao_chan_used = -1;
 static unsigned int ao_range = 0;
 static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
                     ao_rest_level = 0; /* either ao_stim_level / 2 or 0 */
+static uint64       last_time_ms = 0; /* copied from rtp_shm->time_ms
+					 at end of every run */
 
 /*-------------------------------------------------------------------- 
   Some initial parameters or otherwise private constants...                 
@@ -162,8 +165,11 @@ struct StimState stim_state[NumAOchannels],
 /****************************************************************************************/
 static void do_apd_control_stuff (MultiSampleStruct * m)
 {
-
   int which_ai_chan;
+
+  /* we're still on the same millisecond - this module should really run 
+     once every milliseond */
+  if (rtp_shm->time_ms == last_time_ms) return; 
 
   /* Note that do_pacing assumes that rt_process.o is running at precisely 1000 hz! */
   setup_analog_output();
@@ -179,6 +185,9 @@ static void do_apd_control_stuff (MultiSampleStruct * m)
   if (stim_state[1].control_stimulus_called) do_control(1);
 
   m = 0; /* to avoid compiler errors ... not sure what this does ... Calin put it here */
+
+  /* update last_time_ms */
+  last_time_ms = rtp_shm->time_ms;
 }
 
 // this function does periodic pacing at the PI controlled by the user in the GUI
@@ -233,7 +242,7 @@ static void calculate_apd_and_control_perturbation(int which_ai_chan, MultiSampl
   // is there a threshold crossing occuring at this scan? ... the conditional is Calin's code
   if ( ( _test_bit((int)which_ai_chan, spike_info.spikes_this_scan)) ) {
     apd_state[which_ai_chan].find_peak=1;                           //if so, set find_peak so that we know to start looking for peak amplitude
-    apd_state[which_ai_chan].ap_ti=rtp_shm->scan_index; //this scan is the beginning of the action potential, so set ap_ti    
+    apd_state[which_ai_chan].ap_ti=rtp_shm->time_ms; //this scan is the beginning of the action potential, so set ap_ti    
 
     apd_state[which_ai_chan].v_baseline_n_minus_2 = apd_state[which_ai_chan].v_baseline_n_minus_1; //store previous as n_minus_2
     apd_state[which_ai_chan].v_baseline_n_minus_1 = apd_state[which_ai_chan].v_baseline_since_last_detected_thresh_crossing; //store
@@ -271,7 +280,7 @@ static void calculate_apd_and_control_perturbation(int which_ai_chan, MultiSampl
     //set new di before we change ap_tf (because we need to use previous ap_tf)
     apd_state[which_ai_chan].di=apd_state[which_ai_chan].ap_ti-apd_state[which_ai_chan].ap_tf; //this DI is time since last AP_tf;
     //for new apd
-    apd_state[which_ai_chan].ap_tf=rtp_shm->scan_index;
+    apd_state[which_ai_chan].ap_tf=rtp_shm->time_ms;
     apd_state[which_ai_chan].apd = apd_state[which_ai_chan].ap_tf-apd_state[which_ai_chan].ap_ti;
 
     //Determine if this channel is one that is being monitored by one of the 2 AO channels
