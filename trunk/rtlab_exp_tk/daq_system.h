@@ -26,6 +26,8 @@
 
 #include <qmainwindow.h>
 #include <qworkspace.h>
+#include <qmenubar.h>
+#include <qpopupmenu.h>
 #include <qtoolbar.h>
 #include <qtoolbutton.h>
 #include <qbuttongroup.h>
@@ -43,34 +45,6 @@
 #ifdef __RTLINUX__
 #endif
 
-
-/* This class exists as a convenience just to make some notation 
-   a bit shorter.. :)  */
-class DAQSystemGUIObject {
- public:
-  enum ButtonOp {
-    buttonop_toolow = -1,
-    AddChannel,
-    buttonop_toohigh
-  };
-};
-
-class ButtonOpGroup: public QButtonGroup, public DAQSystemGUIObject
-{
-  Q_OBJECT
-    
- public:
-
-  ButtonOpGroup(QWidget *parent = 0, const char *name = 0);
-
-
- signals:
-  void buttonOpClicked (ButtonOp op);
-
- public slots:
-  /* converts the button id to a button op.. very trivial slot */
-  void id2ButtonOp (int id);
-};
 
 class DAQSystem;
 
@@ -131,7 +105,7 @@ class ReaderLoop: public QObject
   vector<vector<SampleListener *> > listeners;
 };
 
-class DAQSystem : public QMainWindow, public DAQSystemGUIObject
+class DAQSystem : public QMainWindow
 {
   Q_OBJECT
 
@@ -145,10 +119,10 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
 
 
  public slots:
-  void channelOperation(ButtonOp op); 
-  void openChannelWindow(uint chan, uint range, 
-			 uint n_secs);
+  void addChannel(); 
+  void openChannelWindow(uint chan, uint range, uint n_secs);
   void removeGraphContainer(const DAQECGGraphContainer *);
+  void about() { /* about the application */ };
 
  protected slots:
   /* this slot does the necessary work to tell the rt-process that a 
@@ -170,9 +144,10 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
   void buildRangeSettings(ECGGraphContainer *contianer);
 
   QWorkspace ws;
+  QMenuBar _menuBar;
+  QPopupMenu fileMenu, channelsMenu, windowMenu, helpMenu;
   QToolBar mainToolBar;
-  QToolButton addChannel;
-  ButtonOpGroup toolBarButtonGroup; /* invisible, pretty trivial widget */
+  QToolButton addChannelB;
   QStatusBar statusBar;
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;

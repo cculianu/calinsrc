@@ -30,6 +30,7 @@
 #include <qinputdialog.h> 
 #include <qmessagebox.h>
 #include <qtimer.h>
+
 #include <iostream>
 #include <map>
 #include <vector>
@@ -52,37 +53,50 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   settings(configWindow.daqSettings()),
   currentdevice(cw.selectedDevice()),
   ws(this),
+  _menuBar(this),
   mainToolBar("DAQ System Toolbar", this, Top),
-  addChannel(&mainToolBar),
-  toolBarButtonGroup(this),
+  addChannelB(&mainToolBar),
   statusBar(this),
   statusBarScanIndex(&statusBar),
   readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
 	     settings),
   daqSystemIsClosingMode(false) /* for now, this becomes true when
-					daq system is closing */
+				   daq system is closing */
 {
   this->setCentralWidget(&ws);
+  ws.setScrollBarsEnabled(true);
   ws.show();
-  addChannel.setText("Add Channel...");
-  toolBarButtonGroup.insert(&addChannel, AddChannel);
-  toolBarButtonGroup.hide();
-  connect(&toolBarButtonGroup, 
-	  SIGNAL(buttonOpClicked(ButtonOp)),
-	  this, SLOT (channelOperation(ButtonOp)));
-		
-  setDockEnabled(Top, true);   setDockEnabled(Bottom, true);
-  setDockEnabled(Left, true);  setDockEnabled(Right, true);
-  setDockMenuEnabled(true);
-  setToolBarsMovable(true);
-  addToolBar(&mainToolBar);
+
+  { /* build menus */
+    fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
+    fileMenu.insertSeparator();
+    fileMenu.insertItem("&Quit", this, SLOT( close() ) );
+    channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ) );
+    windowMenu.insertItem("&Cascade", &ws, SLOT( cascade() ) );
+    windowMenu.insertItem("&Tile", &ws, SLOT( tile() ) );
+    helpMenu.insertItem("&About", this, SLOT( about() ) );
+
+    _menuBar.insertItem("&File", &fileMenu);
+    _menuBar.insertItem("&Channels", &channelsMenu);
+    _menuBar.insertItem("&Window", &windowMenu);
+    _menuBar.insertSeparator();
+    _menuBar.insertItem("&Help", &helpMenu);
+  }
+
+  { /* add toolbar */
+    addChannelB.setText("Add Channel...");
+    connect(&addChannelB, SIGNAL(clicked()), this, SLOT (addChannel()));
+    
+    setDockEnabled(Top, true);   setDockEnabled(Bottom, true);
+    setDockEnabled(Left, true);  setDockEnabled(Right, true);
+    setDockMenuEnabled(true);
+    setToolBarsMovable(true);
+    addToolBar(&mainToolBar);
+  }
 
   connect(&readerLoop, SIGNAL(scanIndexChanged(scan_index_t)),
 	  this, SLOT(setStatusBarScanIndex(scan_index_t)));
   
-  /* empty menubar on the fly? */
-  menuBar();
-
   /* now open up all the channel windows that are left over
      from the last session */
   set<uint> s = settings.windowSettingChannels();
@@ -102,20 +116,14 @@ DAQSystem::~DAQSystem()
 }
 
 void
-DAQSystem::channelOperation (ButtonOp op)
+DAQSystem::addChannel (void)
 {  
   bool ok;
   uint chan, range, n_secs;
 
-  switch (op) {
-  case AddChannel:
-    ok = queryOpen(chan, range, n_secs);
-    if (ok) {
-      openChannelWindow(chan, range, n_secs);
-    }
-    break;
-  default:
-    break;    
+  ok = queryOpen(chan, range, n_secs);
+  if (ok) {
+    openChannelWindow(chan, range, n_secs);
   }
 }
 
@@ -332,23 +340,6 @@ void
 DAQSystem::setStatusBarScanIndex(scan_index_t index)
 {
   statusBarScanIndex.setText(QString("Scan Index: %1").arg((ulong)index));
-}
-
-ButtonOpGroup::ButtonOpGroup(QWidget *parent = 0, const char *name = 0)
-  : QButtonGroup(parent, name) 
-{
-  connect(this, SIGNAL(clicked(int)), this, SLOT(id2ButtonOp(int)));
-}
-
-void
-ButtonOpGroup::id2ButtonOp (int id)
-{
-  if (id > buttonop_toolow && id < buttonop_toohigh) {
-    emit(buttonOpClicked((ButtonOp)id));
-  } else {
-    cerr << "WARNING: ButtonOpGroup::id2ButtonOp called with invalid "
-            "button operation " << id << endl;
-  }
 }
 
 ReaderLoop::
