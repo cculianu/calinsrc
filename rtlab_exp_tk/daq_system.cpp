@@ -118,9 +118,8 @@ void ExperimentLog::init()
 
 set<DAQSystem *> DAQSystem::daq_systems;
 
-DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
-                      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
-                      WFlags f = WType_TopLevel)
+DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent, 
+                      const char * name, WFlags f)
 : QMainWindow(parent, name, f), 
   configWindow(cw),
   settings(configWindow.daqSettings()),
