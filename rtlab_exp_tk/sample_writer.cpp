@@ -67,7 +67,7 @@ SampleGZWriter::setFile(const char *filename)
     file = NULL;
   }
 
-  file = gzopen(filename, "wb5");
+  file = gzopen(filename, "wb1");
   if (file == NULL) {
     throw SampleOutputFileException
       (QString("Could not open ") + filename,
