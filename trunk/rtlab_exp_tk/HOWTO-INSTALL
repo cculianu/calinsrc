@@ -1,0 +1,361 @@
+
+                            HOW TO INSTALL RTLab
+
+                                by Calin A. Culianu <calin@rtlab.org>
+                                September 17, 2002
+        
+
+INTRODUCTION
+------------
+
+So, you read the RTLab README and are still stuck?  You are not alone,
+getting RTLab installed requires pretty advanced knowledge of Linux,
+Linux Kernel configuration, Linux module installation, Qt setup/installation,
+and Comedi installation and setup.
+
+This document attempts to be a step-by-step howto that, if followed to the
+letter, and if things aren't broken, should allow you to download,
+install, and run RTLab.
+
+
+
+STEP 1 - Pick an RTOS.
+----------------------
+
+** If you already have your RTOS installed, skip to STEP 9, since the next
+   8 steps aren't for you.
+
+You have two options here.  Either get RTLinux v3.1 or RTAI 24.1.9.  Both
+are supported by RTLab equally, however I tend to think installing RTLinux
+is usually easier for most people, as the FSMLabs people made a real effort
+to get RTLinux to work on as many systems as possible without a hitch.
+
+The only caveat to running RTLinux is that you will be stuck with a rather
+_old_ kernel (as of the writing of this document, RTLinux v3.1 only supports
+linux kernels as new as 2.4.4).
+
+STEP 1a - Download your RTOS
+----------------------------
+
+    RTLinux
+    -------
+
+
+    http://www.fsmlabs.com/  -- browse around and try and download
+                                the product they call "Open RTLinux 3.1"
+                                
+
+    RTAI
+    ----
+
+    http://www.rtai.org/     -- browse around and try and download
+                                the source to RTAI 24.1.9.  Newer versions
+                                should work ok, but if you can, get this one.
+
+STEP 1b - Unpack your RTOS
+--------------------------
+You should install your RTOS sources in /usr/src, as this is standard.
+
+As root, do the following:
+
+        + cd    /usr/src
+        + tar xvzf /path/to/the/tarball/of/your/rtos.tar.gz
+
+
+STEP 2 - Read the instructions to your RTOS
+-------------------------------------------
+
+This is important.  Generally they both involve the same two steps: 
+
+    1) download and patch a stock linux kernel
+
+    2) configure and install the rtos's kernel modules
+
+
+
+STEP 3 - Download your Kernel
+-----------------------------
+
+    RTLinux 
+    -------
+
+    If you are using RTLinux v3.1, you need to download and install Linux
+    Kernel 2.4.4 from http://www.kernel.org.  
+
+
+    RTAI
+    ----
+
+    If you are using RTAI, then kernel 2.4.18 is preferred.
+
+
+STEP 4 - Unpack your Kernel
+---------------------------
+
+Again, kernel-related sources traditionally go in /usr/src. As root, do the 
+following:
+
+        + cd /usr/src
+        + tar xvzf /path/to/the/tarball/of/your/kernel
+
+        RTLinux
+        -------
+
+            + mv linux linux-2.4.4-rtl
+
+        RTAI
+        ----
+
+            + mv linux linux-2.4.18-rthal
+
+
+STEP 5 - Patch your Kernel
+--------------------------
+
+Again, as root:
+
+    RTLinux
+    -------
+    
+        + cd /usr/src/linux-2.4.4-rtl
+        + patch -p1 < /usr/src/rtlinux-3.1/kernel_patch-2.4.4
+
+    RTAI
+    ----
+
+        + cd /usr/src/linux-2.4.18-rthal
+
+        On Intel x86:
+        -------------
+
+            + patch -p1 < /usr/src/rtai-24.1.9/patches/patch-2.4.18-rthal5g 
+
+        OR, for PPC users:
+        ------------------
+    
+            + patch -p1 < /usr/src/patches/patch-linux-2.4.18-ppc-rthal5g
+
+
+STEP 6 - Configure your Kernel
+------------------------------
+
+Again, as root:
+
+    RTLinux
+    -------
+
+        + cd /usr/src/linux-2.4.4-rtl
+        + make menuconfig
+
+    RTAI
+    ----
+
+        + cd /usr/src/linux-2.4.18-rthal
+        + make menuconfig
+
+Be sure to disable SMP support (no smp for RTLab at this time, sorry!) and to
+disable APM Bios support (as this stuff works poorly with any RTOS) and local
+APIC support (people reported problems compiling RTLinux with local APIC on).
+
+
+STEP 7 - Compile, install your Kernel
+-------------------------------------
+
+Again, as root:
+
+    RTLinux
+    -------
+
+    + cd /usr/src/linux-2.4.4-rtl
+
+    RTAI
+    ----
+   
+    + cd /usr/src/linux-2.4.18-rthal
+
+
+    Now for both do the following to compile:
+
+    + make dep && make bzImage && make modules && make modules_install 
+    + cp -f arch/i386/boot/bzImage /boot/rtosZImage
+
+Edit /etc/lilo.conf (if you're running lilo) and add an entry for your
+shiny new RTOS.  Make sure to make the root= line point to your root device!
+Name this RTOS something like RTLinux or RTAI.  Here is a sample lilo.conf 
+entry:
+
+    image=/boot/rtosZImage
+          label=rtlinux
+          root=/dev/hda5
+
+Which creates an entry called "rtlinux" that points to kernel file
+/boot/rtosZImage and has root device /dev/hda5.
+
+
+Now, rerun lilo, as root:
+
+    + /sbin/lilo -v
+
+REBOOT (make sure to reboot into your new rtos-patched-kernel):
+
+    + /usr/bin/reboot
+
+
+If you are running GRUB, you are on your own, as this indicates to me you
+know what your are doing (since generally only power-users use GRUB :)  ).
+
+
+STEP 8 - Configure & Compile RTOS Kernel Modules
+------------------------------------------------
+
+Configure your RTOS's kernel modules. Again, as root:
+
+    RTLinux
+    -------
+
+        + cd /usr/src/rtlinux-3.1
+        + make menuconfig
+    
+    Make _sure_ to enable at least the following, as they are required by 
+    RTLab: 
+
+        - enable "Posix Standard IO"
+        - enable "Dev Mem Support"
+        - enable "Floating Point support"
+        - enable "Synchornized clock support" (not sure if needed but why not?)
+        - enable "Shared Memory Driver"
+        - set at least 10 for "Max number of fifos" -- but the default 64
+          is ok too.
+
+        + make dep
+        + make modules
+        + make modules_install
+        + make devices
+        + chmod 666 /dev/mbuff # in case you want to run RTLab as a user
+        + chmod 666 /dev/rtf*  # in case you want to run RTLab as a user
+
+    RTAI
+    ----
+
+        + cd /usr/src/rtai-24.1.9
+        + make menuconfig
+
+        [Press enter here because it should have the right Linux kernel dir]
+    
+    Make _sure_ to enable at least the following, as they are required by
+    RTLab:
+
+        - enable "Enable floating point support"
+        - enable "POSIX API"
+        - enable "RT memory manager"
+        - enable "FIFOs"
+        - enable "UP Scheduler" (sorry, no SMP scheduler support yet, or if
+                                 it works for you, let us know!!)
+
+    Compile & install with:
+    
+        + make dep && make && make install
+        + make dev
+        + chmod 666 /dev/rtai_shm # In case you want to run RTLab as user
+        + chmod 666 /dev/rtf* # In case you want to run RTLab as user
+
+
+STEP 9 - Obtain Comedi and Comedilib
+------------------------------------
+
+** If you already have comedi and comedilib installed, skip to step
+   11, since the next 2 steps aren't for you.
+
+http://www.comedi.org/comedi is the place to go.  Get both comedi 
+and comedilib.  They are two separate archives.  As usual, unpack them into
+your /usr/src directory as so (as root):
+
+    + cd /usr/src
+    + tar xvzf /path/to/comedi-x.x.x.tar.gz
+    + tar xvzf /path/to/comedilib-xx.xx.xx.tar.gz
+
+Where x.x.x and xx.xx.xx are the comedi and comedilib version numbers,
+respectively.
+
+
+STEP 10 - Configure, compile, and install comedi and comedilib
+--------------------------------------------------------------
+
+As root:
+
+    + cd /usr/src/comedi-x.x.x # x.x.x is the correct comedi version you dl'd
+    + ./configure
+    
+Your Linux source tree should be auto-detected, so hit enter on that
+question.
+
+Tell it your RTL Tree is as follows, depending on your RTOS:
+
+     RTLinux: /usr/src/rtlinux-3.1
+     RTAI: /usr/src/rtai-24.1.9
+
+IMPORTANT: Say 'Y' to Real-time support (CONFIG_COMEDI_RTL).
+
+Next, just answer the prompts, saying 'M' for the correct driver for
+your board (look on the comedi website, http://www.comedi.org/comedi, 
+ for more info on drivers).
+
+
+IMPORTANT NOTE FOR RTLinux Users:
+
+Comedi does not work well with emulated command timers.  Say
+NO to "RT Timer Emulation" or whatever they call it.  It should be
+the last or next-to-last question.
+
+
+Once you have finished configuring Comedi, compile & install it as such 
+(as root):
+       
+    + make    
+    + make dev # (to create device nodes)
+    + chmod 666 /dev/comedi? # to make sure user programs can open /dev/comediX
+    + make install
+    
+Next, compile and install comedilib (as root):
+
+    + cd /usr/src/comedilib-x.x.x
+    + make
+    + make install
+
+
+
+STEP 11 - Obtain, compile, and install Qt 3.x
+---------------------------------------------
+
+** If you already have Qt 3.x, skip to the next step as this
+   step is not requried for you.
+
+Go to http://www.trolltech.com and get the latest Qt 3.x version.
+
+Read the instructions on INSTALLing, in case they tell you to do someting
+different, but essentially you do the following:
+
+
+Unpack it into /usr/src (as root):
+
+    + cd /usr/src
+    + tar xvzf /path/to/the/qt/archive.tar.gz
+
+Configure the Qt Sources for building, in bash (as root):
+
+    + cd /usr/src/qt-x11-free-x.x.x
+    + export PATH=`pwd`/bin:$PATH
+    + export QTDIR=`pwd`
+    + ./configure
+
+Now compile Qt. This takes FOREVER.
+
+    + gmake
+    + gmake install
+
+Now do some maintenance, edit /etc/profile and add:
+    export QTDIR=/usr/local/qt
+
+
+STEP 12 - Obtain, and compile RTLab
+-----------------------------------
