@@ -23,9 +23,9 @@
 #include <ieee754.h>
 
 #include <qfile.h>
-#include <qbuffer.h>
 #include <qcstring.h>
 #include <qfile.h>
+#include <qfileinfo.h>
 
 #include <set>
 #include <algorithm>
@@ -73,19 +73,34 @@ void DSDStream::init(int mode)// throw (FileException)
 
 void DSDStream::init(const QString & outFile, sampling_rate_t rate, FileDataType dataType)// throw (FileException)
 {
-  unsetDevice();
-  setDevice(new QFile(outFile));
-  init (IO_WriteOnly | IO_Truncate);
-  rateState.rate = rate;
-  rateChangedThisScan = true;
-  fileDataType = dataType;
+  init(new QFile(outFile), rate, dataType);
 }
 
 void DSDStream::init(const QString & inFile) //throw (FileException)
 {
+  init(new QFile(inFile));
+}
+
+// read mode generice io device init
+void DSDStream::init(QIODevice *d)
+{
   unsetDevice();
-  setDevice(new QFile(inFile));
+  if (d->isOpen()) d->reset();
+  setDevice(d);
   init (IO_ReadOnly);
+}
+
+
+void DSDStream::init(QIODevice *d, 
+                     sampling_rate_t rate, FileDataType dataType)// throw (FileException)
+{
+  unsetDevice();
+  if (d->isOpen()) d->reset();
+  setDevice(d);
+  init (IO_WriteOnly | IO_Truncate);
+  rateState.rate = rate;
+  rateChangedThisScan = true;
+  fileDataType = dataType;
 }
 
 DSDStream::~DSDStream()
@@ -812,3 +827,40 @@ template<> DSDStream & DSDStream::operator<<(const int64 & t) //throw (FileExcep
 };
 
 
+/* DSDIStream stuff... */
+
+void DSDIStream::jumpToScanIndex(scan_index_t si)
+{
+  if (!device()) return; // in case this is a dead reader
+
+  vector<SampleStruct> v;
+
+  while (si > scanIndex() )  readNextScan(v); /* nothing.. just read */;  
+}
+
+/*
+  seek forward/back relative to the current position
+*/
+void DSDIStream::seek(scan_index_t scan_index_offset, bool forward) 
+{
+  scan_index_t absolute_index;
+
+  if (forward) absolute_index = scanIndex() + scan_index_offset;
+  else { // they wanna go backwards
+    /* check for underflow */
+    absolute_index = scanIndex() - scan_index_offset;
+    if (absolute_index > scanIndex())  absolute_index = 0;
+    
+    QFile *f = dynamic_cast<QFile *>(device());
+
+    Assert<IllegalStateException>
+      (f && QFile::exists(f->name()), 
+       "Internal Error: QIODevice error for DSDIStream.", 
+       QString("IO Device needs to be a non-deleted QFile for random access in"
+               " DSDIStream::seek()!") 
+      );
+
+    setInFile(f->name()); 
+  }  
+  jumpToScanIndex(absolute_index);
+}

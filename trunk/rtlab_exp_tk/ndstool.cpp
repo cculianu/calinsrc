@@ -226,26 +226,37 @@ SplitOp::SplitOp()
 
 int SplitOp::doIt()
 {
-  cerr << "Reading " << state()->infile.latin1() << endl 
-       << "Splicing out "  << Convert(state()->count).sStr() << " scans" << endl
-       << "Starting at index " << Convert(state()->start).sStr() << endl
-       << "Output file is " << state()->outfile.latin1() << endl;
+  cerr << "Reading " << state()->infile.latin1() << endl;
 
   try {
-    DSDIStream in(state()->infile);
-    in.start();
-    DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
-    
-    out.start();
-
-    in.jumpToScanIndex(state()->start);
-
     vector<SampleStruct> v;
     vector<SampleStruct>::iterator it;
 
-    while(state()->count-- && in.readNextScan(v)) 
-      for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
+    DSDIStream in(state()->infile);
+    
+    /* we need to do this due to bug in some nds format where startIndex() 
+       is always zero!! */
+    if (!in.readNextScan(v)) 
+      { cerr << "No scans in input file!" << endl;  return EINVAL; }
+  
+   
+    DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
 
+    scan_index_t real_start = in.scanIndex();
+
+    in.setInFile(state()->infile); // reopen it now that we know the real start
+
+    in.seek(state()->start);
+
+    cerr << "Splicing out "  << Convert(state()->count).sStr() << " scans" 
+         << endl
+         << "Starting at index " << Convert(real_start).sStr() << endl
+         << "Output file is " << state()->outfile.latin1() << endl;
+
+    while(state()->count-- && in.readNextScan(v)) {
+      for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
+    } 
+    
     cerr << "Done!" << endl;
 
   } catch (Exception & e) {
@@ -267,13 +278,13 @@ void SplitOp::buildAllArgs()
                    (ArgCallback_t)&SplitOp::outfileArg);
 
   allArgs[QString("start")] =
-    ArgsMapValue_t(QString("Start index -- scan index to start copying from "
-                           "(defaults to 0)"),
+    ArgsMapValue_t(QString("Start index -- relative scan to start from "
+                           "(default: 0, or beginning)"),
                    (ArgCallback_t)&SplitOp::startArg);  
 
   allArgs[QString("count")] =
     ArgsMapValue_t(QString("Scan count -- the number of scans to copy "
-                           "(defaults to all of file)"),
+                           "(defaults to all until end)"),
                    (ArgCallback_t)&SplitOp::countArg);  
   
 }
@@ -316,24 +327,31 @@ void InfoOp::filenameArg(const QString &filename)
 int InfoOp::doIt()
 {
   DSDIStream in(state()->filename);
+  bool compensate_for_start_quirk = false; 
 
   try {
     in.start(); /* Potential exception here -- */
     vector<SampleStruct> dummy;
     in.readNextScan(dummy);
+    if (in.scanIndex() != 1) compensate_for_start_quirk = true;
   } catch (Exception & e) {
     e.showConsoleError();   /* will generate its own error message */
     return EINVAL;
   }
-                 
+        
+  scan_index_t
+    startI = compensate_for_start_quirk ? in.scanIndex() :in.startIndex(),
+    scanC  = in.scanCount()  
+             - static_cast<scan_index_t>(compensate_for_start_quirk ? 1 : 0);
+         
   std::string  
-    startIndex = Convert(in.scanIndex()).sStr(),
+    startIndex = Convert(startI).sStr(),
     endIndex = Convert(in.endIndex()).sStr(),
     scanCount = Convert(in.scanCount()).sStr(),
-    samplingRate = Convert((uint64)in.rateAt(in.startIndex())).sStr();
-  double fileTime = in.timeAt(in.endIndex()-1) - in.timeAt(in.scanIndex());
+    samplingRate = Convert((uint64)in.rateAt(startI)).sStr();
+  double fileTime = in.timeAt(in.endIndex()-1) - in.timeAt(startI);
 
-  bool hasDroppedScans = in.scanCount() < in.endIndex() - in.scanIndex();
+  bool hasDroppedScans = in.scanCount() < in.endIndex() - startI;
 
   cout << "Information for file '" << state()->filename.latin1() << "':" 
        << endl
