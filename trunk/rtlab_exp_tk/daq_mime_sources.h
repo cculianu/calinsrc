@@ -55,7 +55,9 @@ namespace DAQMimeSources {
                               quit,
                               channel, // the graph windows
                               daqSystem, // main icon for application
-                              configuration; // icon for config screen
+                              configuration, // icon for config screen
+                              winTemplates; // icon for window template manager
+         
     };
 
   /* grabs the default, registered factory */

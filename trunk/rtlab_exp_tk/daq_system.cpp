@@ -130,7 +130,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   shmCtl(*readerLoop.shmCtl),
   log(0),
   tyler(&ws),
-  plugin_menu(this, 0, QString(name) + " - Plugin Menu")
+  plugin_menu(this, 0, QString(name) + " - Plugin Menu"),
+  windowTemplateDlg(0)
 {
   setIcon(QPixmap(DAQImages::daq_system_img));
 
@@ -172,17 +173,20 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     channelsMenu.insertItem(QIconSet(QPixmap(DAQImages::add_channel_img)), 
                             "&Add Channel...", this, SLOT( addChannel() ), 
                             CTRL + Key_A );
+    channelsMenu.insertItem(QIconSet(QPixmap(DAQImages::synch_img)),
+                            "&Synchronize Channels", this, SLOT(resynch()));
+
     channelsMenu.insertItem("Set Analog Input &Reference Mode...", this, SLOT( changeAREFDialog() ), CTRL + Key_R );
     
-    windowMenu.insertItem("&Window Templates...", this, SLOT ( showWindowTemplateDialog() ));
+    windowMenu.insertItem(QIconSet(QPixmap(DAQImages::wintemplates_img)),
+                          "&Window Templates...", 
+                          this, 
+                          SLOT ( showWindowTemplateDialog() ));
     windowMenu.insertSeparator(); /* ---- */
     windowMenu.insertItem("&Cascade Channel Windows", &ws, SLOT( cascade() ) );
     windowMenu.insertItem("&Tile Channel Windows", &tyler, SLOT( tyle() ) );
     windowMenu.insertSeparator(); /* after this, all open windows will be
                                      stored */
-    windowMenu.insertItem("&Resynch Channel Windows", this, SLOT (resynch()));
-    windowMenu.insertSeparator(); /* ---- */
-
     connect(&windowMenu, SIGNAL(activated(int)), 
 	    this, SLOT(windowMenuFocusWindow(int)));
 
@@ -1630,6 +1634,7 @@ WindowTemplateDialog::WindowTemplateDialog(DAQSystem *parent,
                                            const char *name = 0, WFlags f = 0)
   : QWidget (parent, name, f)
 {
+  setIcon(QPixmap(DAQImages::wintemplates_img));
   ds = parent;
   QGridLayout *layout = new QGridLayout(this);
  

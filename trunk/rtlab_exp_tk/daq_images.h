@@ -40,7 +40,8 @@ namespace DAQImages {
         daq_system_img,
         configuration_img,
         quit_img,
-        channel_img;  
+        channel_img,
+        wintemplates_img;
 };
 
 
