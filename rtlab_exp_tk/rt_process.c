@@ -384,9 +384,9 @@ init_comedi(void)
 
 #ifdef NEW_STYLE_KCOMEDILIB
   {
-    char tempbuf[13];
+    char tempbuf[32];
 
-    snprintf(tempbuf, 13, "/dev/comedi%d", ai_minor);
+    sprintf(tempbuf, "/dev/comedi%d", ai_minor);
 
     rtp_comedi_ai_dev_handle = comedi_open(tempbuf);
 
