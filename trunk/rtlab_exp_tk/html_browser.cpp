@@ -43,7 +43,7 @@ HTMLBrowser::HTMLBrowser( QWidget *parent = 0 )
   QToolTip::add(backButton, "Go to previous document");
   //QPixmap back_pm(back_xpm);
   //backButton->setPixmap( back_pm );
-  backButton->setMaximumSize( back_pm.size() );
+  //backButton->setMaximumSize( back_pm.size() );
 
   forwardButton = new QPushButton( "Forward", navBox );  
   homeButton = new QPushButton( "Home", navBox );

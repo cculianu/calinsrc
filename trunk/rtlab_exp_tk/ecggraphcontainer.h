@@ -211,8 +211,7 @@ public slots:
   vector<QLabel *> xaxis_labels;
   vector<uint64> saved_sample_indices;
   
-  QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
-    *spikeFrequency;
+  QLabel *spikeThreshold, *lastSpike, *spikeFrequency;
   
   
   const scan_index_t scan_index_threshold; // internal
