@@ -32,7 +32,9 @@ class Plugin
 public:
   virtual ~Plugin() {};
   virtual const char *name() const = 0; /* returns the plugin's name */
-  virtual const char *description() const = 0; /* returns the description */
+  virtual const char *description() const = 0; /* returns the description */ 
+  virtual bool inUse() const { return false; } /* if inUse() then 
+                                                  don't unload */
 };
 
 /* all entry functions throw an Exception if they cannot be started */

@@ -40,9 +40,9 @@ class AVNStim: public QObject, public Plugin
 
 public:
   AVNStim(DAQSystem *daqSystem);
-  ~AVNStim();  
-  const char *name() const;
-  const char *description() const;
+  virtual ~AVNStim();  
+  virtual const char *name() const;
+  virtual const char *description() const;
 
 private slots:
   void periodic(); /* does stuff periodically.. called by the timer */

@@ -100,6 +100,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     fileMenu.insertSeparator();
     fileMenu.insertItem("&Quit", this, SLOT( close() ) );
 
+    logMenu.insertItem("Show &Log Window", this, SLOT (showLogWindow()), CTRL + Key_L);
     logMenu.insertSeparator();
     logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
@@ -633,6 +634,11 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 
 }
 
+void DAQSystem::showLogWindow()
+{
+  windowMenuFocusWindow(&log);
+}
+
 ReaderLoop::
 /* very comedi-specific constructor! Must change! */
 ReaderLoop(DAQSystem *d) :
@@ -1017,10 +1023,7 @@ void PluginMenu::removeSelectedPlugin()
   if (!item) return;
 
   Plugin *p = pluginFindByName(item->text(0));  
-  if (p) {
-    unloadPlugin(p);     
-    item->setText(1, "No");
-  }
+  if (p)  unloadPlugin(p);     
 }
 
 void PluginMenu::pluginMenuContextReq(QListViewItem *item, 
@@ -1134,15 +1137,27 @@ PluginMenu::findScannedByName(const QString & name)
 
 void PluginMenu::unloadPlugin(Plugin *p) 
 {
-  
   map<Plugin *, int *>::iterator i;
   QString name(p->name());
 
+  if (p->inUse()) {
+    QMessageBox::information(this, "Cannot unload plugin.",
+                             QString("Plugin ") + name + " is in use and "
+                             "cannot be unloaded.", QMessageBox::Ok);
+    return;
+  }
+  
+
   for (i = plugins_and_handles.begin(); i != plugins_and_handles.end(); i++) 
     if (i->first == p) {
+
       delete p;
       dlclose(i->second);
       plugins_and_handles.erase(i--);
+#ifdef DEBUG
+      cerr << "Plugin '" << name << "' at address " << reinterpret_cast<void *>(p) << " unloaded." << endl;
+#endif
+
     }
   
   QListViewItem *item = plugin_box->findItem(name, 0);
