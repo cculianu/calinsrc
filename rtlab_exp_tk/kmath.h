@@ -22,6 +22,7 @@
 #ifndef _KMATH_H
 #define _KMATH_H
 
+#ifdef __KERNEL__
 /** Some helpful kernel math-like functions.  Rounding, sine, etc.  For
     now just round() is here.. */
 
@@ -43,7 +44,8 @@ extern "C" {
 }
 #endif
 
-
-
+#else
+#warning kmath.h should only be used in the kernel!
+#endif /* __KERNEL__ */
 
 #endif
