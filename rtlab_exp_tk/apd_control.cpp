@@ -168,7 +168,8 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   masterlayout->setColStretch(1, 2);
 
   int num_graph_columns = 3; //2 columns of graphs, plus one spacer in between
-  int num_graph_rows = NumAPDGraphs; //NumAPDGraphs/2 rows of graphs, plus spacers
+  int num_graph_rows = NumAPDGraphs+2; //NumAPDGraphs/2 rows of graphs, plus spacers
+                                                                        //plus 2 more for the graph showing all electrodes
   graphlayout = new QGridLayout(graphs, num_graph_rows, num_graph_columns);
 
   graphlayout->setColStretch(0, 20); //graphs are 20X as wide as space between
@@ -178,8 +179,9 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   for (int i=0; i<num_graph_rows; i++)
     if (!(i%2)) graphlayout->setRowStretch(i, 10); //graphs are 10X as high as spaces between
     else graphlayout->setRowStretch(i, 1);
-  
-  for (int which_apd_graph=0; which_apd_graph<NumAPDGraphs; which_apd_graph++) {
+
+  //next draw the individual apd_graphs
+  for (int which_apd_graph=0; which_apd_graph<(NumAPDGraphs+1); which_apd_graph++) {
     apd_graph[which_apd_graph]   = new ECGGraph (beats_per_gridline, num_gridlines, 
                                                  apd_ranges[0].min, apd_ranges[0].max, 
                                                  graphs, QString(name()) + " - APD");
@@ -191,7 +193,10 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
 
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
-    graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+    if (which_apd_graph < NumAPDGraphs)
+      graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+    else
+      graphlayout->addWidget(new QLabel(QString("All APDs"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
     apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
     graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
@@ -668,7 +673,23 @@ void APDcontrol::readInFifo()
       
     apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
 
-      if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
+    if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
+
+    /*
+      Dave's early-stage attempt at plotting all apds ... jettisoned in favor of Calin's class
+    all_apd_graph[buf[i].apd_channel] = buf[i].apd;
+    num_apds_in_all_apds++;
+
+    if (!(num_apds_in_all_apds%NUM_THRESHS_DRAWN)) {
+          if (!(num_apds_in_all_apds%(2*NUM_THRESHS_DRAWN))) {
+	    DumpAllAPDSwithonecolor();
+	    num_apds_in_all_apds=0; //reset after 2 draws
+	  }      
+	  else
+	    DumpAllAPDSwithOtherColor;
+    }
+
+    */
 }
 
   /* now update the stats once per read() call (meaning we take the

@@ -128,12 +128,12 @@ private:
               *graphlayout,    /* 6,2 */
               *controlslayout;
 
-  ECGGraph *apd_graph[NumAPDGraphs];
+  ECGGraph *apd_graph[NumAPDGraphs+1];    /* 1 extra for graph showing all electrodes*/
   /* Dummy Widget that contains 3 qlabels, 1 per axis label */
-  QWidget *apd_graph_labels[NumAPDGraphs];
+  QWidget *apd_graph_labels[NumAPDGraphs+1];
   /* Combo box atop each graph that controls graph ranges.. this gets populated
      with GraphRangeSettings for each combo box, see apd_control.cpp */
-  QComboBox *apd_range_ctl[NumAPDGraphs];
+  QComboBox *apd_range_ctl[NumAPDGraphs+1];
   /* this stuff defines the contents of the above combo boxes and also
      controls the range settings of the ECGGraph * graphs above */
   struct GraphRangeSettings { double min; double max; };
