@@ -1,3 +1,25 @@
+/*
+ * This file is part of the RT-Linux Multichannel Data Acquisition System
+ *
+ * Copyright (C) 1999,2000 David Christini
+ * Copyright (C) 2001 David Christini, Lyuba Golub, Calin Culianu
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program (see COPYRIGHT file); if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA, or go to their website at
+ * http://www.gnu.org.
+ */
 #include <string>
 #include <strstream>
 #include <sys/time.h>
@@ -8,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <string.h>
+#include <qdatetime.h>
 #include "exception.h"
 #include "sample_source.h"
 #include "shm_mgr.h"
@@ -34,7 +57,7 @@ SampleStructSource::numBytesLastRead() const
   return num_bytes_last_read; 
 }
 
-unsigned int 
+uint 
 SampleStructSource::numSamplesLastRead() const
 {
   return numBytesLastRead() / SAMPLE_SOURCE_BLOCK_SZ_BYTES;
@@ -176,12 +199,20 @@ SampleStructRTFSource::flush() {
   
 }
 
-int 
-SampleStructRTFSource::suggestSleepTime(int proc_time_ms = 0) const 
+const SampleStruct * 
+SampleStructRTFSource::read(int b_time=-1)
 {
-  int sleeptime_ms, n_read;
-  unsigned int n_chans_in_use;
+  pollWaitTimer.start();
+  return SampleStructFileSource::read(b_time);
+}
 
+int 
+SampleStructRTFSource::suggestPollWaitTime() const 
+{
+  int sleeptime_ms, n_read, proc_time_ms;
+  uint n_chans_in_use;
+
+  proc_time_ms = pollWaitTimer.elapsed();
   sleeptime_ms = DESIRED_FIFO_FEEL_MS - proc_time_ms;  
   n_chans_in_use = ShmMgr::numChannelsInUse(ComediSubDevice::AnalogInput);
   n_read = numSamplesLastRead();

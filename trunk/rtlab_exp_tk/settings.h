@@ -142,20 +142,20 @@ class DAQSettings: public Settings
 
   /* returns a null QRect (isNull() == true) if specified channel
      has no settings */
-  const QRect & getWindowSetting(unsigned int channel_number) const;
+  const QRect & getWindowSetting(uint channel_number) const;
   /* to disable a window, pass a null QRect */
-  void setWindowSetting(unsigned int channel_number, const QRect & rect);
+  void setWindowSetting(uint channel_number, const QRect & rect);
 
   /* returns a set of channel-id's that are all channels
      that have window settings.  This is intended to be used in daq system
      as a master list of channels to re-open for the user as a convenience
      on startup. All the windowSettings in this set will return a valid
      QRect in getWindowSettings() */
-  set<unsigned int> windowSettingChannels() const;
+  set<uint> windowSettingChannels() const;
 
  private:
 
-  map<unsigned int, QRect> windowSettings;
+  map<uint, QRect> windowSettings;
 
   /* parses the windosettings string and sets up the windowSettings map */
   void parseWindowSettings();

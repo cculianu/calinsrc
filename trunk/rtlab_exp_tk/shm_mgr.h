@@ -40,7 +40,9 @@ namespace ShmMgr
   extern const char *devFileName; /* the file name of the mbuff character 
 				     device we are using */
 
-  void check(); /* attaches to shm, or throws exception if unable to */
+  void check(); /* inline version */
+  void _check(); /* real meat of above... attached to shm or throws exception 
+		    on error */
   void detach(); 
   bool attach(); /* returns true iff we sucessfully attached to the shm 
 		    or were already attached */
@@ -72,31 +74,173 @@ namespace ShmMgr
   /* channel-specific stuff--basically wrappers to CR_PACK */
 
   /* below returns range index from comedi - use with comedi_get_range */
-  unsigned int channelRange(ComediSubDevice::SubdevType t, 
-			    unsigned int chan);   
-  unsigned int channelRange(int subdevtype, unsigned int chan);
-  void setChannelRange(ComediSubDevice::SubdevType t, unsigned int chan, 
-		       unsigned int r); 
-  void setChannelRange(int subdevtype, unsigned int chan, unsigned int r);
+  uint channelRange(ComediSubDevice::SubdevType t, 
+			    uint chan);   
+  uint channelRange(int subdevtype, uint chan);
+  void setChannelRange(ComediSubDevice::SubdevType t, uint chan, 
+		       uint r); 
+  void setChannelRange(int subdevtype, uint chan, uint r);
  
 
   /* is channel controls */
-  bool isChanOn(ComediSubDevice::SubdevType t, unsigned int chan);
-  bool isChanOn(int t, unsigned int chan); 
-  void setChannel (ComediSubDevice::SubdevType t, unsigned int chan, 
+  bool isChanOn(ComediSubDevice::SubdevType t, uint chan);
+  bool isChanOn(int t, uint chan); 
+  void setChannel (ComediSubDevice::SubdevType t, uint chan, 
 		   bool onoroff);
-  void setChannel (int t, unsigned int chan, bool onoroff);  
-  unsigned int numChannels (ComediSubDevice::SubdevType t);
-  unsigned int numChannels (int subdevtype);
-  unsigned int numChannelsInUse (ComediSubDevice::SubdevType t);
-  unsigned int numChannelsInUse (int subdevtype);
+  void setChannel (int t, uint chan, bool onoroff);  
+  uint numChannels (ComediSubDevice::SubdevType t);
+  uint numChannels (int subdevtype);
+  uint numChannelsInUse (ComediSubDevice::SubdevType t);
+  uint numChannelsInUse (int subdevtype);
 
   /* return the right array for this type */
-  unsigned int *chanArray(ComediSubDevice::SubdevType t);
-  unsigned int *chanArray(int subdevtype);
+  uint *chanArray(ComediSubDevice::SubdevType t);
+  uint *chanArray(int subdevtype);
   char *chanUseArray(ComediSubDevice::SubdevType t);
   char *chanUseArray(int t);
+
+  /* other shared memory wrappers... */
+  uint samplingRateHz();
 };
+
+inline 
+void 
+ShmMgr::check() /* inline version */
+{ 
+  if (shm == NULL) _check(); 
+} 
+
+inline
+uint *
+ShmMgr::chanArray(int subdevtype) 
+{ 
+  check();
+  return (subdevtype == COMEDI_SUBD_AO 
+	  ? shm->ao_chan
+	  : shm->ai_chan);
+}
+ 
+inline
+uint *
+ShmMgr::chanArray(ComediSubDevice::SubdevType t) 
+{ return chanArray(ComediSubDevice::sd2int(t)); }
+
+ 
+inline
+char *
+ShmMgr::chanUseArray (int channeltype) 
+{
+  check();
+  return ( channeltype == COMEDI_SUBD_AO
+	   ? shm->ao_chans_in_use
+	   : shm->ai_chans_in_use );
+}
+
+ 
+inline
+char *
+ShmMgr::chanUseArray (ComediSubDevice::SubdevType channeltype) 
+{ return chanUseArray(ComediSubDevice::sd2int(channeltype)); }   
+
+
+inline
+uint
+ShmMgr::channelRange(ComediSubDevice::SubdevType subdev, uint chan) 
+{ return channelRange(ComediSubDevice::sd2int(subdev), chan); }  
+
+ 
+inline
+uint 
+ShmMgr::channelRange(int subdevtype, uint chan) 
+{
+  return CR_RANGE (chanArray(subdevtype)[chan]);
+}
+
+ 
+inline
+void 
+ShmMgr::setChannelRange(ComediSubDevice::SubdevType s, uint c, 
+			uint r)
+{setChannelRange(ComediSubDevice::sd2int(s), c, r);}
+
+ 
+inline
+void 
+ShmMgr::setChannelRange(int s, uint c, uint r)
+{
+  uint *arr = chanArray(s);
+  arr[c] = CR_PACK(CR_CHAN(arr[c]), r, CR_AREF(arr[c]));
+}
+
+
+inline
+bool
+ShmMgr::isChanOn (int t, uint c)
+{ check(); return is_chan_on(c, chanUseArray(t)) == 1; }
+
+inline
+bool
+ShmMgr::isChanOn (ComediSubDevice::SubdevType t, uint c) 
+{ return isChanOn(ComediSubDevice::sd2int(t), c); }
+
+
+
+inline
+void
+ShmMgr::setChannel(ComediSubDevice::SubdevType t,  uint c, bool onoff)
+{ setChannel(ComediSubDevice::sd2int(t), c, onoff); }
+
+
+inline
+void
+ShmMgr::setChannel(int t,  uint c, bool onoff)
+{ set_chan ( c, chanUseArray(t), onoff ); }
+
+inline
+uint
+ShmMgr::numChannels(ComediSubDevice::SubdevType t)
+{
+  return numChannels(ComediSubDevice::sd2int(t));
+}
+
+inline
+uint 
+ShmMgr::numChannels(int t)
+{
+  check();
+  return (t == COMEDI_SUBD_AO 
+	  ? shm->n_ao_chans
+	  : shm->n_ai_chans);
+}
+
+inline
+uint
+ShmMgr::numChannelsInUse(ComediSubDevice::SubdevType t)
+{
+  return numChannelsInUse(ComediSubDevice::sd2int(t));
+}
+
+inline
+uint
+ShmMgr::numChannelsInUse(int t)
+{
+  uint ret = 0;
+  uint n_chans = numChannels(t);
+
+  for (uint i = 0; i < n_chans; i++) {
+    ret += isChanOn(t, i);
+  }
+
+  return ret;
+}
+
+inline
+uint
+ShmMgr::samplingRateHz()
+{
+  check();
+  return shm->sampling_rate_hz;
+}
 
 
 #endif

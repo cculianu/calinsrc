@@ -45,7 +45,7 @@ main (void)
     cout << "RT Process is " << (p.have_rt_process ? "" : "NOT ") 
 	 << "loaded..." << endl;
 
-    for (unsigned int i = 0; i < p.probed_devices.size(); i++) {
+    for (uint i = 0; i < p.probed_devices.size(); i++) {
       ComediDevice & dev = p.probed_devices[i];
       cout << dev.filename << " (minor " << dev.minor << ") with board name " 
 	   << dev.devicename << " and driver name " << dev.drivername << "." 
@@ -54,7 +54,7 @@ main (void)
 	   << pluralize("acceptable subdevice", dev.subdevices.size()) 
 	   << ":" << endl;
       
-      for (unsigned int j = 0; j < dev.subdevices.size(); j++) {
+      for (uint j = 0; j < dev.subdevices.size(); j++) {
 	ComediSubDevice & subdev = dev.subdevices[j];
 	cout << "    Device " << subdev.id << " of type " << subdev.type
 	     << " has " << pluralize("channel", subdev.n_channels) << " (" 
@@ -126,7 +126,7 @@ Probe::find(const QString & dev) const
 {
   static const ComediDevice nullDevice;
 
-  for (unsigned int i = 0; i < probed_devices.size(); i++) {
+  for (uint i = 0; i < probed_devices.size(); i++) {
     if (dev == probed_devices[i].filename) {
       return probed_devices[i];
     }
@@ -175,7 +175,7 @@ Probe::do_probe(const QString & filename)
     sdev.n_channels = comedi_get_n_channels(it, sdev.id);
     if (sdev.n_channels) {
       sdev.ranges().resize(comedi_get_n_ranges(it, sdev.id, 0));
-      for (unsigned int j = 0; j < sdev.ranges().size(); j++) {
+      for (uint j = 0; j < sdev.ranges().size(); j++) {
 	sdev.ranges()[j] = *comedi_get_range(it, sdev.id, 0, j);
       }
       sdev.maxData() = comedi_get_maxdata(it, sdev.id, 0);
@@ -200,7 +200,7 @@ Probe::do_probe(const QString & filename)
 void
 Probe::validate() const
 {
-  unsigned int i;
+  uint i;
 
   /* TODO: Fixme.  There needs to be a way to tell if rt_process.o is loaded
      which is independent of the shm_mgr. */

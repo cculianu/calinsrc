@@ -1,6 +1,7 @@
 #ifndef _SAMPLE_SOURCE_H
 #define _SAMPLE_SOURCE_H
 
+#include <qdatetime.h>
 #include <string>
 #include "shared_stuff.h"
 
@@ -15,12 +16,11 @@ class SampleStructSource {
   virtual const SampleStruct * read(int b_time=-1) = 0; // throws eof, others  
   virtual void flush() = 0; /* flushes the reader input buffer */
   virtual size_t numBytesLastRead() const;
-  virtual unsigned int numSamplesLastRead() const;
+  virtual uint numSamplesLastRead() const;
 
   /* time in ms that this source suggests the reading process should
      spend waiting for more data, for maximal efficiency */
-  virtual int suggestSleepTime(int proc_time_ms = 0) const 
-    { return ( proc_time_ms < 0 ? 0 : proc_time_ms); };
+  virtual int suggestPollWaitTime() const { return 0; };
 
  protected:
   SampleStructSource(); /* abstract class.. no public constructors */
@@ -75,8 +75,11 @@ class SampleStructRTFSource : public SampleStructFileSource {
  public:
   SampleStructRTFSource(unsigned short minor = 0);
   void flush(); // flush old/stale data that may be in fifo, throws exceptions
-  int suggestSleepTime(int proc_time_ms = 0) const;
-  
+  const SampleStruct * read(int b_time=-1); // throws eof, others  
+  int suggestPollWaitTime() const;
+
+ private:
+  QTime pollWaitTimer;
 };
 
 #endif

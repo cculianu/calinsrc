@@ -26,9 +26,11 @@
 
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
+#include "sample_listener.h"
 
 
-class DAQECGGraphContainer : public ECGGraphContainer {
+class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener 
+{
   Q_OBJECT
 
  public:
@@ -36,22 +38,21 @@ class DAQECGGraphContainer : public ECGGraphContainer {
   /** Pass in a daq graph to become the container of.  Graph gets reparented
       to be a child of this class! */
   DAQECGGraphContainer(ECGGraph *graph, 
-		       unsigned int channelId,
+		       uint channelId,
 		       QWidget *parent = 0, 
 		       const char *name = 0, 
 		       WFlags flags = 0);
 
-
-  unsigned int channelId() const { return  channel_id; }
+  /* as per the SampleListener 'interface' */
+  void newSample(const SampleStruct *);
 
  signals:
-  /* emitted whenever this graph is closing */
-  void closing (unsigned int channelId);
+  void closing(const DAQECGGraphContainer *self);
 
   /* emitted whenever the range changes on the graph this container 
      contains.  Range is the index of the range in this container's 
      private combo box.  Channelid comed from the DAQECGGraph */
-  void rangeChanged (unsigned int channelId, int range);
+  void rangeChanged (uint channelId, int range);
 
  protected slots:
   void _rangeChangedWrapper(int range); /* signal wrapper 
@@ -62,7 +63,6 @@ class DAQECGGraphContainer : public ECGGraphContainer {
 
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
   
-  unsigned int channel_id;
 };
 
 #endif

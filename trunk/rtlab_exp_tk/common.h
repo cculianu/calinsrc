@@ -24,9 +24,9 @@
 #ifndef _COMMON_H
 #  define _COMMON_H
 #  include "config.h"
-
+#  include <values.h>
 #  define DAQ_SYSTEM_USER_DIR QString(getenv("HOME")) + "/." + DAQ_DIRNAME
 
-
+typedef unsigned int uint;
 
 #endif

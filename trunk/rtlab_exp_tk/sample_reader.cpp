@@ -66,7 +66,7 @@ SampleStructReader::newSource(SampleStructSource *source)
 const SampleStruct *
 SampleStructReader::readAll()
 {
-  register unsigned int num_samples_read, i;
+  register uint num_samples_read, i;
 
   const SampleStruct *samples = source->read(secs_to_block_on_reads);
 
@@ -111,10 +111,10 @@ SampleStructReader::numRead() const { return num_samples_total; }
 scan_index_t
 SampleStructReader::numDropped() const { return num_dropped_total; }
 
-unsigned int
+uint
 SampleStructReader::numLastRead() const { return source->numSamplesLastRead();}
 
-unsigned int
+uint
 SampleStructReader::numLastDropped() const { return num_dropped_last; }
 
 /* returns the index of the first scan encountered */
@@ -125,7 +125,7 @@ SampleStructReader::firstScanIndex() const {  return scan_started_index; }
 scan_index_t 
 SampleStructReader::currentScanIndex() const 
 {
-  unsigned int i;
+  uint i;
   scan_index_t ret = 0;
 
   for (i = 0; i < SHD_MAX_CHANNELS; i++) {

@@ -27,7 +27,7 @@ const ComediSubDevice &
 ComediDevice::find(ComediSubDevice::SubdevType type, int id_start = 0) const
 {
   static const ComediSubDevice nullSubDevice((float *)0);
-  for (unsigned int i = 0; i < subdevices.size(); i++) {
+  for (uint i = 0; i < subdevices.size(); i++) {
     if (subdevices[i].id >= id_start && subdevices[i].type == type) {
       return subdevices[i];
     }
@@ -36,13 +36,17 @@ ComediDevice::find(ComediSubDevice::SubdevType type, int id_start = 0) const
   return nullSubDevice;
 }
 
-/* modifies SampleStruct, writing data into it as well */
+/* 
+   NO LONGER NEEDED AS NOW SampleStruct natively stores the unitdata
+   in ->data field.
+   modifies SampleStruct, writing data into it as well 
 lsampl_t
 ComediSubDevice::
 unitsToSample(SampleStruct & s, double unitdata) const
 {
-  return (s.data = (lsampl_t)
-	  ((unitdata-(_ranges[s.range].min) 
+    return (s.data = (lsampl_t)
+            ((unitdata-(_ranges[s.range].min) 
 	    / (_ranges[s.range].max - _ranges[s.range].min)) 
 	   * maxdata));
-}
+} 
+*/

@@ -328,7 +328,7 @@ ConfigurationWindow::DeviceListView::DeviceListView
   addColumn("Driver");
   addColumn("No. AI Channels");
   
-  for (unsigned int i = 0; i < devs.size(); i++) {
+  for (uint i = 0; i < devs.size(); i++) {
     const ComediDevice & d = devs[i];
     const ComediSubDevice & ai = d.find(ComediSubDevice::AnalogInput);
     QString driverTxt ( (!ai.isNull() && ai.used_by_rt_process  
