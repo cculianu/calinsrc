@@ -25,6 +25,10 @@
 #  define _COMMON_H
 #  include "config.h"
 #  include <values.h>
+#ifndef BUG
+#  include <stdio.h>
+#define BUG() do { fprintf(stderr, "BUG at %s:%s!\n", __FILE__, __LINE__); } while (0)
+#endif
 
 
 typedef unsigned int uint;
