@@ -1054,7 +1054,7 @@ ReaderLoop(DAQSystem *d) :
   switch (d->settings.getInputSource()) {
   
   case DAQSettings::RTProcess:
-    shmCtl = new ShmControllerNoFifo(); /* auto-probe a shm_type */
+    shmCtl = new ShmControllerWithFifo(); /* auto-probe a shm_type */
 
     source = new SampleStructFIFOSource(string("/dev/rtf") + shmCtl->aiFifoMinor());
     source->flush();

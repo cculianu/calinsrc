@@ -40,6 +40,8 @@
 #include "rtos_middleman.h"
 #include "rtlab_cmd.h"
 #include "stimulator.h"
+#include "user_cmd.h"
+#include "user_to_kernel.h"
 
 #ifdef TIME_RT_LOOP
 #  define I_SHOULD_PRINT_TIME \
@@ -339,6 +341,9 @@ static void *daq_rt_task (void *arg)
 
     lastloopstart = loopstart;
 
+    /* reads the control FIFO and possibly modifies rtp_shm */
+    do_user_commands(); 
+
     clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &next_task_period, 0);
   }
 
@@ -415,6 +420,12 @@ int init_module(void)
     error = -ENOMEM;
   }
   
+  if ((error = rtp_find_free_rtf(&rtp_shm->control_fifo, 
+				 256 * sizeof(struct rtfifo_cmd)))) {
+    errorMessage = "Cannot create fifo for user to kernel communication!";     
+    goto init_error;
+  }
+
   if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, rtp_shm->ai_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
@@ -903,10 +914,11 @@ static void cleanup_fifos (void)
 {
   if (! rtp_shm) return;
 
+  if (rtp_shm->control_fifo  >= 0) rtf_destroy(rtp_shm->control_fifo);
   if (rtp_shm->ai_fifo_minor >= 0) rtf_destroy(rtp_shm->ai_fifo_minor);
   if (rtp_shm->ao_fifo_minor >= 0) rtf_destroy(rtp_shm->ao_fifo_minor);    
 
-  rtp_shm->ai_fifo_minor = rtp_shm->ao_fifo_minor = -1;
+  rtp_shm->control_fifo = rtp_shm->ai_fifo_minor = rtp_shm->ao_fifo_minor = -1;
 }
 
 static void cleanup_comedi_stuff (void) 

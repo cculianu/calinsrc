@@ -87,7 +87,7 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 63      /* test this against the below 
+# define SHD_SHM_STRUCT_VERSION 64      /* test this against the below 
                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
@@ -103,16 +103,16 @@ struct SharedMemStruct {
                                             define                           */
 
   /* read/write struct memebers for kernel and userland                      */
-  volatile unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
+  volatile uconst unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
                                                       analog channel parameters, use
                                                       CR_PACK et al to modify this    */
-  volatile unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
+  volatile uconst unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
                            
-  volatile char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
-                                           process which channels to ignore. 
-7                                           Use inline funcs set_chan() and 
-                                           is_chan_on() to set this           */
-  volatile char ao_chans_in_use[CHAN_MASK_SIZE];  
+  volatile uconst char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
+						    process which channels to ignore. 
+						    Use inline funcs set_chan() and 
+						    is_chan_on() to set this           */
+  volatile uconst char ao_chans_in_use[CHAN_MASK_SIZE];  
   
   /* The constant sampling rate --
      this directly affects the period of the rt loop.  
@@ -120,7 +120,7 @@ struct SharedMemStruct {
      default of 1000  */
   uconst sampling_rate_t sampling_rate_hz; 
   
-  volatile scan_index_t scan_index; /* index of current analog input scan --   
+  volatile uconst scan_index_t scan_index; /* index of current analog input scan --   
                                        notice how this property is writable..
                                        we can reset this at any time from the 
                                        user process so as to allow the ability
@@ -130,10 +130,10 @@ struct SharedMemStruct {
                                                   is a trivial function
                                                   of BILLION / sampling rate */
 				     
-  SpikeParams spike_params;              /* see struct definition above      */
-  int    attached_pid;  /* Normally the PID of daq_system, but crashed
-                           daq_system's can forget to clean up after themselves
-                           here! */
+  uconst SpikeParams spike_params;              /* see struct definition above      */
+  uconst int    attached_pid;  /* Normally the PID of daq_system, but crashed
+				  daq_system's can forget to clean up after themselves
+				  here! */
   /* read-only struct members for userland, read/write for kernel            */
   uconst int ai_minor;                   /* /dev/comediX                     */
   uconst int ao_minor;                   /* /dev/comediX (currently unused)  */
