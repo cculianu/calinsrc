@@ -34,13 +34,9 @@
 #include <qtable.h>
 #include <qheader.h>
 #include <qmessagebox.h> 
-#include <qfile.h>
 #include <iostream>
 #include <vector>
 #include <comedi.h>
-
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "configuration.h"
 #include "settings.h"
@@ -182,13 +178,14 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   connect(&OK, SIGNAL(clicked(void)),
 	  this, SLOT(accept(void)));
 
+  fromSettings();
 }
 
 void
 ConfigurationWindow::show()
 {
   fromSettings(); /* sets up default selected values in this dialog
-		     based on stuff from the Settings instance */
+                     based on stuff from the Settings instance */
   QDialog::show();
 }
 
@@ -327,51 +324,19 @@ ConfigurationWindow::accept()
 bool
 ConfigurationWindow::validate()
 {
-  QFile of (outputFile.text());
+  bool retval = true;
 
-  
-  /* todo: put this particular file check somewhere
-     more logical like inside DAQSystem class? */
-  if (of.exists() && startupScreenSemantics ) {
-    struct stat buf;
+  if (!startupScreenSemantics)
+    retval = 
+      QMessageBox::information(this,
+                               "Changes will take effect later",
+                               "Settings changes (if any), will take effect "
+                               "the next time the application is restarted.",
+                               QMessageBox::Ok);
 
-    stat(of.name(), &buf);
-
-    if (S_ISDIR(buf.st_mode) ) {
-
-      /* if it's a directory, complain and reject */
-      QMessageBox::critical(this,
-                            QString("%1 is a directory.").arg(of.name()),
-                            QString("%1 is a directory. Specify a "
-                                    "non-directory file for "
-                                    "output.").arg(of.name()),
-                            QMessageBox::Ok, QMessageBox::NoButton);
-      return false;
-
-    } else if (S_ISREG(buf.st_mode)) {
-
-      /* don't allow pre-existing regular files */
-      return 
-        ( 0 ==
-          
-          QMessageBox::warning 
-          (
-           this, 
-           QString("File %1 exists").arg(of.name()),
-           QString("The output filename you have chosen: %1 already exists.\n"
-                   "If you choose to continue, this file will be overwritten "
-                   "and your data will be lost!").arg(of.name()),
-           "Overwrite", 
-           "Cancel", 
-           QString::null,
-           1, 
-           1
-          )
-          
-       );
-    }
-  }
-  return true;
+  return retval; /* always true for now... 
+                    put other stuff in here if we want some sort of 
+                    all-stop-on-illegal inputs.. */
 }
 
 ConfigurationWindow::DeviceListView::

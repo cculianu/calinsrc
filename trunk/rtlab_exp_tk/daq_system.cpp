@@ -30,11 +30,15 @@
 #include <qinputdialog.h> 
 #include <qmessagebox.h>
 #include <qtimer.h>
+#include <qfile.h>
 
 #include <iostream>
 #include <map>
 #include <vector>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "configuration.h"
 #include "sample_source.h"
 #include "sample_reader.h"
@@ -46,7 +50,7 @@
 #include "daq_system.h"
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
-		      const char * name = "DAQSystem", 
+		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
 		      WFlags f = WType_TopLevel)
 : QMainWindow(parent, name, f), 
   configWindow(cw),
@@ -64,6 +68,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
                                     daq system is closing */
   log(&ws, "Log Window")
 {
+  this->setCaption(QString("%1 - %2").arg(name).arg(settings.getDataFile()));
   this->setCentralWidget(&ws);
   ws.setScrollBarsEnabled(true);
   ws.show();
@@ -434,6 +439,55 @@ DAQSystem::setStatusBarScanIndex(scan_index_t index)
 {
   statusBarScanIndex.setText(QString("%1").arg((ulong)index));
 }
+
+bool
+DAQSystem::isValidDAQSettings(const DAQSettings & s)
+{
+  QFile of (s.getDataFile());
+
+  
+  if (of.exists()) {
+    struct stat buf;
+
+    stat(of.name(), &buf);
+
+    if (S_ISDIR(buf.st_mode) ) {
+
+      /* if it's a directory, complain and reject */
+      QMessageBox::critical(0,
+                            QString("%1 is a directory.").arg(of.name()),
+                            QString("%1 is a directory. Specify a "
+                                    "non-directory file for "
+                                    "output.").arg(of.name()),
+                            QMessageBox::Ok, QMessageBox::NoButton);
+      return false;
+
+    } else if (S_ISREG(buf.st_mode)) {
+
+      /* don't allow pre-existing regular files */
+      return 
+        ( 0 ==
+          
+          QMessageBox::warning 
+          (
+           0, 
+           QString("File %1 exists").arg(of.name()),
+           QString("The output filename you have chosen: %1 already exists.\n"
+                   "If you choose to continue, this file will be overwritten "
+                   "and your data will be lost!").arg(of.name()),
+           "Overwrite", 
+           "Cancel", 
+           QString::null,
+           1, 
+           1
+          )
+          
+       );
+    }
+  }
+  return true;
+}
+
 
 
 ReaderLoop::

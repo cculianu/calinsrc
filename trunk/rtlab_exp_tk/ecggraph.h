@@ -71,6 +71,11 @@ class ECGGraph : public QWidget {
       Default is a reddish dashed-line  width=1 pen */
   virtual QPen & spikeLinePen ();
 
+  /** Use this to change the way the blip pen looks.  
+      Note that it will always be filled though
+      Default is a  yellowish width=0 pen */
+  virtual QPen & blipPen ();  
+
   /** Change the backgroundColor with this method */
   virtual QColor & backgroundColor ();
 
@@ -202,12 +207,12 @@ signals:
 					    we have plotted in total */
 
   QPointArray *points;          /* a cache of all the points written 
-				   (size is numSamples) */  
+                                   (size is numSamples) */  
   QPixmap  _buffer, _background, _threshHoldLine;
 
   QPainter devicePainter;
 
-  QPen graphPen, spikePen;
+  QPen graphPen, spikePen, _blipPen;
 
   QColor _gridColor, _backgroundColor;
 
@@ -216,7 +221,7 @@ signals:
   bool spikeTHoldEnabled;
   double spikeTHold;
 
-  QPoint spikeTHoldPoints[2];
+  QPoint spikeTHoldPoints[2], lastBlip;
 
   ECGPoint lastSpike;
   int _spikeBlanking;
@@ -260,6 +265,9 @@ signals:
   virtual void paintSpikeTHoldLine();
   virtual void clearSpikeTHoldLine();
   virtual void computeSpikeTHoldPoints();
+
+  /** draws that little blip artifact at the current position */
+  virtual void drawLittleBlip ();
 
  private:
   void detectSpike(double amplitude);

@@ -46,6 +46,7 @@
 #ifdef __RTLINUX__
 #endif
 
+#define DAQ_SYSTEM_APPNAME_CSTRING "DAQSystem"
 
 class DAQSystem;
 
@@ -107,12 +108,14 @@ class DAQSystem : public QMainWindow
 
  public:
   DAQSystem (ConfigurationWindow & cw, QWidget * parent = 0, 
-	     const char * name = "DAQSystem", WFlags f = WType_TopLevel);
+             const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
+             WFlags f = WType_TopLevel);
 
   ~DAQSystem();
 
   const ComediDevice & currentDevice() const { return currentdevice; }
 
+  static bool isValidDAQSettings(const DAQSettings & s);
 
  public slots:
   void addChannel(); 

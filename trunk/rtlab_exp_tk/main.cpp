@@ -54,22 +54,26 @@ int
 main(int argc, char *argv[])
 {
   QApplication a(argc, argv);
-  bool gotUnimplementedException = false;
+  bool showConfigScreen;
   int retval = 0;
 
  try_again:
   try {
 
     init(); /* this may throw an exception on error */
-  
-    /* display configuration window, if we're supposed to */
-    if ( (settings->getShowConfigOnStartup() || gotUnimplementedException )    
-         && (conf->startupScreenSemantics=true) && !conf->exec() ) {
-      uninit();
-      return (1);
-    }
+    showConfigScreen = settings->getShowConfigOnStartup();
 
-    daqSystem = new DAQSystem(*conf, 0,0, 
+    /* display configuration window, if we're supposed to */
+    do {
+      conf->startupScreenSemantics = true;
+      if ( showConfigScreen && !conf->exec() ) {
+        uninit();
+        return (1);
+      }
+    } while (!DAQSystem::isValidDAQSettings(*settings) 
+             && (showConfigScreen = true) );
+
+    daqSystem = new DAQSystem(*conf, 0, DAQ_SYSTEM_APPNAME_CSTRING, 
                               Qt::WType_TopLevel | Qt::WDestructiveClose );
     a.setMainWidget(daqSystem);     
     
@@ -78,7 +82,7 @@ main(int argc, char *argv[])
     
   } catch (const UnimplementedException & e) {
     e.showError();
-    gotUnimplementedException = true;
+    showConfigScreen = true;
     uninit();
     goto try_again;
   } catch (const Exception & e) {

@@ -73,6 +73,9 @@ ECGGraph::ECGGraph (int sampleRateHz = 1000,
   spikePen.setWidth(1);
   spikePen.setColor("#ff3333");
   spikePen.setStyle(DashLine);
+  _blipPen.setWidth(0);
+  _blipPen.setCapStyle(RoundCap);
+  _blipPen.setColor("#ffffcc");
 
   initBuffer(); // initialize the pixmap buffer
 
@@ -94,6 +97,15 @@ QPen & ECGGraph::plotPen () {
 QPen & ECGGraph::spikeLinePen () {
   return spikePen;  
 }
+
+/** Use this to change the way the blip pen looks.  
+    Note that it will always be filled though
+    Default is a  yellowish width=0 pen */
+QPen & 
+ECGGraph::blipPen () {
+  return _blipPen;
+}  
+
   
 /** Change the backgroundColor with this method */
 QColor & ECGGraph::backgroundColor () {
@@ -153,7 +165,7 @@ void ECGGraph::plot (double amplitude, uint64 sample_index) {
 void ECGGraph::plot (double amplitude) {
 
   static const int plotFactor = 10; /* actually draw to screen every 
-				       plotFactor-th sample */
+                                       plotFactor-th sample */
 
   if (currentSampleIndex && currentSampleIndex != _totalSampleCount
       && !(currentSampleIndex  % plotFactor)) {
@@ -162,9 +174,16 @@ void ECGGraph::plot (double amplitude) {
 
   makePoint(amplitude);
 
-  if (currentSampleIndex && !(currentSampleIndex % plotFactor) )
+  if (currentSampleIndex && !(currentSampleIndex % plotFactor) ) {
+
+    /* plot the lines */
     plotLines (currentSampleIndex - plotFactor, currentSampleIndex);  
 
+    /* now draw the little blip */
+    drawLittleBlip();
+
+  }
+  
   currentSampleIndex = ++currentSampleIndex % numSamples;
   _totalSampleCount++;  
 
@@ -186,12 +205,11 @@ void ECGGraph::paintEvent (QPaintEvent *paintEvent) {
 /** creates real (points array) and virtual (samples array) points,
     for a given amplitude at a given index */
 void ECGGraph::makePoint (double amplitude, int sampleIndex = -1) {
-  QPoint point;
   
   if (sampleIndex < 0) 
     sampleIndex = currentSampleIndex;
   
-  point = sampleVectorToPoint(amplitude, sampleIndex);
+  QPoint point ( sampleVectorToPoint(amplitude, sampleIndex) );
 
 #ifdef DEBUG
   //cout << "created Point(" << point.x() << ", " << point.y() << ") for amp. " << amplitude << " and index " << sampleIndex << endl;
@@ -333,7 +351,7 @@ void ECGGraph::remakeAllPoints () {
 
   computeSpikeTHoldPoints (); /* re-compute the spike threshold */
   initBuffer(); /* reset the background pixmap so that 
-		   we may procees with a fresh render */
+                   we may procees with a fresh render */
   maxIndex = ( _totalSampleCount < numSamples 
 	       ? _totalSampleCount 
 	       : numSamples );
@@ -478,6 +496,35 @@ void
 ECGGraph::setSpikeBlanking(int sb)
 { _spikeBlanking = sb; emit spikeBlankingSet(sb); }
 
+
+void ECGGraph::drawLittleBlip () {
+  static const int blipsize = 4; /* in pixels */
+
+  QPoint here (points->at(currentSampleIndex));
+  here.setY(here.y()-blipsize/2); // center  
+  here.setX(here.x()-blipsize/2); //        it
+  
+  
+
+  if (!lastBlip.isNull()) {
+    /* erase old blip */
+    bitBlt(this, lastBlip.x(), lastBlip.y(), &_buffer, lastBlip.x(), lastBlip.y(), blipsize, blipsize, CopyROP, TRUE);      
+    /* todo: fix this so the spike threshhold line doesn't get clobbered */
+
+  }
+  devicePainter.begin (this);
+  BrushStyle oldBrush = devicePainter.brush().style();
+  QColor oldBrushColor = devicePainter.brush().color();
+  devicePainter.setBrush(SolidPattern);
+  devicePainter.setBrush(_blipPen.color());
+  devicePainter.setPen(_blipPen);
+  devicePainter.drawEllipse(here.x(), here.y(), blipsize, blipsize);
+  devicePainter.setBrush(oldBrushColor);
+  devicePainter.setBrush(oldBrush);
+  devicePainter.end();
+  lastBlip = here;
+}
+
 /* super internal helper for plot() ... should be called every
    time plot() is called */
 void
@@ -503,3 +550,4 @@ ECGGraph::detectSpike(double amplitude) {
   }
   
 }
+
