@@ -152,7 +152,7 @@ class ECGGraph : public QWidget {
      is 0 (after a reset() or on a new graph) and the max is
      samplingRateHz() * secondsVisible() - 1 */
   uint currentPosition() const { return currentSampleIndex; }
-  
+
 signals:
   // to do: move these out of here in favor of
   //        keeping this class generic?
@@ -171,6 +171,9 @@ signals:
 
   /** emits the sample vector that the mouse is over */
   void mouseOverVector(double amplitude, uint64 cumSampleIndex);
+
+  /** emits the real wc time of the mouse pos */
+  void mouseOverTimeAndVoltage(double realTimeSecs, double voltage);
 
   /** emitted when the user clicks on the graph */
   void rightClicked();  void leftClicked(); void eitherClicked();
@@ -290,16 +293,6 @@ signals:
       new size before a repaint. */
    void remakeAllPoints ();
 
-  /** The basic formula to translate a sample's vector to 
-      physical x and y coordinates relative to the graph.  */
-   QPoint sampleVectorToPoint (double amplitude, int sampleIndex,
-                               int n_indices = -1,
-                               int width = -1, int height = -1) const;
-
-  /** The inverse of sampleVectorToPoint() */
-  void pointToSampleVector (const QPoint & point, 
-                                    double *amplitude, int *sampleIndex); 
-
   /** Converts a local sample index to a cumulative sample index */
   long long cumulateSampleIndex(int localSampleIndex);
 
@@ -311,6 +304,16 @@ signals:
   void drawLittleBlip (int index = -1);
 
   void computeCurrentSampleIndex(bool reset = false);
+
+  /** The basic formula to translate a sample's vector to 
+      physical x and y coordinates relative to the graph.  */
+   QPoint sampleVectorToPoint (double amplitude, int sampleIndex,
+                               int n_indices = -1,
+                               int width = -1, int height = -1) const;
+
+  /** The inverse of sampleVectorToPoint() */
+  void pointToSampleVector (const QPoint & point, 
+                            double *amplitude, int *sampleIndex); 
 
 };
 

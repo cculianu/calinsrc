@@ -30,6 +30,7 @@
 #include <qregexp.h>
 #include <qtooltip.h>
 #include <qfont.h>
+#include <qtimer.h>
 
 #include <stdio.h>
 #include <math.h>
@@ -177,8 +178,6 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     last_spike_index(0)
     
 {  
-
-
   static const QString yAxisLabelFormat( "%1 V" );
   
   this->setFrameStyle(StyledPanel);
@@ -352,21 +351,6 @@ setCurrentIndexStatus(scan_index_t index)
   }
 }
 
-/* Slot for updating the 'Mouse pos' status bar line.
-   The 'index' we get here (from the ECGGraph class) is inaccurate
-   as dropped samples can lead to de-synchronization between
-   the graph and the actual sample's scan index.
-   In addition we may also have O.B.1 (Obi-Wan) error here -- I didn't 
-   check since I will re-write this mechanism soon.  
-
-   TODO: Rethink scan index strategy  --Calin */
-void
-ECGGraphContainer::
-setMouseVectorStatus(double voltage, scan_index_t index)
-{   
-  (void) voltage; (void) index;
-}
-
 void
 ECGGraphContainer::
 setSpikeThresholdStatus(double voltage)
@@ -512,3 +496,4 @@ vector<QString> ECGGraphContainer::xAxisText() const
   
   return ret;
 }
+

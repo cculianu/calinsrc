@@ -79,6 +79,7 @@
 #include "daq_images.h"
 #include "daq_graph_controls.h"
 #include "daq_channel_params.h"
+#include "version.h"
 
 /* 
    An Opaque Class that handles the log window.. this allows us
@@ -132,6 +133,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   timeStampB(&mainToolBar),
   statusBar(this),
   statusBarScanIndex(&statusBar),
+  statusBarMouseOver(&statusBar),
   readerLoop(this),
   shmCtl(*readerLoop.shmCtl),
   log(0),
@@ -176,6 +178,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   plugin_menu.setCaption(plugin_menu.name());
   
   statusBar.addWidget(&statusBarScanIndex);
+  statusBar.addWidget(&statusBarMouseOver);
 
   configWindow.startupScreenSemantics = false;
 
@@ -220,7 +223,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
     helpMenu.insertItem("DAQ System Help", help1);
     helpMenu.insertItem("Configuring DAQ System", help2);
-    helpMenu.insertItem("&About", help3);
+    helpMenu.insertItem("&About", helpAbout);
 
     connect(&helpMenu, SIGNAL(activated(int)), 
             this, SLOT(daqHelp(int)));
@@ -486,11 +489,28 @@ const QString DAQSystem::helpMenuDestinations[n_help_dests] =
   DAQMimeSources::HTML::about
 };
 
+void DAQSystem::about()
+{
+  QMessageBox *aboutMB = 
+    new QMessageBox("About DAQSystem", "", QMessageBox::Information, 
+                    QMessageBox::Ok, QMessageBox::NoButton, 
+                    QMessageBox::NoButton, this, "About DAQSystem", true);
+
+  aboutMB->setText("DAQSystem v." VERSION_NUM_STR"\n"
+                   "Copyright 2001-2003 Calin A. Culianu, David J. Christini\n"
+                   "This program is part of the Realtime Linux Experiment \n"
+                   "Interface System (RTLab).\n"
+                   "This program is licensed as GNU GPL (http://www.gnu.org)");
+  aboutMB->setIconPixmap(QPixmap(DAQImages::daq_system_img));
+  aboutMB->exec();
+  delete aboutMB;
+}
+
 void DAQSystem::daqHelp( int id )
 {
-  if ( id >= help1 && id < n_help_dests )
+  if ( id == helpAbout ) about();
+  else if ( id >= help1 && id < n_help_dests )
     DAQHelpBrowser::getDefaultBrowser()->openPage( helpMenuDestinations[id] );
-  
 }
 
 bool
@@ -608,6 +628,11 @@ DAQSystem::openChannelWindow(uint chan, int range, int n_secs)
      destructor in ECGGraph */
   ECGGraph *graph = new ECGGraph(shmCtl.samplingRateHz(), n_secs);
 
+  // for mouse position status bar
+  graph->setMouseTracking(true);
+  connect(graph, SIGNAL(mouseOverTimeAndVoltage(double, double)),
+          this, SLOT(setMouseOverSample(double, double)));  
+
   /* todo: put the below in a deleteable place! */
   ECGGraphContainer *gcont =
     new ECGGraphContainer(graph, chan, &ws, graphName.latin1());
@@ -633,7 +658,7 @@ DAQSystem::openChannelWindow(uint chan, int range, int n_secs)
           this, SLOT(graphOff(const ECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
           graphControls, SLOT(removeGraph(const ECGGraphContainer *)));
-
+  
   /* spike connections */
   connect(graph, SIGNAL(spikeThresholdSet(double)),
           this, SLOT(spikeThresholdSet(double)));
@@ -755,6 +780,17 @@ DAQSystem::setStatusBarScanIndex(scan_index_t index)
 {
   statusBarScanIndex.
     setText(QString("Scan Index %1").arg(uint64_to_cstr(index)));
+}
+
+void
+DAQSystem::setMouseOverSample(double time, double voltage)
+{
+  static const int factor = 1; // tweak this if its too slow
+  static int ct = 0;
+
+  if (!(ct++ % factor))
+    statusBarMouseOver.setText(QString("Mouse pos: %1 sec, %2 V")
+                               .arg(time, 0, 'f', 1).arg(voltage, 0, 'f', 3));
 }
 
 void

@@ -51,6 +51,7 @@
 #include "daq_help_browser.h"
 #include "daq_mime_sources.h"
 #include "daq_images.h"
+#include "version.h"
 
 #ifdef TEST_CW
 #include <qapplication.h>
@@ -142,7 +143,7 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   startupScreenSemantics(false),
   deviceProbe(deviceProbe), 
   settings(settings),
-  masterGrid(this, 5, 1), 
+  masterGrid(this, 6, 1), 
   deviceSelectionGroup(1, Horizontal, this),
   templateSelectionGroup(1, Horizontal, this),
   outputFileSelectionGroup(1, Horizontal, this),
@@ -221,6 +222,9 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   masterGrid.addWidget(&showDialogOnStartupChk, 3, 0); 
   masterGrid.addWidget(&bottomButtons, 4, 0);
   //masterGrid.addWidget(&OK, 4, 0);
+  QLabel *tmplbl = new QLabel(QString("v.%1").arg(VERSION_NUM_STR), this);
+  tmplbl->setAlignment(AlignRight);
+  masterGrid.addWidget(tmplbl, 5, 0);
   showDialogOnStartupChk.setText("Always show this configuration window on "
                                  "application startup");
   OK.setAutoDefault(true);

@@ -92,14 +92,6 @@ public slots:
     this channel is up to */
   void setCurrentIndexStatus(scan_index_t index);
 
-  /* Slot for updating the 'Mouse pos' status bar line.
-     The 'index' we get here (from the ECGGraph class) is inaccurate
-     as dropped samples can lead to de-synchronization between
-     the graph and the actual sample's scan index.
-     In addition we may also have ab O.B.1 (Obi-Wan) error here -- I didn't 
-     check since I will re-write this mechanism soon.  --Calin */
-  void setMouseVectorStatus(double voltage, uint64 index);
-
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
 
@@ -113,7 +105,7 @@ public slots:
  protected:
 
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
-
+  
  private slots:
   void mouseUpInGraph();
   void mouseDownInGraph();
@@ -141,6 +133,7 @@ public slots:
   const scan_index_t scan_index_threshold; // internal
   scan_index_t last_scan_index, 
                last_spike_index; /* for computing instantaneous hz */
+
 };
 
 #endif
