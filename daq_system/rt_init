@@ -6,9 +6,10 @@
 #setup comedi ... these also insert comedi.o, mite.o & rtl_time.o automatically
 #(comment if done automatically in /etc/rc.d/rc.local)
 /sbin/modprobe ni_atmio
-/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260,3 
+/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260
+#/usr/sbin/comedi_config /dev/comedi0 atmio-E 0x260,3 
 /sbin/modprobe kcomedilib
-/usr/local/comedi/comedilib-0.7.9/comedi_calibrate/comedi_calibrate #slow!
+#/usr/local/comedi/comedilib-0.7.9/comedi_calibrate/comedi_calibrate #slow!
 modlocation=`pwd`
 
 /sbin/insmod rtl_sched
