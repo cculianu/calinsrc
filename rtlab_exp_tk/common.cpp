@@ -41,14 +41,31 @@ QString operator+(const QString & s, uint64 in)
 { return s + QString(uint64_to_cstr(in)); };
 
 
+
+/* 
+   Takes an unsigned 64-bit integer and converts it into a human-readable
+   C-string in base-10.  Uses 10 static buffers for the target strings,
+   so that if you call this more than 10 times in a row, it will overwrite
+   old data, since this function does an sprintf conversion to a static char* 
+   buffer.  (There are 10 such buffers, and old ones get recycled
+   after 10 calls to this function).
+
+   Summary: Basically this function isn't terribly reentrant! 
+*/
 const char *uint64_to_cstr(uint64 in)
 {
-  static char buf[64]; // non-reentrant function!!
+  static const int n_strs = 10, bufsz = 64;
+  static int n = 0;
+  static char buf[n_strs][bufsz]; // non-reentrant function!!
+  
+  char * ret = buf[n];
+  
+  snprintf(ret, bufsz, "%llu", in);
+  ret[bufsz-1] = 0;
 
-  snprintf(buf, 64, "%llu", in);
-  buf[63] = 0;
+  n = (n + 1) % n_strs;
 
-  return buf;
+  return ret;
 }
 
 bool cstr_to_uint64(const char *in, uint64 & out)

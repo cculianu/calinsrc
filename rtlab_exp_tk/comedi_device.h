@@ -45,6 +45,34 @@ namespace ComediChannel
   AnalogRef int2ar(int r);
 };
 
+namespace ComediRange {
+
+  class Unit {
+    public:
+        Unit(int i = UNIT_volt);
+ 
+        Unit & operator=(int i);     
+        bool operator== (const Unit &);
+        operator int() const;
+        operator QString() const;
+
+    private:
+        int u;
+  };
+
+  /* parses 'string' for range settings and puts the results
+     inside rangeMin, rangeMax, and units */
+  extern bool parseString(const QString &string, 
+                          double & rangeMin, 
+                          double & rangeMax, 
+                          Unit & units);
+
+  extern QString buildString(double min, double max, Unit);
+
+  extern const Unit Volts, MilliVolts;
+
+};
+
 class ComediSubDevice
 {  
   friend class ComediDevice;
@@ -70,8 +98,8 @@ class ComediSubDevice
   const vector<comedi_range> & ranges() const {return _ranges;}
 
   /* Generates a string for the given range index
-     returns a null QString if channelId is invalid...  */
-  QString generateRangeString(uint channelId) const;
+     returns a null QString if range_id is invalid...  */
+  QString generateRangeString(uint range_id) const;
 
   lsampl_t maxData() const { return maxdata; }
   lsampl_t & maxData() { return maxdata; }

@@ -20,7 +20,22 @@
  * http://www.gnu.org.
  */
 
+#include <qregexp.h>
 #include "comedi_device.h"
+
+
+const ComediRange::Unit     ComediRange::Volts      = UNIT_volt, 
+                            ComediRange::MilliVolts = UNIT_mA;
+
+ComediRange::Unit::Unit(int i = UNIT_volt) { *this = i; }
+bool ComediRange::Unit::operator==(const Unit &in) { return in.u == u; } 
+ComediRange::Unit & ComediRange::Unit::operator=(int i) 
+    { u = ( i == UNIT_volt ? UNIT_volt : UNIT_mA ); return *this; } 
+ComediRange::Unit::operator int() const { return u; }
+ComediRange::Unit::operator QString() const
+    { return QString( u == UNIT_volt ? "V" : "mV" ); }
+
+
 
 /* below returns a ComediSubDevice with isNull()==true if not found */
 const ComediSubDevice &
@@ -36,34 +51,53 @@ ComediDevice::find(ComediSubDevice::SubdevType type, int id_start = 0) const
   return nullSubDevice;
 }
 
-/* 
-   NO LONGER NEEDED AS NOW SampleStruct natively stores the unitdata
-   in ->data field.
-   modifies SampleStruct, writing data into it as well 
-lsampl_t
-ComediSubDevice::
-unitsToSample(SampleStruct & s, double unitdata) const
-{
-    return (s.data = (lsampl_t)
-            ((unitdata-(_ranges[s.range].min) 
-	    / (_ranges[s.range].max - _ranges[s.range].min)) 
-	   * maxdata));
-} 
-*/
-
-
 QString
 ComediSubDevice::  /* Generates a string for the given range */
-generateRangeString(uint channelId) const
+generateRangeString(uint rangeId) const
 {
   QString ret;
 
-  if (channelId < ranges().size() ) {
+  if (rangeId < ranges().size() ) {
     /* build range id combo box inside here */
-    const comedi_range & r = ranges()[channelId];
-    QString u( ( r.unit == UNIT_volt ? "V" : "mV" ) );
-    ret = QString().setNum(r.min) + u + " - " + QString().setNum(r.max) + u;
+    const comedi_range & r = ranges()[rangeId];
+    ret = ComediRange::buildString(r.min, r.max, r.unit);
   }
 
   return ret;
 }
+
+QString
+ComediRange::
+buildString (double min, double max, Unit unit) 
+{
+  static const QString format ("%1%3 - %2%4");
+
+  QString ustr = static_cast<QString>(unit); // operator QString()
+  return format.arg(min, 2).arg(max, 2).arg(ustr).arg(ustr);
+}
+
+/** parses the range setting string and places its components in
+    the provided reference parameters */
+bool
+ComediRange::
+parseString (const QString & rangeString, 
+             double & rangeMin, 
+             double & rangeMax, 
+             Unit & units) 
+{
+  static QRegExp regexp("-?[0-9]+\\.?-?[0-9]*");
+  int index=0,len=0;
+  
+  if ( (index = regexp.match(rangeString, 0, &len)) != -1
+       && sscanf(rangeString.mid(index,len), "%lf", &rangeMin) 
+       && (index = regexp.match(rangeString, index+len, &len)) != -1
+       && sscanf(rangeString.mid(index,len), "%lf", &rangeMax) ) {
+    // look for the units string
+    units = ((rangeString.find((QString)MilliVolts, index + len ) > -1) 
+             ? MilliVolts 
+             : Volts );
+    return true;
+  }
+  return false;
+}
+

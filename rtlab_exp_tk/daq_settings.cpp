@@ -236,25 +236,22 @@ void DAQSettings::clearWindowSettings()
     setWindowSetting(*it, nullqr);   
 }
 
-/* the null channel parameter */
-const DAQSettings::ChannelParams DAQSettings::ChannelParams::null; 
-
 const
-DAQSettings::ChannelParams &
+DAQChannelParams &
 DAQSettings::getChannelParameters(uint channel_number) const
 {
-  map<uint, ChannelParams>::const_iterator i = channelParams.find(channel_number);
+  map<uint, DAQChannelParams>::const_iterator i = channelParams.find(channel_number);
 
   if (i != channelParams.end()) {
     return i->second;
   }
 
-  return ChannelParams::null;
+  return DAQChannelParams::null;
 }
 
 void
 DAQSettings::setChannelParameters(uint channel_number, 
-                                  const ChannelParams & cp)
+                                  const DAQChannelParams & cp)
 {
   if (cp.isNull()) {
     channelParams.erase(channel_number);
@@ -267,7 +264,7 @@ DAQSettings::setChannelParameters(uint channel_number,
 void 
 DAQSettings::clearChannelParameters()
 {
-  map<uint, ChannelParams>::iterator it;
+  map<uint, DAQChannelParams>::iterator it;
   set<uint> ids;
   set<uint>::iterator sit;
 
@@ -275,7 +272,7 @@ DAQSettings::clearChannelParameters()
     ids.insert(it->first);
   
   for (sit = ids.begin(); sit != ids.end(); sit++) 
-    setChannelParameters(*sit, ChannelParams::null); /* set them all to null */
+    setChannelParameters(*sit, DAQChannelParams::null); /* set them all to null */
   
 }
 
@@ -436,30 +433,30 @@ DAQSettings::parseChannelParameters()
   channelParams = parseChannelParameters(settingsMap [SECTION_NAME] [ KEY_CHANNEL_PARAMS ]);
 }
 
-map<uint, DAQSettings::ChannelParams>
+map<uint, DAQChannelParams>
 DAQSettings::parseChannelParameters(QString cp)
 {
-  map<uint, ChannelParams> ret;
+  map<uint, DAQChannelParams> ret;
 
   QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+[.0-9e-]*,\\d+,\\d+;");
   int curr_match = 0, len = 0;
   while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
-    ChannelParams c; 
+    DAQChannelParams c; 
     int chan, tmp; chan = tmp = -1;
     QString match = cp.mid(curr_match, len);
     chan = match.left((tmp = match.find(':'))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.n_secs = match.left((tmp = match.find(','))).toInt(); // parse number
+    c.secondsVisible = match.left((tmp = match.find(','))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.range = match.left((tmp = match.find(','))).toInt(); // parse number
+    c.rangeSetting = match.left((tmp = match.find(','))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.spike_on = match.left((tmp = match.find(','))).toInt(); // parse number
+    c.spikeOn = match.left((tmp = match.find(','))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.spike_thold = match.left((tmp = match.find(','))).toDouble(); // parse number
+    c.spikeThold = match.left((tmp = match.find(','))).toDouble(); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.spike_polarity = (match.left((tmp = match.find(','))).toInt() == Negative ? Negative : Positive); // parse number
+    c.spikePolarity = (match.left((tmp = match.find(','))).toInt() == Negative ? Negative : Positive); // parse number
     match = match.mid(tmp + 1); // consume number
-    c.spike_blanking = match.left((tmp = match.find(';'))).toInt(); // parse number
+    c.spikeBlanking = match.left((tmp = match.find(';'))).toInt(); // parse number
     match = match.mid(tmp + 1); // consume number
     c.setNull(false);
     ret[ chan ] = c; // add channel params to map
@@ -479,22 +476,22 @@ DAQSettings::generateChannelParametersString()
 
 QString
 DAQSettings::
-generateChannelParametersString(const map<uint, ChannelParams> & cp)
+generateChannelParametersString(const map<uint, DAQChannelParams> & cp)
 {
   QString out;
 
-  map<uint, ChannelParams>::const_iterator i;
+  map<uint, DAQChannelParams>::const_iterator i;
   for (i = cp.begin(); i != cp.end(); i++) {
     uint chan = i->first;
-    const ChannelParams & c = i->second;
+    const DAQChannelParams & c = i->second;
     out += 
       QString::number(chan) + ":" +
-      QString::number(c.n_secs) + "," +
-      QString::number(c.range) + "," +
-      QString::number((short)c.spike_on) + "," +
-      QString::number(c.spike_thold) + "," +
-      QString::number((short)c.spike_polarity) + "," +
-      QString::number(c.spike_blanking) + ";";
+      QString::number(c.secondsVisible) + "," +
+      QString::number(c.rangeSetting) + "," +
+      QString::number((short)c.spikeOn) + "," +
+      QString::number(c.spikeThold) + "," +
+      QString::number((short)c.spikePolarity) + "," +
+      QString::number(c.spikeBlanking) + ";";
   }
   return out;
 }

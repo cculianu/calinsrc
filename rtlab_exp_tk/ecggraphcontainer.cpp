@@ -36,6 +36,7 @@
 #include <string.h>
 
 #include "ecggraphcontainer.h"
+#include "comedi_device.h"
 #include "daq_images.h"
 
 struct FMT
@@ -159,10 +160,6 @@ QString FMT::get(const char *name, ...)
   return fstr;
 }
 
-/* used for string parsing and building in the combo box
-   see also enum RangeUnit */
-const QString ECGGraphContainer::unitStrings[3] =  { "V", "mV" };
-
   /** Pass in a graph to become the container of.  Graph gets reparented
       to be a child of this class! */
 ECGGraphContainer::ECGGraphContainer(ECGGraph *graph, 	
@@ -170,13 +167,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
                                      QWidget *parent, 
                                      const char *name, 
                                      WFlags flags,
-                                     scan_index_t scanIndexStatusIncrement, 
-                                     uint seconds_visible_step) 
+                                     scan_index_t scanIndexStatusIncrement) 
   : 
     QFrame (parent, name, flags | WDestructiveClose), 
     graph(graph),
     channelId(channelId),
-    seconds_visible_step(seconds_visible_step),
     scan_index_threshold(scanIndexStatusIncrement), 
     last_scan_index((scan_index_t)-scan_index_threshold),
     last_spike_index(0)
@@ -184,108 +179,14 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 {  
 
 
-  if (seconds_visible_step == 0) seconds_visible_step = 1;
-
   static const QString yAxisLabelFormat( "%1 V" );
-  QHBox *tmpBox;
   
   this->setFrameStyle(StyledPanel);
   
   // this is the master layout for this widget
-  layout = new QGridLayout (this, 2, 3, 1, 1);
+  layout = new QGridLayout (this, 2, 2, 1, 1);
   
-
-  // the controls on top
-  controlsBox = new QHBox(this);
-  controlsBox->setFrameStyle(StyledPanel | Raised);
-  controlsBox->setMargin(1);
-  controlsBox->setSpacing(6);
-
-  // graph's name in the top left
-  graphNameLabel = new QLabel((name ? name : ""), controlsBox);
-  graphNameLabel->setAlignment(AlignRight | AlignTop);  
-  graphNameLabel->setMargin(1);
-  graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
-
-  pauseBox = new QPushButton ( controlsBox );
-  pauseBox->setPixmap( DAQImages::pause_img );
-  pauseBox->setMaximumSize(pauseBox->sizeHint());
-  QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
-                "actual data acquisition");
-  connect(pauseBox, SIGNAL(pressed()), this, SLOT(pauseUnpause()));    
-
-  // the range settings control
-  tmpBox = new QHBox(controlsBox);
-  tmpBox->setFrameStyle(StyledPanel | Raised);
-  tmpBox->setMargin(1);
-  tmpBox->setSpacing(2);
-
-  QLabel *tmpLabel = new QLabel ("Change Scale: ", tmpBox);  
-  rangeComboBox = new QComboBox(tmpBox, 
-                                QString("%1 Scale Box").arg(graph->name()));
-  const char *rangeComboBoxTip = "Use this to change graph scale (Y Axis Range).";
-  QToolTip::add(rangeComboBox, rangeComboBoxTip);
-  QToolTip::add(tmpLabel, rangeComboBoxTip);
-
-  controlsBox->setStretchFactor(rangeComboBox, 1);  
-  layout->addMultiCellWidget (controlsBox, 0, 0, 0, 1);
-
-  connect(rangeComboBox,  
-          SIGNAL(activated(const QString &)),
-          this, 
-          SLOT (rangeChange(const QString &))); 
-
-  // the number of seconds visible spin box up top
-  tmpBox = new QHBox(controlsBox);
-  tmpBox->setFrameStyle(StyledPanel | Raised);
-  tmpBox->setMargin(1);
-  tmpBox->setSpacing(2);
-
-  tmpLabel = 
-    new QLabel("Secs. Visible", tmpBox); 
-  /* we can do the above because of qt's 'quasi-garbage collection'  */
-  secondsVisibleBox = new QSpinBox(0, 100, seconds_visible_step, tmpBox);
-  secondsVisibleBox->setValue(graph->secondsVisible());
-  const char * secondsVisibleBoxTip =  
-    "Use this to change the number of seconds visible in your graph "
-    "(X Axis Scale).";
-  QToolTip::add(tmpLabel, secondsVisibleBoxTip);
-  QToolTip::add(secondsVisibleBox, secondsVisibleBoxTip);
-  connect(secondsVisibleBox, SIGNAL(valueChanged ( int )),
-          this, SLOT(setSecondsVisible(int)));
-  
-
-  // the spike polarity box
-  tmpBox = new QHBox(controlsBox); // we rely on auto-gc
-  tmpBox->setFrameStyle(StyledPanel | Raised);
-  tmpBox->setMargin(1);
-  tmpBox->setSpacing(2);
-
-  spikePolarityLabel = new QLabel("Spike 'Polarity': ", tmpBox);
-
-  QToolTip::add(spikePolarityLabel, 
-                "Set the spike polarity by selecting either positive or "
-                "negative spike polarity.");
-  
-  QString tmpStr("Set the spike blanking, which is defined as the number of\n"
-                 "milliseconds to wait before detecting a new spike.  If\n"
-                 "this is set too low and you are constantly getting spikes,\n"
-                 "you may not be able to keep track of them as they will\n"
-                 "come in too fast.  If this is set too high you may lose\n"
-                 "some spikes you would have otherwise been interested in.");
-
-  polarityButton = new QPushButton( tmpBox );
-  connect(polarityButton, SIGNAL(clicked()), 
-          this, SLOT(swapSpikePolarity()));
-  setSpikePolarity( Positive );
-
-  tmpLabel = new QLabel("  Spike Blanking (ms):", tmpBox);
-  spikeBlanking = new QSpinBox(10, 1000000, 10, tmpBox);
-  QToolTip::add(tmpLabel, tmpStr);
-  QToolTip::add(spikeBlanking, tmpStr);
-  connect(spikeBlanking, SIGNAL(valueChanged(int)), 
-          this, SLOT (emitSpikeBlanking(int))); 
-  
+ 
   /* y axis labels -- these get auto-updated whenever the graph emits signal 
      rangeChanged */
   labelBox = new QVBox(this);
@@ -304,7 +205,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   connect(graph, 
           SIGNAL(rangeChanged(double, double)), 
           this, 
-          SLOT(updateYAxisLabels(double, double)));  
+          SLOT(setYAxisLabels(double, double)));  
   connect (graph,
            SIGNAL(eitherClicked(void)),
            this,
@@ -318,32 +219,26 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
            graph,
            SLOT(unsetSpikeThreshold(void)));
 
-  connect (graph,
-           SIGNAL(secondsVisibleChanged(int)),
-           secondsVisibleBox,
-           SLOT(setValue(int)));
-
   graph->reparent(this, QPoint(0,0) );
 
   // re-synch the labels to the graph, just to be sure...
   // setRange implicitly emits rangeChanged()
   graph->setRange(graph->rangeMin(), graph->rangeMax());
-  QToolTip::add(graph, "Click+Drag to set a spike threshhold.");
   
-  layout->addWidget (labelBox, 1, 0);
-  layout->addWidget (graph, 1, 1);
+  layout->addWidget (labelBox, 0, 0);
+  layout->addWidget (graph, 0, 1);
 
   layout->setColStretch(1,1); // make the graph the only stretchable thing
-  layout->setRowStretch(1,1);
+  layout->setRowStretch(0,1);
 
   if (name)  this->setCaption(name);
 
   { /* for the x-axis stuff */
     QLabel *xaxislabel = new QLabel("Time: ", this);
-    layout->addWidget(xaxislabel, 2, 0);
+    layout->addWidget(xaxislabel, 1, 0);
 
     xaxis = new QWidget(this);
-    layout->addWidget(xaxis, 2, 1);
+    layout->addWidget(xaxis, 1, 1);
     xaxis_layout = 0; /* will be built dynamically by setXAxisLabels() */
 
     connect(graph, SIGNAL(gridlineMeaningChanged(const vector<uint64> &)),
@@ -400,161 +295,30 @@ consume(const SampleStruct *sample)
   setCurrentIndexStatus(sample->scan_index);  
 }
 
-/** RangeChange slot to be used in conjunction
-    with a combobox.  The rangeString should be of the form
-    */
-void 
-ECGGraphContainer::rangeChange( const QString &rangeString ) {
-  static QRegExp regexp("-?[0-9]+\\.?-?[0-9]*");
-  double newRangeMin, newRangeMax;
-  RangeUnit unit;
-
-  if ( parseRangeString(rangeString, newRangeMin, newRangeMax, unit) ) {
-    if ( unit == MilliVolts ) {
-      /* for notifying anyone interested in range changes on the 
-         container-level */
-      emit rangeChanged(channelId, findRangeSetting(newRangeMin, newRangeMax, unit));
-
-      newRangeMin /= 1000.0; /* convert the millivolts range settings into 
-			      Volts, which is done so that we can always rely
-			      on working with the graph in terms of volts */
-      newRangeMax /= 1000.0;
-    }
-    graph->setRange(newRangeMin, newRangeMax);
-  }
-  
-}
-
-void 
-ECGGraphContainer::rangeChange( int index ) {
-  if (index > -1 && index < rangeComboBox->count())
-    rangeComboBox->setCurrentItem( index );
-  /* not needed ? */
-  rangeChange( rangeComboBox->currentText() );
-}
-
-void 
-ECGGraphContainer::rangeChange (double newMin, double newMax, RangeUnit u)
-{
-  int index = findRangeSetting(newMin, newMax, u);
-  if ( index >= 0 ) {
-    rangeChange( index );
-  }
-}
-
-
-/** Returns the index of the new range setting, or -1 if requested
-    setting is a dupe.
-    Appends a range setting to the combo box, having the specified
-    values in the specified units. */
-int 
-ECGGraphContainer::addRangeSetting (double min, double max, RangeUnit unit) 
-{
-  static const QString format ("%1%3 - %2%4");
-
-  // first make sure it isn't a dupe
-  if (findRangeSetting(min, max, unit) > -1) {
-    return -1;
-  }
-  
-  rangeComboBox->insertItem(format.arg(min, 2).arg(max, 2).arg(unitStrings[unit]).arg(unitStrings[unit]));
-
-  return rangeComboBox->count()-1;
-
-}
-
-/* Deletes a range setting from the range combo box at the specified index 
-   Returns false if index is invalid/not found */
-bool
-ECGGraphContainer::deleteRangeSetting (int index) {
-  if (index > -1 && index < rangeComboBox->count()) {
-    rangeComboBox->removeItem(index);
-    return true;
-  }  
-  return false;
-}
-
-int
-ECGGraphContainer::findRangeSetting (double min, double max, RangeUnit u) {
-  int i;
-  double testmin, testmax;
-  RangeUnit testunit;
-
-  for (i = 0; i < rangeComboBox->count(); i++) {
-    parseRangeString(rangeComboBox->text(i), testmin, testmax, testunit);
-    if (testmin == min && testmax == max && testunit == u) {
-      return i;
-    }    
-  }
-  return -1;
-}
-
 /** slot that is normally triggered from the rangeChanged(double, double)
     signal in the ECGGraph instance bound to this object instance */
 void
-ECGGraphContainer::updateYAxisLabels(double rangeMin, double rangeMax) {
+ECGGraphContainer::setYAxisLabels(double rangeMin, double rangeMax) {
   static const QString yAxisLabelFormat( "%1 %2" );
   double rangeMiddle = (rangeMin + rangeMax) / 2;
-  const QString *unit = &unitStrings[Volts];
+  QString unit = ComediRange::Volts;
 
   if (fabs(rangeMax) < 1.0) {
     rangeMin *= 1000;
     rangeMiddle *= 1000;
     rangeMax *= 1000;
-    unit = &unitStrings[MilliVolts];
+    unit = (QString)ComediRange::MilliVolts;
   }
 
-  topYLabel->setText( yAxisLabelFormat.arg(rangeMax).arg(*unit) );
-  middleYLabel->setText( yAxisLabelFormat.arg(rangeMiddle).arg(*unit) );
-  bottomYLabel->setText( yAxisLabelFormat.arg(rangeMin).arg(*unit) );
+  topYLabel->setText( yAxisLabelFormat.arg(rangeMax).arg(unit) );
+  middleYLabel->setText( yAxisLabelFormat.arg(rangeMiddle).arg(unit) );
+  bottomYLabel->setText( yAxisLabelFormat.arg(rangeMin).arg(unit) );
 
 }
 
 inline int roundit(int n, uint step)
 { return n + ( step - n % step < n % step ? (step - n % step) : -(n % step)); }
 
-void
-ECGGraphContainer::setSecondsVisible(int secs)
-{
-  if (!secs) 
-    secondsVisibleBox->setValue(graph->secondsVisible()); // recurse back
-  else if (secs % seconds_visible_step)  // round it to step, recurse back
-    secondsVisibleBox->setValue(roundit(secs, seconds_visible_step));
-  else // propagate it down to the graph since it's a multiple of step
-    graph->setSecondsVisible(secs);
-}
-
-void ECGGraphContainer::swapSpikePolarity() 
-    { 
-      if ( polarity == Positive )
-        setSpikePolarity( Negative );
-      else setSpikePolarity( Positive );
-    }
-
-void ECGGraphContainer::setSpikePolarity(SpikePolarity p)
-{
-  polarity = p;
-  if ( polarity == Positive )
-    {
-      polarityButton->setPixmap( DAQImages::spike_plus_img );
-      QToolTip::remove(polarityButton);
-      QToolTip::add(polarityButton, 
-                    "A positive spike polarity means that a spike is detected if\n"
-                    "the amplitude is greater than or equal to the spike "
-                    "threshold.");      
-    }
-  else
-    {
-      polarityButton->setPixmap( DAQImages::spike_minus_img );
-      QToolTip::remove(polarityButton);
-      QToolTip::add(polarityButton, 
-                    "A negative spike polarity means that a spike is detected if\n"
-                    "the amplitude is less than or equal to the spike "
-                    "threshold.");
-    }
-  emit spikePolarityChanged( polarity );
-
-}
 void
 ECGGraphContainer::
 detectSpike(const SampleStruct *s)
@@ -642,31 +406,6 @@ closeEvent (QCloseEvent *e)
   QWidget::closeEvent(e);
 }
 
-/** parses the range setting string and places its components in
-    the provided reference parameters */
-bool
-ECGGraphContainer::parseRangeString (const QString & rangeString, 
-                                     double & rangeMin, 
-                                     double & rangeMax, 
-                                     RangeUnit & units) 
-{
-  static QRegExp regexp("-?[0-9]+\\.?-?[0-9]*");
-  int index=0,len=0;
-  
-  if ( (index = regexp.match(rangeString, 0, &len)) != -1
-       && sscanf(rangeString.mid(index,len), "%lf", &rangeMin) 
-       && (index = regexp.match(rangeString, index+len, &len)) != -1
-       && sscanf(rangeString.mid(index,len), "%lf", &rangeMax) ) {
-    // look for the units string
-      units = ((rangeString.find(unitStrings[MilliVolts], index + len ) > -1) 
-	       ? MilliVolts 
-	       : Volts );
-      return true;
-  }
-  return false;
-  
-}
-
 /* 
    This code is extremely ugl^H^H^Hcomplex and fragile!
    This basically takes the list of sample indices that the ecggraph
@@ -732,18 +471,7 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
 
 void ECGGraphContainer::pauseUnpause()
 {
-  if (nothungry) //from pause to play
-    {
-      pauseBox->setPixmap( DAQImages::pause_img );
-      statusBar->clear();
-      nothungry = FALSE;
-    }
-  else //from play to pause
-    {
-      pauseBox->setPixmap( DAQImages::play_img );
-      statusBar->message("Graph Display PAUSED");
-      nothungry = TRUE;
-    }
+  nothungry = !nothungry;
 }
 
 /* returns the xAxis strings as they appeaer in the graph container's

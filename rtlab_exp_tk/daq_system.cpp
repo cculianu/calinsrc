@@ -76,6 +76,8 @@
 #include "plugin.h"
 #include "comedi_coprocess.h"
 #include "daq_images.h"
+#include "daq_graph_controls.h"
+#include "daq_channel_params.h"
 
 /* 
    An Opaque Class that handles the log window.. this allows us
@@ -137,6 +139,18 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
   log = new ExperimentLog(*this, 0, "Log Window");
 
+  /* Graph controls.. */
+  graphControls = new DAQGraphControls("Graph Controls", this, &ws, this);
+  graphControls->setCaption("Graph controls");
+
+  /* Graph Controls Connections */
+  connect(graphControls, SIGNAL(rangeChanged(uint, uint)),
+          this, SLOT(graphChangedRange(uint, uint)));
+  connect(graphControls, SIGNAL(spikeBlankingChanged(uint, uint)),
+          this, SLOT(spikeBlankingChanged(uint, uint)));
+  connect(graphControls, SIGNAL(spikePolarityChanged(uint, SpikePolarity)), 
+          this, SLOT(spikePolarityChanged(uint, SpikePolarity)));
+  
 
   printer.setPageSize(settings.getPageSize());
 
@@ -240,6 +254,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     setDockMenuEnabled(true);
     setToolBarsMovable(true);
     addToolBar(&mainToolBar);
+    addDockWindow(graphControls);
   }
 
   connect(&readerLoop, SIGNAL(scanIndexChanged(scan_index_t)),
@@ -541,97 +556,71 @@ DAQSystem::queryOpen(uint & chan, uint & range,
   return retval;
 }
 
-static void defaultifyChannelParams (ECGGraphContainer *gcont, 
-                                     ShmController & shmCtl)
-{
-  const uint & chan = gcont->channelId;
-  ECGGraph *& graph = gcont->graph;
-
-  graph->unsetSpikeThreshold();
-  gcont->setSpikeBlanking( static_cast<int>(DEFAULT_SPIKE_BLANKING) );
-  gcont->setSpikePolarity( Positive );
-  shmCtl.setSpikeEnabled ( chan, false );
-  shmCtl.setSpikeBlanking( chan, DEFAULT_SPIKE_BLANKING ); 
-  shmCtl.setSpikePolarity( chan, Positive );
-}
-
 void
 DAQSystem::openChannelWindow(uint chan, uint range, 
                              uint n_secs)
 {
-  
+  const QString graphName = QString("Channel %1").arg(chan);
+
   QRect pos(settings.getWindowSetting(chan)); /* grab window pos from file */
-  
-  DAQSettings::ChannelParams chanParams(settings.getChannelParameters(chan));
   
   /* leaky memory prevented by spaghetti-like destructive close
      on the ECGGraphContainer and a signal-emitting
-     destructor in DAQECGGraph */
+     destructor in ECGGraph */
   ECGGraph *graph = new ECGGraph(1000, n_secs);
 
   /* todo: put the below in a deleteable place! */
   ECGGraphContainer *gcont =
-    new ECGGraphContainer(graph, chan, &ws, 
-                             QString("Channel %1").arg(chan).latin1());
+    new ECGGraphContainer(graph, chan, &ws, graphName.latin1());
 
   gcont->setIcon(QPixmap(DAQImages::channel_img));
-
-  buildRangeSettings(gcont);
 
   windowMenuAddWindow(gcont); /* add this window to the 
                                  windowMenu QPopupMenu */
 
+  
   gcont -> show(); /* will this help with window setting/geometry? */
+
+  /* add the graph to the readerLoop producers chain.. */
   readerLoop.producers[chan].add(gcont);
+
   /* see about getting rid of these signal/slots and use natural signalling
      in producer/consumer classes.. -CC */
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
           this, SLOT(removeGraphFromSettings(const ECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
           this, SLOT(windowMenuRemoveWindow(const ECGGraphContainer *)));
-  connect(gcont, SIGNAL(rangeChanged(uint, int)),
-          this, SLOT(graphChangedRange(uint, int)));
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
           this, SLOT(graphOff(const ECGGraphContainer *)));
+  connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
+          graphControls, SLOT(removeGraph(const ECGGraphContainer *)));
+
   /* spike connections */
-  connect(gcont, SIGNAL(spikePolarityChanged(SpikePolarity)), 
-          this, SLOT(spikePolarityChanged(SpikePolarity)));
-  connect(gcont, SIGNAL(spikeBlankingChanged(uint)),
-          this, SLOT(spikeBlankingChanged(uint)));
   connect(graph, SIGNAL(spikeThresholdSet(double)),
           this, SLOT(spikeThresholdSet(double)));
   connect(graph, SIGNAL(spikeThresholdUnset(void)),
           this, SLOT(spikeThresholdOff(void)));
 
-  gcont->rangeChange( range ); /* hopefully above slot will take effect 
-                                  and update rt_process appropriately? */
+
+  DAQChannelParams chanParams(settings.getChannelParameters(chan));  
+  chanParams.label = graphName;
+  chanParams.id = chan;
+  chanParams.buildRangeStrings(&currentDevice().find());
+
+  if ( chanParams.isNull() ) { /* means we had no config.ini settings */
+    chanParams.secondsVisible = n_secs;
+    chanParams.rangeSetting = range;
+    chanParams.spikeOn = false;    
+  }
+  
+  graphControls->addGraph(gcont, chanParams);
 
   if (! pos.isNull() ) { /* means we had a default setting */
     gcont->resize(pos.size());
     gcont->move(pos.x(), pos.y());
     gcont->show();
   }
-
-  /* set chan params to default values .. */
-  defaultifyChannelParams(gcont, shmCtl); /* static function */
-  
-  if (! chanParams.isNull() ) { /* means we had a default setting */
-
-    if (chanParams.spike_on) {
-      graph->setSpikeThreshold(chanParams.spike_thold); 
-      /* signal from graph will propagate this information out to the 
-         Shared Memory for the rt_process */
-    }
-
-    gcont->rangeChange(chanParams.range);
-    gcont->setSpikePolarity( chanParams.spike_polarity );
-    gcont->setSpikeBlanking( static_cast<int>(chanParams.spike_blanking) );
-    shmCtl.setSpikeBlanking( chan, chanParams.spike_blanking );
-    shmCtl.setSpikePolarity( chan, chanParams.spike_polarity );
-
-    graph->setSecondsVisible( chanParams.n_secs );
-  } 
- 
+   
   resynch(); /* synchronize all the graph displays */
 
   /* ladies and gentlemen, start your samplings!! */
@@ -657,19 +646,12 @@ DAQSystem::saveGraphSettings(const ECGGraphContainer  *gcont)
   for (it = graphs.begin(); it != graphs.end() && (gcont = *it); it++) {
     uint chan = gcont->channelId; 
 
+
     /* save actual window settings */
     QRect pos(gcont->pos(), gcont->size());
     settings.setWindowSetting(chan, pos);
-    DAQSettings::ChannelParams cp;
-    const ECGGraph *graph = gcont->graph;
-    cp.n_secs = graph->secondsVisible();
-    cp.range = gcont->currentRange();
-    cp.spike_on = graph->spikeMode();
-    cp.spike_thold = graph->spikeThreshold();
-    cp.spike_polarity = shmCtl.spikePolarity(chan);
-    cp.spike_blanking = shmCtl.spikeBlanking(chan); 
-    cp.setNull(false);
-    settings.setChannelParameters(chan, cp);
+    /* grab the channel params model from the graphControls instance... */
+    settings.setChannelParameters(chan, graphControls->getParams(chan) );
   }
 }
 
@@ -691,7 +673,7 @@ DAQSystem::removeGraphFromSettings(const ECGGraphContainer  *gcont)
     settings.setWindowSetting(gcont->channelId, QRect());
     /* clear channel parameters */
     settings.setChannelParameters(gcont->channelId, 
-                                  DAQSettings::ChannelParams());
+                                  DAQChannelParams());
   }
 }
 
@@ -717,10 +699,9 @@ DAQSystem::closeEvent (QCloseEvent * e)
    channel's range/gain setting needs to be changed */
 void
 DAQSystem::
-graphChangedRange(uint channel, int range)
+graphChangedRange(uint channel, uint range)
 {
-  shmCtl.setChannelRange(ComediSubDevice::AnalogInput, channel, 
-                         (uint)range);
+  shmCtl.setChannelRange(ComediSubDevice::AnalogInput, channel, range);
 }
 
 void
@@ -744,22 +725,14 @@ void DAQSystem::windowMenuFocusWindow(QWidget *w)
     w->setFocus(); /* is this how we activate it? */  
 }
 
-void DAQSystem::spikePolarityChanged(SpikePolarity p) 
+void DAQSystem::spikePolarityChanged(uint chan, SpikePolarity p) 
 {
-  const ECGGraphContainer *sender = 
-    dynamic_cast<const ECGGraphContainer *>(this->sender());
-  
-  if ( sender )
-    shmCtl.setSpikePolarity(sender->channelId, p);
+  shmCtl.setSpikePolarity(chan, p);
 }
 
-void DAQSystem::spikeBlankingChanged(uint b) 
+void DAQSystem::spikeBlankingChanged(uint chan, uint b) 
 {
-  const ECGGraphContainer *sender = 
-    dynamic_cast<const ECGGraphContainer *>(this->sender());
-
-  if ( sender )
-    shmCtl.setSpikeBlanking(sender->channelId, b);
+  shmCtl.setSpikeBlanking(chan, b);
 }
 
 void DAQSystem::spikeThresholdSet(double value) 
@@ -877,24 +850,6 @@ DAQSystem::resynch()
       g->graph->reset();
     
  
-}
-
-/* populates the graphcontianer with the correct range options for this
-   channel */
-void 
-DAQSystem::buildRangeSettings(ECGGraphContainer *c) 
-{
-  
-  const vector<comedi_range> ranges = 
-    currentDevice().find().ranges();
-
-  for (uint i = 0; i < ranges.size(); i++) {
-    c->addRangeSetting(ranges[i].min, ranges[i].max,
-                       ( ranges[i].unit == UNIT_volt 
-                         ? ECGGraphContainer::Volts
-                         : ECGGraphContainer::MilliVolts ));
-  }
-
 }
 
 void DAQSystem::showLogWindow()
@@ -1018,7 +973,7 @@ void DAQSystem::print(vector<const ECGGraphContainer *> & gcs)
 
       QPoint topleft(margin,margin);
     
-      painter.drawText(topleft, QString(gcs[i]->name()) + " (" + gcs[i]->currentRangeText() + ")");
+      painter.drawText(topleft, QString(gcs[i]->name()) + " (" + graphControls->getParams(gcs[i]).rangeSettings[graphControls->getParams(gcs[i]).rangeSetting] + ")");
       topleft += QPoint(0, margin + fmetrics.height());
 
       int pm_width = pmetrics.width() - 2 * margin,
@@ -1302,7 +1257,7 @@ PluginMenu::PluginMenu(DAQSystem * ds,
   setIcon(QPixmap(DAQImages::plugins_img));
 
   plugin_cmenu = new QPopupMenu(this, QString(name) + " - Plugin Menu Context");
-  plugin_cmenu->insertItem("Show Window", this, SLOT(showSelectedWindow()));
+  plugin_cmenu->insertItem("Show Window");
   plugin_cmenu->insertItem("Load", this, SLOT(carefullyLoadSelected()));
   plugin_cmenu->insertItem("Unload", this, SLOT(removeSelectedPlugin()));
   plugin_cmenu->insertSeparator();
@@ -1444,25 +1399,10 @@ void PluginMenu::carefullyLoadSelected()
 #ifdef DEBUG
     cerr << "Plugin '" << plugin->name() << "' loaded with address " << reinterpret_cast<void *>(plugin) << endl;
 #endif
+
   } catch (Exception & e) {
     e.showError();   
-  }
-}
-
-void PluginMenu::showSelectedWindow()
-{
-  QListViewItem *item = plugin_box->currentItem();
-
-  if (!item) return;
-
-  Plugin *p = pluginFindByName(item->text(0));
-  QWidget *w = ( p ? dynamic_cast<QWidget *>(p) : 0);
-    
-  if (w) {
-    daqSystem->windowMenuFocusWindow(w); // just in case it is a child of ds
-    w->setFocus(); w->raise(); // in case it is not a child of ds
   }  
-
 }
 
 void PluginMenu::removeSelectedPlugin()
@@ -1480,10 +1420,10 @@ void PluginMenu::pluginMenuContextReq(QListViewItem *item,
                                       int col)
 {  
   Plugin *p = (item ? pluginFindByName(item->text(0)) : 0 );
-  QWidget *w = (p ? dynamic_cast<QWidget *>(p) : 0);
 
-  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(0), /* show window */
-                               w && plugin_box->currentItem());
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(0), /* show window 
+                                                        not supported*/
+                               false);
   plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(1), /* load */
                                !p);
   plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(2), /* unload */
@@ -1728,14 +1668,14 @@ void WindowTemplateDialog::updateDetails()
   QString profileName( templateNames->currentText() );
   DAQSettings::WindowSettingProfile profile 
     = ds->settings.getWindowSettingProfile(profileName);
-  map<uint, DAQSettings::ChannelParams>::iterator it;
+  map<uint, DAQChannelParams>::iterator it;
   
   QString detailStr="";
 
   for (it = profile.channelParams.begin(); it != profile.channelParams.end();
        it++)
     {
-      DAQSettings::ChannelParams & cp = it->second;
+      DAQChannelParams & cp = it->second;
       
       if (cp.isNull()) continue;
 
@@ -1743,16 +1683,16 @@ void WindowTemplateDialog::updateDetails()
       detailStr += 
         QString("<b>Channel ") + QString().setNum(it->first) + "</b><br>\n" 
         + QString("<u>Range:</u> ") 
-        + ds->currentdevice.find().generateRangeString(cp.range) + "<br>\n"
-        + QString("<u>Seconds Visible:</u> ") + QString().setNum(cp.n_secs) 
+        + ds->currentdevice.find().generateRangeString(cp.rangeSetting) + "<br>\n"
+        + QString("<u>Seconds Visible:</u> ") + QString().setNum(cp.secondsVisible) 
         + "<br>\n" 
         + QString("<u>Spike:</u> ") 
-        + (cp.spike_on 
-           ?  QString().setNum(cp.spike_thold)  + "V "
-              + (cp.spike_polarity == Positive 
+        + (cp.spikeOn
+           ?  QString().setNum(cp.spikeThold)  + "V "
+              + (cp.spikePolarity == Positive 
                  ? "Positive" 
                  : "Negative") + " polarity, " 
-           + QString().setNum(cp.spike_blanking) + "ms blanking" 
+           + QString().setNum(cp.spikeBlanking) + "ms blanking" 
              
            : QString("Off")) + "<br>\n" 
         + "<P>\n";
@@ -1811,19 +1751,19 @@ void WindowTemplateDialog::useSelected()
   QString profileName( templateNames->currentText() );
   DAQSettings::WindowSettingProfile profile 
     = ds->settings.getWindowSettingProfile(profileName);
-  map<uint, DAQSettings::ChannelParams>::iterator it;
+  map<uint, DAQChannelParams>::iterator it;
   
   for (it = profile.channelParams.begin(); it != profile.channelParams.end();
        it++)
     {
       uint chan = it->first;
       QRect & pos = profile.windowSettings[chan];
-      DAQSettings::ChannelParams & cp = it->second;
+      DAQChannelParams & cp = it->second;
 
       ds->settings.setChannelParameters(chan, cp);
       ds->settings.setWindowSetting(it->first, pos);
 
-      ds->openChannelWindow(chan, cp.range, cp.n_secs);
+      ds->openChannelWindow(chan, cp.rangeSetting, cp.secondsVisible);
     }
   
 }
