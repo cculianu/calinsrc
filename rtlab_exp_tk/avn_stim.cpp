@@ -148,6 +148,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
   spooler = new TempSpooler<AVNLiebnitz>("avnstim", true);
 
+  determineRTOS(); /* can throw exception here */
   moduleAttach(); /* can throw exception here */
 
   /* stub.. */
@@ -383,9 +384,37 @@ AVNStim::description() const
 }
 
 
+void AVNStim::determineRTOS()
+{
+  rtosUsed = Unknown;
+
+  if (QFile::exists("/proc/rtai")) rtosUsed = RTAI;
+  else if (QFile::exists("/proc/rtlinux")) rtosUsed = RTLinux;
+
+  Assert<PluginException>(rtosUsed != Unknown,
+                          "AVN Stim Plugin Attach Error",
+                          "The AVN Stim plugin could not be attached "
+                          "because it can't figure out which RTOS you are "
+                          "running.  Are you running either RTLinux or RTAI?");
+}
+
 void AVNStim::moduleAttach()
 {
-  shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+  switch(rtosUsed) {
+  case RTLinux:
+    shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+    break;
+  case RTAI:
+    shm = (AVNShared *)rtai_shm_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+    break;
+  default:
+    /* Should not be reached */
+    throw PluginException("Internal Error", QString("Internal error on line ")
+                          + QString::number(__LINE__) + " in file " 
+                          + __FILE__);
+    break;
+  }
+
   Assert<PluginException>(shm && shm->magic == AVN_SHM_MAGIC,
                           "AVN Stim Plugin Attach Error", 
                           "The AVN Stim Plugin can not find the shared "
@@ -418,7 +447,28 @@ void AVNStim::moduleAttach()
 void AVNStim::moduleDetach()
 {
   if (!needFifo()) close(fifo); fifo = -1;
-  if (shm) mbuff_detach(AVN_SHM_NAME, shm); shm = 0;
+
+  if (shm) {
+
+    switch(rtosUsed) {
+    case RTLinux:
+      mbuff_detach(AVN_SHM_NAME, shm);
+      break;
+    case RTAI:
+      rtai_shm_detach(AVN_SHM_NAME, shm);
+      break;
+    default:
+      /* Should not be reached */
+      throw PluginException("Internal Error", 
+                            QString("Internal error on line ") 
+                            + QString::number(__LINE__) + " in file " 
+                            + __FILE__);
+      break;
+    }
+
+    shm = 0;
+
+  }
 }
 
 /* returns parent() dynamic_cast to DAQSystem* */
@@ -499,6 +549,8 @@ void AVNStim::readInFifo()
   int n_read = 0, n_bufs = 0, i = 0;
 
   n_read = ::read(fifo, buf, sizeof(buf));
+
+  n_read = ( n_read < 0 ? 0 : n_read ); // rtai fifos return -1 on failure
 
   n_bufs = n_read / sizeof(AVNLiebnitz);
 
