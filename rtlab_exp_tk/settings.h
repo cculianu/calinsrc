@@ -28,7 +28,6 @@
 #include <vector>
 #include <qiodevice.h>
 #include <qstring.h>
-#include <qregexp.h>
 
 /* 
    todo: figure out a nice way to use hashsets on  all this so
@@ -97,22 +96,26 @@ class Settings
   /* a derived class may optionally set masterSettings -- without it all settings in the file are read and acknowledged */
   const SettingsMap *masterSettings;
 
-  /* Derived classes may need to override these in their constructors! */
-  const QRegExp lineRE, sectionRE;
-
 /* reads all the name/value pairs in the settings file and throws them in a map and returns that */
   virtual SettingsMap readAll();
 
   /* parses a VALID settings line and populates key and value */
-  virtual void parseMatchedLine(const QString & matchedline, 
+  virtual void parseMatchedLine(QString matchedline, 
                                 QString & key, QString & value) const;
 
-  /* returns a matched substring from line if line matches the lineRE, 
-     or otherwise a null QString */
-  virtual QString testLine(const QString & line) const;
-  /* returns a matched substring from line if line matches the sectionRE,
-     or otherwise a null QString */
-  virtual QString testSectionLine(const QString & line) const;
+  /*
+    returns a matched substring from line if line matches the perl-like re:
+        \s*\S+\s*=\s*\S+
+
+     otherwise returns QString::null.
+  */
+  virtual QString testLine(QString line) const;
+  /* 
+     returns the section name if the line matches the form:
+        \s*\[\S*\]\s*
+     otherwise returns null
+ */
+  virtual QString testSectionLine(QString line) const;
 
   virtual void maybeDeleteConfigFile(); // kind of awkward but necessary
 
