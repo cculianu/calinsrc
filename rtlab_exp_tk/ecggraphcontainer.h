@@ -34,6 +34,7 @@
 #include <qbuttongroup.h>
 #include <qradiobutton.h>
 #include <qstatusbar.h>
+#include <qcheckbox.h>
 
 #include <vector>
 
@@ -106,6 +107,8 @@ public:
      x axis labels */
   vector<QString> xAxisText() const;
   
+  bool isPaused() const { return pauseBox->isChecked(); }
+
  signals:
   /* Emitted whenever the range changes on the graph this container 
      contains.  Range is the index of the range in this container's 
@@ -189,6 +192,8 @@ public slots:
  
 
   QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel;
+
+  QCheckBox *pauseBox;
 
   QVBox *labelBox; // for the y axis labels
  

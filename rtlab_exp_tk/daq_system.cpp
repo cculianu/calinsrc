@@ -680,7 +680,7 @@ void DAQSystem::printDialog()
   l.addWidget(vbox, 0, 0);
   QHGroupBox *hgbox = new QHGroupBox("Select graphs to print:", vbox);
   
-  vector<const ECGGraphContainer *> gcs(graphContainers());
+  vector<const ECGGraphContainer *> gcs(graphContainers()), paused;
   map<const ECGGraphContainer *, QCheckBox *> checkboxen;
 
   for (uint i = 0; i < gcs.size(); i++) 
@@ -694,8 +694,16 @@ void DAQSystem::printDialog()
   b->setAccel(QKeySequence(Key_Escape));
   connect(b, SIGNAL(pressed()), &whichGraphs, SLOT(reject()));
 
+  /* pause everything to be all dramatic... */
+  for (uint i = 0; i < gcs.size(); i++) 
+    if (!gcs[i]->isPaused()) {
+      const_cast<ECGGraphContainer *>(gcs[i])->pause();
+      paused.push_back(gcs[i]);
+    }
+
   int result = whichGraphs.exec();
 
+  
   if (result == QDialog::Accepted) {    
     /* harvest selected boxes */
     vector<const ECGGraphContainer *>::iterator i;
@@ -703,6 +711,10 @@ void DAQSystem::printDialog()
       if (!checkboxen[*i]->isChecked()) gcs.erase(i--);
     print(gcs);
   }
+
+  /* now unpause everything that was paused before */
+  for (uint i = 0; i < paused.size(); i++) 
+    const_cast<ECGGraphContainer *>(paused[i])->pause(false);
 
 }
 
@@ -717,6 +729,7 @@ void DAQSystem::print(vector<const ECGGraphContainer *> & gcs)
   if (gcs.size() == 0) return;
 
   printer.setMinMax(1, gcs.size());
+  printer.setFromTo(0, 0);
 
   if (!printer.setup(0)) return;
 
