@@ -431,7 +431,7 @@ int SplitOp::doIt()
 
     cerr << "Done!" << endl;
   } catch (Exception & e) {
-    e.showError();
+    e.showConsoleError();
     return EIO;
   }
   return 0;

@@ -175,7 +175,7 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
       
       Assert<FileException>(!numLeft, "TempSpoolerGZ Error",
                             "Could not fully unspool all data from temporary "
-                            ".gz file!");
+                            "gz file!");
 
       closeGZ();
       openGZ(Write);
