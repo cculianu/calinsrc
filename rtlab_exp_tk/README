@@ -10,7 +10,7 @@ this to compile properly you must do the following:
 
 1. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
 
-2. Make sure Qt 2.3 is installed.  Earlier versions may work or they may not.  Make sure the environment variable QTDIR is set before you run Make and that it points to your Qt installed directory. (On Redhat it has been known to be /usr/lib/qt-2.3.0/ or /usr/lib/qt2).
+2. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  I have tried Qt 2.3.0 and it seemed to work as well, but I am not actively making a promise it will continue to work in the future.  Make sure the environment variable QTDIR is set before you run 'make' and that it points to your Qt installed directory. (On Redhat it has been known to be /usr/lib/qt-2.3.0/ or /usr/lib/qt2 or maybe /usr/lib/qt-3.0.1 if you are already on Qt3).
 
 3. Make sure you also installed tmake.  The rpm for tmake is available from http://www.trolltech.com and also http://www.rpmfind.net.  This tmake utility is a great make-helper written in Perl.  It really made our lives easier and I recommend it highly!
 
@@ -45,7 +45,7 @@ In order for this sample program to even run, you need to insmod the real-time p
 
 COMING SOON
 -----------
-More in the way of an actual toolkit.  Including documentation, more C++ classes, and more development to the core architecture. Also more applications will be built as reference implementations of software that uses the toolkit.
+More in the way of an actual toolkit.  Including documentation, more C++ classes and templates, and more development to the core architecture. Also more applications will be built as reference implementations of software that uses the toolkit.
 
 
 Please come back to http://www.rtlab.org soon to check for changes.  Also if you are interested in updates, please email me and I may get around to creating a mailing list for this software.  We hope this software will grow very much in the coming months!

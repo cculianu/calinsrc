@@ -27,12 +27,15 @@
 
 #include <qmultilineedit.h>
 #include <qstring.h>
-#include <qfile.h>
+#include <qlayout.h>
+#include <qlabel.h>
 
 #include "common.h"
 
-class ExperimentLog: public QMultiLineEdit
+class ExperimentLog: public QWidget
 {
+  Q_OBJECT 
+
  public:
   /* constructs an ExperimentLog with no open outfiles.. use
      the property methods to set a template and outfile */
@@ -48,32 +51,68 @@ class ExperimentLog: public QMultiLineEdit
                  const char * name = 0);
 
   ~ExperimentLog();
-  
-  const QString outFile() const; /* returns the outfile name */
+    
+  /* returns the save file name -- null means not set */
+  const QString & outFile() const { return _outFile; }
 
-  /* closes current output file and attempts to open a new one.  If it doesn't
-     exist this prompts the user to specify another file */
+  bool unsavedStatus() const { return _unsaved_changes; }
+
+  bool checkUnsaved(); /* checks if changes aren't saved and prompts to 
+                          save if user elects to save 
+                          returns false only if the user cancelled */
+
+ public slots:
+  /* Sets the save file.   */
   void setOutFile (const QString &f);
+ 
+  /* attempts to use contents of file as the current text.  This implicitly
+     replaces the text buffer with the contents of the file.
+     If file isn't valid, it just blanks out the buffer. */     
+  void loadTemplate (const QString & log_template);
+
+  void load(); /* prompts user for a file, loads it, sets it to outFile */
+  void save(); /* tries to save current file if its open, otherwise does
+                  saveAs() */
+  void saveAs(); /* prompts user for a file, then saves to it */
+  void revert(); /* reverts the current text if there is a current outfile */
+
+  void insertAtCursor(const QString & text);
+
+ protected slots:
+
+  void setUnsavedStatus(bool status) 
+   { 
+     if ((status && !_unsaved_changes) || (!status && _unsaved_changes)) 
+       changedLabel.setEnabled(status);    
+     _unsaved_changes = status; 
+   }
+
+ private slots:
+
+  void changed() { setUnsavedStatus(true); }
+
+ public:
+
+ QMultiLineEdit & embeddedMultiLineEditorWidget() { return mle; }
+ const QMultiLineEdit & embeddedMultiLineEditorWidget() const { return mle; }
+
+ private:
+  void init();
+  
 
   /* attempts to save the text() buffer to the output file -- may throw
      an application exception on error!! */
   void saveOutFile ();
 
-  /* attempts to use log_template as the current template.  This implicitly
-     replaces the text buffer with the contents of the file log_template.
-     If log_template isn't valid, it just blanks out the buffer. */     
-  void useTemplate (const QString & log_template);
-  
- private:
-  void init();
-  void openOutFile();
-
   static QString readFile(const QString & fileName);
-  static QString queryUserForFile(const QString & selected = QString(""),
-				  bool forceUserToPickSomething = true);
   static const QString getQFileMessage(int status);
 
-  QFile _outFile; 
+  QString _outFile; 
+  bool _unsaved_changes;
+
+  QGridLayout layout; /* this manages this widget's layout */
+  QMultiLineEdit mle; /* the actual editable text */
+  QLabel fileNameLabel, changedLabel;
 };
 
 #endif
