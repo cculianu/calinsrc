@@ -48,6 +48,7 @@
 #include <qfontmetrics.h>
 #include <qpixmap.h>
 #include <qtextbrowser.h>
+#include <qregexp.h>
 
 #include <iostream>
 #include <map>
@@ -190,9 +191,25 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     _menuBar.insertItem("&Help", &helpMenu);
   }
 
-  /* add the log window */
-  log->loadTemplate(settings.getTemplateFileName());
-  windowMenuAddWindow(log); /* add this window to the windowMenu QPopupMenu */
+
+  { /* log window stuff */    
+    log->loadTemplate(settings.getTemplateFileName());
+    
+    /* set the default log savefile name -- which is datafile, minus 
+       extension, plus .log */
+    QString logfile = settings.getDataFile();
+    
+    QRegExp re("(\\.nds|\\.nds-ascii.gz)$"); // match the extension
+
+    if (re.search(logfile) > -1)
+      logfile = logfile.replace(re, ".log"); // replace the extension
+    else
+      logfile = logfile + ".log";
+
+    log->setOutFile(logfile);
+    windowMenuAddWindow(log); /* add this window to the windowMenu 
+                                 QPopupMenu */
+  }
 
 
   { /* add toolbar */

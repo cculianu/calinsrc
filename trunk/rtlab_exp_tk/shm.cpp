@@ -36,7 +36,6 @@
 #include <sys/types.h>
 #include <sys/shm.h>
 
-
 #include "tweaked_mbuff.h"
 
 const QString ShmController::failureReasons[] = {
@@ -46,7 +45,7 @@ const QString ShmController::failureReasons[] = {
   
   QObject::tr(
   "It is likely that rt_process.o (or the comedi coprocess) is not loaded, "
-  "because the shared memory segment could not be found.  If rt_process.o "
+  "because the shared memory segment could not be found.\nIf rt_process.o "
   "(or the comedi coprocess) is loaded, check to make sure it is the "
   "correct version for this program."),
   
@@ -89,7 +88,7 @@ ShmController::attach(ShmType t)
 
 
   switch (t) {
-  case MBuff:
+  case MBuff:    
     fullErrorMessage = 
       QObject::tr("Could not attach to rt_process's shared memory segment "
                   "named:\"") +
@@ -97,6 +96,11 @@ ShmController::attach(ShmType t)
       + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through "
                     MBUFF_DEV_NAME ")");
 
+    if (!haveRTProcess()) {
+      failureReason = RegionNotFound;
+      shm = NULL;
+      break;
+    }
 
     shm = reinterpret_cast<SharedMemStruct *>(mbuff_attach(SHARED_MEM_NAME, 
                                                            sizeof(SharedMemStruct)));
@@ -244,4 +248,18 @@ double ShmController::spikeThreshold(uint chan) const
 uint ShmController::spikeBlanking(uint chan) const
 {
   return shm->spike_params.blanking[chan];
+}
+
+
+#include <linux/module.h> 
+extern "C" {
+extern int query_module(const char *name, int which, void *buf, 
+                        size_t bufsize, size_t *ret);
+}
+bool ShmController::haveRTProcess()
+{
+  char buf[255];
+  size_t sz;
+
+  return (query_module("rt_process", QM_INFO, buf, 255, &sz) == 0);  
 }

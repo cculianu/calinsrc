@@ -49,6 +49,9 @@ class ShmController
   static SharedMemStruct *attach(ShmType t = MBuff);
   static void detach(SharedMemStruct *, ShmType t = MBuff);
 
+  static bool haveRTProcess(); /* true iff a module named rt_process is 
+                                  loaded */
+
   /* channel-specific stuff--basically wrappers to CR_PACK */
 
   /* below returns range index from comedi - use with comedi_get_range */

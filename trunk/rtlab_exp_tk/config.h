@@ -12,7 +12,7 @@
 #endif
 
 #ifndef DAQ_DATA_PREFIX
-#define DAQ_DATA_PREFIX "/tmp"
+#define DAQ_DATA_PREFIX "/tmp/"
 #endif
 
 #ifndef DAQ_ETC_PREFIX
@@ -24,7 +24,7 @@
 #endif
 
 #ifndef DAQ_PLUGINS_PREFIX
-#define DAQ_PLUGINS_PREFIX DAQ_RESOURCES_PREFIX "/plugins"
+#define DAQ_PLUGINS_PREFIX DAQ_RESOURCES_PREFIX "/plugins/"
 #endif
 
 #endif
