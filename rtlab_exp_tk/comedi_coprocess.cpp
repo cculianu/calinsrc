@@ -39,22 +39,30 @@
 #include "comedi_coprocess.h"
 #include "exception.h"
 #include "comedi_device.h"
+#include "probe.h"
 
 static inline void microsleep(long time_us);
 
 const int ComediCoprocess::INITIAL_SAMPLING_RATE_HZ = 1000,
           ComediCoprocess::INITIAL_CHANNEL_GAIN = 0;
 
-ComediCoprocess::ComediCoprocess(const ComediDevice & d) 
-  : device(d),  ai_dev(0),   ao_dev(0), 
-    thread(0), sample_buffer(0), sbuf_i(0) /* i hope pthread_t is an int! */
+ComediCoprocess::ComediCoprocess() { init(Probe::probeDevices()[0]); }
+ComediCoprocess::ComediCoprocess(const ComediDevice & d) { init(d); }
+
+void ComediCoprocess::init(const ComediDevice & d)
 {
+
+  device = d,  ai_dev = 0,   ao_dev = 0, 
+  thread = 0, sample_buffer = 0, sbuf_i = 0; /* i hope pthread_t is an int! */
+
   Assert<SystemResourceException>
     (!::pipe(pipe), "INTERNAL ERROR: Could not create pipe.",
      QString("System call to pipe() returned ") + "an error: " 
      + strerror(errno) + " in " __FILE__);
 
-  //  fcntl(pipe[1], F_SETFL, O_NONBLOCK); /* is this safe? */
+
+  fcntl(pipe[0], F_SETFL, O_SYNC);
+  fcntl(pipe[1], F_SETFL, O_SYNC);  
   
   struct_version = SHD_SHM_STRUCT_VERSION;
   ai_minor = device.minor;
@@ -67,9 +75,6 @@ ComediCoprocess::ComediCoprocess(const ComediDevice & d)
   ao_subdev = aoSubDev.id;;
 
   ai_fifo_minor = pipe[0]; /* cheap hack */
-
-  fcntl(pipe[0], F_SETFL, O_SYNC);
-  fcntl(pipe[1], F_SETFL, O_SYNC);  
 
   ao_fifo_minor = -1;
   /* num AI channels in use */
@@ -164,6 +169,8 @@ ComediCoprocess::threadLoop()
     gettimeofday(&loop_begin, 0);
 
     pthread_testcancel();        
+
+    scan_index++;
    
     for (insn_list.n_insns = 0, chan = 0; chan < n_ai_chans; chan++) {
       if (is_chan_on(chan, ai_chans_in_use)) {
@@ -175,8 +182,10 @@ ComediCoprocess::threadLoop()
         insn_list.n_insns++;
       }      
     }
-    if (insn_list.n_insns)
-      comedi_do_insnlist(ai_dev, &insn_list);
+
+    if (!insn_list.n_insns) goto calc_per;
+
+    comedi_do_insnlist(ai_dev, &insn_list);
 
     for (uint i = 0; sbuf_i < sample_buffer_size && i < insn_list.n_insns;  
          i++, sbuf_i++) {
@@ -191,10 +200,9 @@ ComediCoprocess::threadLoop()
     }
 
     flushBuffer();
-    
-    period_us = 1000000 / sampling_rate_hz;
 
-    scan_index++;
+  calc_per:
+    period_us = 1000000 / sampling_rate_hz;
 
     gettimeofday(&loop_end, 0);
 
@@ -218,7 +226,7 @@ inline void microsleep(long time_us)
   do {
     gettimeofday(&now_tv, 0);
     now  = now_tv.tv_sec * 1000000; now += now_tv.tv_usec;
-  } while ( (now - begin) <= time_us);
+  } while ( (now - begin) <= time);
   
 }
 
@@ -226,7 +234,7 @@ inline void microsleep(long time_us)
 void ComediCoprocess::flushBuffer()
 {
   if (sbuf_i && sampling_rate_hz >= 10 
-      && ! ((scan_index+1) % (sampling_rate_hz / 10)) ) { 
+      && ! (scan_index % (sampling_rate_hz / 10)) ) { 
     /* do a blocking  write every 100ms iff we have any samples ready */
 
     /* assumption is a blocking write */
@@ -241,6 +249,8 @@ void ComediCoprocess::flushBuffer()
 #ifdef TEST_COMEDI_COPROCESS
 #include <signal.h>
 #include <iostream>
+#include <strstream>
+#include <string>
 #include "probe.h"
 #include "shm.h"
 
@@ -252,15 +262,21 @@ void sig(int)
   exit(0);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
+  int n_chans = 0;
+
   signal(SIGINT, sig);
 
-  Probe p;
-  ComediCoprocess cc(p.probed_devices[0]);
+  ComediCoprocess cc(Probe::probeDevices()[0]);
   ShmController sc(&cc);
 
-  for (uint i = 0; i < 10; i++)
+  if (argc > 1) n_chans = QString(argv[1]).toInt();
+
+  if ( n_chans <= 0 || n_chans > sc.numChannels(ComediSubDevice::AnalogInput) )
+    n_chans = sc.numChannels(ComediSubDevice::AnalogInput);
+
+  for (uint i = 0; i < n_chans; i++)
     sc.setChannel(ComediSubDevice::AnalogInput, i, true);
 
   cc.start();

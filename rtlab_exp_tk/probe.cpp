@@ -240,4 +240,11 @@ Probe::kill_shm() /* Only to be called if instance initialization is done! */
   if (shm) ShmController::detach(shm, ShmController::MBuff);
 }
 
+/* static */
+vector<ComediDevice> 
+Probe::probeDevices()
+{
+  Probe p;
 
+  return p.probed_devices;    
+}

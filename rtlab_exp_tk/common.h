@@ -89,8 +89,11 @@ class Convert
   QString qs;
 };
 
-/* Checks whether file can be opened for reading ('r') or writing ('w'). Returns an empty sting if opened successfully, an error message otherwise. */
-string fileErrorMsg( const char *file_name, char mode ); 
+/* Checks whether file can be opened for reading ('r') or writing ('w'). 
+   Returns an empty sting if opened successfully, 
+   an error message otherwise. */
+string fileErrorMsg ( const char *file_name, char mode ); 
+
 #endif
 
 #endif

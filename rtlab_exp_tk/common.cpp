@@ -67,14 +67,16 @@ uint64 cstr_to_uint64(const char *in, bool * ok)
   return tmp;
 }
 
-/* Checks whether file can be opened for reading ('r') or writing ('w'). Returns an empty sting if opened successfully, an error message otherwise. */
-string fileErrorMsg( const char *file_name, char mode = 'r' )
+/* Checks whether file can be opened for reading ('r') or writing ('w'). 
+   Returns an empty sting if opened successfully, 
+   an error message otherwise. */
+string fileErrorMsg ( const char *file_name, char mode = 'r' )
 {
   string message;
   string generic = "Error opening file.";
   if (mode == 'r') { //file opened for reading
     int file = open( file_name, O_RDONLY );
-
+    
     if ( file != -1 )
       {
         close( file );
@@ -86,56 +88,71 @@ string fileErrorMsg( const char *file_name, char mode = 'r' )
         struct stat buf;
         if ( !stat( file_name, &buf ) )
           {
-            if( ( buf.st_mode & S_IRUSR ) && !( buf.st_mode & S_IROTH ) && !( buf.st_mode & S_IRGRP ) && getuid() ) //only user has read permission
+            if( ( buf.st_mode & S_IRUSR ) && !( buf.st_mode & S_IROTH ) 
+                && !( buf.st_mode & S_IRGRP ) && getuid() ) 
               {
-                //check if user id matches
-                if ( getuid() != buf.st_uid )
-                  message = "Error opening file " + string( file_name ) + " for reading. Check user permissions.\n";
+                //only user has read permission
+                
+                if ( getuid() != buf.st_uid )  //check if user id matches
+                  
+                  message = "Error opening file " + string( file_name ) + 
+                    " for reading. Check user permissions.\n";
                 else message = generic;
               }
-            else if ( ( buf.st_mode & S_IRGRP ) && !( buf.st_mode & S_IROTH ) && getuid() ) //only group has read permission
+            else if ( ( buf.st_mode & S_IRGRP ) && !( buf.st_mode & S_IROTH ) 
+                      && getuid() ) 
               {
-                //check if group id matches
-                if ( getgid() != buf.st_gid )
-                  message = "Error opening file " + string ( file_name ) + " for reading. Check group permissions.\n";
+                //only group has read permission
+                
+                if ( getgid() != buf.st_gid ) //check if group id matches
+                  message = "Error opening file " + string ( file_name ) + 
+                    " for reading. Check group permissions.\n";
                 else message = generic;
               }
-            else if ( !( buf.st_mode & S_IRUSR ) && getuid() ) //user does not have read permission
+            else if ( !( buf.st_mode & S_IRUSR ) && getuid() ) 
+              //user does not have read permission
               {
                 if ( getuid() == buf.st_uid )
-                  message = "Error opening file " + string ( file_name ) + " for reading. Owner does not have read permission.\n";
+                  message = "Error opening file " + string ( file_name ) + 
+                    " for reading. Owner does not have read permission.\n";
               }
-            else if ( !( buf.st_mode & S_IRGRP ) && getuid() ) //group does not have read permission
+            else if ( !( buf.st_mode & S_IRGRP ) && getuid() ) 
               {
+                //group does not have read permission
                 if ( getgid() == buf.st_gid )
-                  message = "Error opening file " + string ( file_name ) + " for reading. Group does not have read permission.\n";
+                  message = "Error opening file " + string ( file_name ) + 
+                    " for reading. Group does not have read permission.\n";
               }
-            else //unknown permissions problem
+            else //unknown permissions problem              
               message = generic;
           }
         else
           {
-            message = "Error opening file " + string ( file_name ) + " for reading. " + string ( strerror( errno ) );
+            message = "Error opening file " + string ( file_name ) + 
+              " for reading. " + string ( strerror( errno ) );
           }  
       }
     else 
       {
-        message = "Error opening file " + string ( file_name ) + " for reading. " + string ( strerror( errno ) );
+        message = "Error opening file " + string ( file_name ) + 
+          " for reading. " + string ( strerror( errno ) );
       }
     
   } 
   
-  else { //file opened for writing
-    if ( open(file_name, O_CREAT|O_WRONLY|O_EXCL, S_IWUSR) != -1 ) //file opened successfully 
-      {
-        unlink( file_name );
-        return ""; 
-      }
-    else 
-      {
- 
-        message = "Error writing to file " + string ( file_name ) + ". " + string ( strerror( errno ) );
-      }
-  }
+  else 
+    { //file opened for writing
+      if ( open(file_name, O_CREAT|O_WRONLY|O_EXCL, S_IWUSR) != -1 ) 
+        {
+          //file opened successfully 
+          unlink( file_name );
+          return ""; 
+        }
+      else 
+        { 
+          message = "Error writing to file " + string ( file_name ) + ". " + 
+            string ( strerror( errno ) );
+        }
+    }
   return message;
 }
