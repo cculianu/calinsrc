@@ -253,9 +253,11 @@ int SplitOp::doIt()
          << "Starting at index " << Convert(real_start).sStr() << endl
          << "Output file is " << state()->outfile.latin1() << endl;
 
-    while(state()->count-- && in.readNextScan(v)) {
-      if (i++ >= state()->start)
+    while(state()->count && in.readNextScan(v)) {
+      if (i++ >= state()->start) {
+        state()->count--;
         for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
+      }
     } 
     
     cerr << "Done!" << endl;
