@@ -21,7 +21,7 @@
  * http://www.gnu.org.
  */
 
-
+#define EXPORT_SYMTAB 1 /* <--- for annoying kernels that need this */
 #include <linux/module.h> 
 #include <linux/kernel.h>
 #include <linux/version.h>
