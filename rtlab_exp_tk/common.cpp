@@ -23,6 +23,14 @@
 
 #include <stdio.h>
 #include "common.h"
+#include <string>   
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <iostream.h>
+#include <fcntl.h>
+#include <errno.h>
 
 /* this function is non-reentrant! */
 string operator+(const string & s, uint64 in)
@@ -57,4 +65,77 @@ uint64 cstr_to_uint64(const char *in, bool * ok)
   k = cstr_to_uint64(in, tmp);
   if (ok) *ok = k;
   return tmp;
+}
+
+/* Checks whether file can be opened for reading ('r') or writing ('w'). Returns an empty sting if opened successfully, an error message otherwise. */
+string fileErrorMsg( const char *file_name, char mode = 'r' )
+{
+  string message;
+  string generic = "Error opening file.";
+  if (mode == 'r') { //file opened for reading
+    int file = open( file_name, O_RDONLY );
+
+    if ( file != -1 )
+      {
+        close( file );
+        cout <<"No error";
+        return ""; 
+      }
+    if ( errno == EACCES ) //check file permissions
+      {
+        struct stat buf;
+        if ( !stat( file_name, &buf ) )
+          {
+            if( ( buf.st_mode & S_IRUSR ) && !( buf.st_mode & S_IROTH ) && !( buf.st_mode & S_IRGRP ) && getuid() ) //only user has read permission
+              {
+                //check if user id matches
+                if ( getuid() != buf.st_uid )
+                  message = "Error opening file " + string( file_name ) + " for reading. Check user permissions.\n";
+                else message = generic;
+              }
+            else if ( ( buf.st_mode & S_IRGRP ) && !( buf.st_mode & S_IROTH ) && getuid() ) //only group has read permission
+              {
+                //check if group id matches
+                if ( getgid() != buf.st_gid )
+                  message = "Error opening file " + string ( file_name ) + " for reading. Check group permissions.\n";
+                else message = generic;
+              }
+            else if ( !( buf.st_mode & S_IRUSR ) && getuid() ) //user does not have read permission
+              {
+                if ( getuid() == buf.st_uid )
+                  message = "Error opening file " + string ( file_name ) + " for reading. Owner does not have read permission.\n";
+              }
+            else if ( !( buf.st_mode & S_IRGRP ) && getuid() ) //group does not have read permission
+              {
+                if ( getgid() == buf.st_gid )
+                  message = "Error opening file " + string ( file_name ) + " for reading. Group does not have read permission.\n";
+              }
+            else //unknown permissions problem
+              message = generic;
+          }
+        else
+          {
+            message = "Error opening file " + string ( file_name ) + " for reading. " + string ( strerror( errno ) );
+          }  
+      }
+    else 
+      {
+        message = "Error opening file " + string ( file_name ) + " for reading. " + string ( strerror( errno ) );
+      }
+    
+  } 
+  
+  else { //file opened for writing
+    if ( open(file_name, O_CREAT|O_WRONLY|O_EXCL, S_IWUSR) != -1 ) //file opened successfully 
+      {
+        unlink( file_name );
+        return ""; 
+      }
+    else 
+      {
+ 
+        message = "Error writing to file " + string ( file_name ) + ". " + string ( strerror( errno ) );
+      }
+  }
+  return message;
 }
