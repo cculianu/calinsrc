@@ -253,6 +253,8 @@ uint ShmController::spikeBlanking(uint chan) const
 
 #include <linux/module.h> 
 extern "C" {
+/* I have to declare this prototype for this system call here by hand, 
+   since gnu libc has it but linux/module.h doesn't define the prototype. */
 extern int query_module(const char *name, int which, void *buf, 
                         size_t bufsize, size_t *ret);
 }
