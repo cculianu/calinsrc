@@ -29,8 +29,8 @@
 
 /* 
    This class is a cheap hack to adapt the SharedMemStruct 'interface'
-   that talks to the realtime module rt_process.o.  This class emulates
-   rt_process.o in userspace.  It acts *just* like rt_prcoess,
+   that talks to the realtime module rtlab.o.  This class emulates
+   rtlab.o in userspace.  It acts *just* like rtlab.o,
    in that it's completely opaque and its only interface is SharedMemStruct.
 
    It internally creates a pthread when you call "start()" and 

@@ -51,7 +51,6 @@ class Exception
             ErrorReportingMode m = GUI); 
 
   void showError() const;
- 
   
  protected:
   QString _briefMsg, _fullMsg;

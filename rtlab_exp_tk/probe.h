@@ -75,6 +75,7 @@ class Probe
   bool allowBusyDevices;
 
   SharedMemStruct *shm;
+  int misc; /* really private data that has to do with some internals */
 };
 
 

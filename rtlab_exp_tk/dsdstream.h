@@ -51,12 +51,15 @@ inline void chkIOErr(const QIODevice * d, const char *msg1 = 0, const char *msg2
       Assert<FileException>(d->status() == IO_Ok, "IO Error reading from the input file", "An IO error occurred while reading from the input file");
 }
 
+class DSDRStream; /* Custom DSD Repair Tool subclass */
+
 class DSDStream : protected QDataStream  {
 
 #define _INSIDE_DSDSTREAM
 #include "dsdstream_inner.h"
 #undef _INSIDE_DSDSTREAM
 
+  friend class DSDRStream;
   friend struct Serializeable;
   friend struct ChannelMask;
   friend struct MaskState;

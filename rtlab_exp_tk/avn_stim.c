@@ -27,15 +27,18 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/proc_fs.h>
 
 #include <linux/comedilib.h>
 
-#include <mbuff.h>
-#include <rtl_fifo.h>
-#include <rtl_sched.h>
-
 #include "rt_process.h"
+#include "rtos_middleman.h"
 #include "avn_stim.h"
+#include "proc_macros.h"
+
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL"); 
+#endif
 
 /*----------------------------------------------------------------------------
   Some Private Structures...
@@ -78,6 +81,8 @@ static void stimulate(int new_stim); /* if true, a new stim is started */
 static void calc_g(void);
 static void out_to_fifo(void);
 static int find_free_chan(volatile char *, unsigned int);
+/* called whenever the /proc/rtlab/avn_stim proc file is read  */
+static int avn_stim_proc_read (char *, char **, off_t, int, int *, void *data);
 
 module_init(avn_stim_init);
 module_exit(avn_stim_cleanup);
@@ -136,10 +141,11 @@ struct StimState {
 
 struct StimState state = {0, -1, -1};
 
+static struct proc_dir_entry *proc_ent = 0;
+
 int avn_stim_init (void)
 {
   int retval = 0;
-
 
   if (rtp_shm->sampling_rate_hz < REQUIRED_SAMPLING_RATE) {
     printk("avn_stim: cannot start the module because the sampling rate of "
@@ -159,11 +165,19 @@ int avn_stim_init (void)
     ) 
     avn_stim_cleanup();  
 
+  proc_ent = create_proc_entry("avn_stim", S_IFREG|S_IRUGO, rtlab_proc_root);
+  if (proc_ent)  /* if proc_ent is zero, we silently ignore... */
+    proc_ent->read_proc = avn_stim_proc_read;
+  
+  
   return retval;
 }
 
 void avn_stim_cleanup (void)
 {
+  if (proc_ent)
+    remove_proc_entry("avn_stim", rtlab_proc_root);
+
   rtp_deactivate_function(do_avn_control_stuff);
   rtp_unregister_function(do_avn_control_stuff);
   if (shm && shm->fifo_minor >= 0)  rtf_destroy(shm->fifo_minor);
@@ -171,7 +185,7 @@ void avn_stim_cleanup (void)
     /* indicate that now this channel is free */
     _set_bit(shm->ao_chan, rtp_shm->ao_chans_in_use, 0);
 
-  if (shm)  { mbuff_free(AVN_SHM_NAME, shm); shm = 0; }
+  if (shm)  { rtos_shm_detach(shm); shm = 0; }
 }
 
 static void do_avn_control_stuff (MultiSampleStruct * m)
@@ -207,8 +221,8 @@ static int init_shared_mem(void)
   memset(&working_liebnitz, 0, sizeof(AVNLiebnitz));
 
   shm = 
-    (AVNShared *) mbuff_alloc (AVN_SHM_NAME,
-                               sizeof(AVNShared));
+    (AVNShared *) rtos_shm_attach (AVN_SHM_NAME,
+                                   sizeof(AVNShared));
   if (! shm)  return -ENOMEM;
 
   memset(shm, 0, sizeof(AVNShared));
@@ -464,4 +478,50 @@ static inline int rri_rel_index(int offset)
 }
 
 
- 
+static int avn_stim_proc_read (char *page, char **start, off_t off, int count, 
+                               int *eof,  void *data)
+{
+  char g_val[23], delta_g[23], g_adj;
+  PROC_PRINT_VARS;
+
+  float2string(g_val, 23, G_VAL_CURR, 5);
+  float2string(delta_g, 23, DG_CURR, 5);
+  g_adj = G_ADJ_CURR;
+
+  PROC_PRINT("AVN Stimulation Experiment Realtime Kernel Module Statistics\n"
+             "------------------------------------------------------------\n"
+             "FIFO Minor Device: %d\n"
+             "AI Channel ID to Monitor: %d\n"
+             "AO Output (Stimulation) Channel ID: %d\n\n"
+             "G Value: %s\n"
+             "Delta-G: %s\n"             
+             "G Adjustment Mode: %s\n"
+             "Stim: %s\n"
+             "Last Number of Stims Delivered: %d\n"
+             "Nominal Number of Stimulations: %d\n"
+             "Last RR Interval (in milliseconds): %d\n"
+             "Average RR Interval (in milliseconds): %d\n"
+             "Target RR Interval (in milliseconds): %d\n"
+             "Number of Beats in RR Average: %d\n"
+             "G-Too-Small-Count: %d\n"
+             "G-Too-Big-Count: %d\n",
+             shm->fifo_minor, shm->spike_channel, shm->ao_chan,             
+             g_val, delta_g, 
+             (g_adj == AVN_G_ADJ_MANUAL ? "Manual" :
+               (g_adj == AVN_G_ADJ_AUTOMATIC ? "Automatic" : "Unknown")),
+             (STIM_ON_CURR ? "Stim. Is ON" : "Stim. Is Off"),
+             STIM_CURR,
+             NOM_STIM_CURR,
+             RRI_CURR,
+             RR_AVG_CURR,
+             shm->rr_target,
+             N_AVG_CURR,
+             G_2SMALL_CURR,
+             G_2BIG_CURR
+            );
+
+  PROC_PRINT_DONE;
+}
+
+
+

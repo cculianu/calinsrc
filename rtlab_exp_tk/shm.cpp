@@ -26,6 +26,7 @@
 #include "shared_stuff.h"
 #include <qobject.h>
 #include <qstring.h>
+#include <qfile.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -38,23 +39,25 @@
 
 #include "tweaked_mbuff.h"
 
+#define RTO RTLAB_MODULE_NAME ".o" 
+
 const QString ShmController::failureReasons[] = {
   QObject::tr("There is no error."),
 
   QObject::tr("The cause of the error is unknown."),
   
   QObject::tr(
-  "It is likely that rt_process.o (or the comedi coprocess) is not loaded, "
-  "because the shared memory segment could not be found.\nIf rt_process.o "
+  "It is likely that " RTO " (or the comedi coprocess) is not loaded, "
+  "because the shared memory segment could not be found.\nIf " RTO 
   "(or the comedi coprocess) is loaded, check to make sure it is the "
   "correct version for this program."),
   
   QObject::tr(
-  "The compiled version of rt_process.o (or the comedi coprocess) and this "
+  "The compiled version of " RTO " (or the comedi coprocess) and this "
   "program do not match."),
 
   QObject::tr(
-  "The shared memory segment region exported by rt_process.o and/or the "
+  "The shared memory segment region exported by " RTO " and/or the "
   "comedi coprocess has the wrong size.  This is an internal error that "
   "should never occur.  Email the programmers!"),
 
@@ -66,6 +69,28 @@ const QString ShmController::failureReasons[] = {
   0
 };
 
+
+ShmController::ShmController() throw(ShmException, IllegalStateException)
+  : shm(0)
+{
+  static const int types2try_sz = 3;
+  ShmType types2try[types2try_sz] = {MBuff, RTAI_Shm, IPC};
+  ShmException exception;
+
+  for (int i = 0; !shm && i < types2try_sz; i++) {
+    ShmType t = types2try[i];
+    
+    try {
+      shm = attach(t);
+      shmType = t;
+    } catch (ShmException & e) {
+      shm = 0;
+      /* gracefully ignore .. */
+    } 
+  }
+
+  if (!shm) throw exception;
+}
 
 ShmController::ShmController(ShmType t) 
   throw(ShmException, /* if cannot attach to type */
@@ -90,8 +115,8 @@ ShmController::attach(ShmType t)
   switch (t) {
   case MBuff:    
     fullErrorMessage = 
-      QObject::tr("Could not attach to rt_process's shared memory segment "
-                  "named:\"") +
+      QObject::tr("Could not attach to " RTLAB_MODULE_NAME 
+                  "'s shared memory segment named:\"") +
       + SHARED_MEM_NAME 
       + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through "
                     MBUFF_DEV_NAME ")");
@@ -114,6 +139,32 @@ ShmController::attach(ShmType t)
       shm = NULL;
     }   
     break;
+  case RTAI_Shm:
+    fullErrorMessage = 
+      QObject::tr("Could not attach to rtlab's shared memory segment "
+                  "named:\"") +
+      + SHARED_MEM_NAME 
+      + QObject::tr("\" via the RTAI 'rtai_shm.o' driver (accessed through "
+                    RTAI_SHM_DEV ")");
+
+    if (!haveRTProcess()) {
+      failureReason = RegionNotFound;
+      shm = NULL;
+      break;
+    }
+
+    shm = reinterpret_cast<SharedMemStruct *>(rtai_shm_attach(SHARED_MEM_NAME, 
+                                                              sizeof(SharedMemStruct)));
+
+    if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
+      failureReason = WrongStructVersion;
+      rtai_shm_detach(SHARED_MEM_NAME, shm); 
+      shm = NULL;
+    } else if ( !rtaiShmDevFileIsValid() ) {
+      failureReason = CharacterDevAccessError;
+      shm = NULL;
+    }
+    break;    
   case IPC:
     fullErrorMessage =
     (QObject::tr("Could not attach to the interprocess shared memory segment "
@@ -181,7 +232,13 @@ ShmController::detach (SharedMemStruct *shm, ShmType t)
   case IPC:
     shmdt(shm);
     break;
+  case RTAI_Shm:
+    rtai_shm_detach(SHARED_MEM_NAME, shm); 
+    break;
   default:
+    IllegalStateException("Illegal State in ShmController::detach()",
+                          "INTERNAL BUG: ShmController::detach() was "
+                          "given an invalid argument.");
     /* nothing.. */
     break;
   }
@@ -204,6 +261,22 @@ ShmController::mbuffDevFileIsValid()
   return true;
 }
 
+/* static */
+bool /* rtai_shm file exists and is readable */
+ShmController::rtaiShmDevFileIsValid() 
+{
+  /* since rtai_shm_attach isn't very good about giving us exactly what 
+     went wrong, we will attempt to figure out if it was a permissions
+     issue or some other error. */
+  struct stat statbuf;
+  int fd = -1;
+  
+  if (stat (RTAI_SHM_DEV, &statbuf) || !S_ISCHR(statbuf.st_mode)
+      || (fd = open(RTAI_SHM_DEV, O_RDWR)) < 0 || close(fd)) {
+    return false;
+  }
+  return true;
+}
 
 void ShmController::clearSpikeSettings()
 {
@@ -250,19 +323,7 @@ uint ShmController::spikeBlanking(uint chan) const
   return shm->spike_params.blanking[chan];
 }
 
-/* cheap hack */
-#define QM_INFO 5 
-
-extern "C" {
-/* I have to declare this prototype for this system call here by hand, 
-   since gnu libc has it but linux/module.h doesn't define the prototype. */
-extern int query_module(const char *name, int which, void *buf, 
-                        size_t bufsize, size_t *ret);
-}
 bool ShmController::haveRTProcess()
 {
-  char buf[255];
-  size_t sz;
-
-  return (query_module("rt_process", QM_INFO, buf, 255, &sz) == 0);  
+  return QFile::exists("/proc/" RTLAB_MODULE_NAME );
 }

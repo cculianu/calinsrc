@@ -386,7 +386,7 @@ AVNStim::description() const
 void AVNStim::moduleAttach()
 {
   shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
-  Assert<PluginException>(!shm || shm->magic == AVN_SHM_MAGIC,
+  Assert<PluginException>(shm && shm->magic == AVN_SHM_MAGIC,
                           "AVN Stim Plugin Attach Error", 
                           "The AVN Stim Plugin can not find the shared "
                           "memory buffer named \"" AVN_SHM_NAME "\".  "

@@ -45,7 +45,7 @@ typedef comedi_t* COMEDI_T;
 #endif
 
 
-# include <rtl_time.h>
+# include "rtos_middleman.h"
 # include "shared_stuff.h" /* for SampleStruct type */
 
 
@@ -135,5 +135,37 @@ extern struct spike_info spike_info;
 /* helper rounding function */
 inline int round (double d) { return (int)(d + (d >= 0 ? 0.5 : -0.5)); }
 
+/* the proc dir root for rtlab -- in case additional modules want to add
+   themselves to the proc fs */
+struct proc_dir_entry;
+extern struct proc_dir_entry *rtlab_proc_root;
+
+
+/*-----------------------------------------------------------------------------
+  UTILITY FUNCTIONS
+-----------------------------------------------------------------------------*/
+
+/* 
+   float2string
+   
+   Takes a float, f, and writes its decimal character string representation 
+   to the memory pointed to by the first param.
+   
+   num_decs is the number of decimal places to the right of the decimal
+   point required (trailing zeroes will be added).
+
+   n is the size of the destination string buffer.  
+
+   Note that if the string ends up being exactly n characters long, 
+   the trailing \0 is not written to the destination buffer 
+   (as per strncpy).
+
+   Note that a float as a decimal string can never exceed 23 characters, 
+   including trailing \0.
+
+   The number of characters actually printed is returned, not including
+   the trailing \0.
+ */
+extern int float2string(char *dest, int n, float f, int num_decs);
 
 #endif 

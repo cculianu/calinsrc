@@ -96,8 +96,7 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
 {
   if (alreadyBegan) return;
 
-  Assert<IllegalStateException>(device(), "Illgal DSDStream Class State", "Cannot call start() without calling setOutFile() or setInFilere()");
-  alreadyBegan = true;
+  Assert<IllegalStateException>(device(), "Illgal DSDStream Class State", "Cannot call start() without calling setOutFile() or setInFile()");
   if (mode() & IO_WriteOnly) {
     *this << MAGIC << (uint)fileDataType;
     history.scanCount = 0;
@@ -116,11 +115,13 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
                                 "Unknown file data type encountered.  Currently only double and float data types are supported." );
     unserializeMetaData();
   }
+
+  alreadyBegan = true;
 }
 
 void DSDStream::end()
 {
-  if (isOpen() && (mode() & IO_WriteOnly)) {
+  if (alreadyBegan && isOpen() && (mode() & IO_WriteOnly)) {
     try {
       flush();
       maskState.endIndex = scanIndex();
@@ -131,7 +132,7 @@ void DSDStream::end()
       serializeMetaData();
     } catch (Exception & e) {  }
   }
-  unsetDevice(); // also deletes .. :)
+  unsetDevice(); // also deletes instance .. :)
   if (data_buf) { delete data_buf; data_buf = 0; data_buf_sz = 0; }
 }
 

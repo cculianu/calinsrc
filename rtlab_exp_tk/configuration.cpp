@@ -328,7 +328,7 @@ DeviceListView (const vector<ComediDevice> & v,
     const ComediDevice & d = devs[i];
     const ComediSubDevice & ai = d.find(ComediSubDevice::AnalogInput);
     QString driverTxt ( (!ai.isNull() && ai.used_by_rt_process  
-                         ? QString("rt-process.o")
+                         ? QString("rtab.o")
                          : d.drivername) );
     QString no_ai_chan ( (ai.isNull() 
                           ? QString("No Output Device Detected") 

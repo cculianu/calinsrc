@@ -44,6 +44,8 @@ typedef unsigned char uint8;
 typedef unsigned long long uint64;
 typedef long long int64;
 
+#define RTLAB_MODULE_NAME "rtlab"
+
 #ifdef __cplusplus
 #include <string>
 #include <qstring.h>

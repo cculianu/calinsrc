@@ -36,7 +36,11 @@ class ShmController
 {
  public:
 
-  enum ShmType { MBuff, IPC, NotSharedOrUnknown = 0 };
+  enum ShmType { MBuff, IPC, RTAI_Shm, NotSharedOrUnknown = 0 };
+
+  /* probes for the right shm type then calls attach() with that type 
+     behaves just like below constructor except t is auto-detected */
+  ShmController() throw (ShmException, IllegalStateException);
 
   ShmController(ShmType t) throw(ShmException, /* if cannot attach to type */
                                  IllegalStateException /* if t is Unknown */
@@ -99,6 +103,7 @@ class ShmController
  private:
   
   static bool mbuffDevFileIsValid();
+  static bool rtaiShmDevFileIsValid();
 
   SharedMemStruct *shm; /* the actual shared memory region */
   ShmType shmType;
@@ -165,7 +170,7 @@ ShmController::channelRange(int subdevtype, uint chan) const
 inline
 void 
 ShmController::setChannelRange(ComediSubDevice::SubdevType s, uint c, 
-			uint r)
+                               uint r)
 {setChannelRange(ComediSubDevice::sd2int(s), c, r);}
 
  
