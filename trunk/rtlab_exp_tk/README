@@ -51,9 +51,9 @@ and how they propagate through different dynamically linked objects. (I *think*)
 RUNNING
 -------
 In order for this sample program to even run, you need to insmod the real-time
- part of this application, "rlab.o", which is also built into the current
- directory.  Before rlab.o will work, however, you have to make sure the
- following criteria are met:
+part of this application, "rlab.o", which is also built into the current
+directory.  Before rlab.o will work, however, you have to make sure the
+following criteria are met:
 
 1) You have the following modules installed:
 
