@@ -28,6 +28,7 @@
 #include <qlistbox.h>
 #include <qpushbutton.h>
 #include <qtoolbutton.h>
+#include <qtooltip.h>
 #include <qinputdialog.h> 
 #include <qmessagebox.h>
 #include <qtimer.h>
@@ -65,6 +66,10 @@
 #include "ecggraphcontainer.h"
 #include "daq_system.h"
 #include "common.h"
+
+#include "timestamp.xpm"
+#include "plus.xpm"
+#include "synch.xpm"
 
 #include "plugin.h"
 
@@ -144,13 +149,17 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
 
   { /* add toolbar */
-    addChannelB.setText("Add Channel...");
+
+    addChannelB.setPixmap( plus_xpm );
+    QToolTip::add( &addChannelB, "Add Channel..." );
     connect(&addChannelB, SIGNAL(clicked()), this, SLOT (addChannel()));
     
-    resynchB.setText("Synchronize Channels");
+    resynchB.setPixmap( synch_xpm );
+    QToolTip::add( &resynchB, "Synchronize Channels" );
     connect(&resynchB, SIGNAL(clicked()), this, SLOT (resynch()));
 
-    timeStampB.setText("Insert Timestamp into Log");
+    timeStampB.setPixmap( timestamp_xpm );
+    QToolTip::add( &timeStampB, "Insert Timestamp into Log" );
     connect(&timeStampB, SIGNAL(clicked()), this, SLOT (logTimeStamp()));
 
     setDockEnabled(Top, true);   setDockEnabled(Bottom, true);
@@ -724,7 +733,7 @@ void DAQSystem::printDialog()
 
   /* now unpause everything that was paused before */
   for (uint i = 0; i < paused.size(); i++) 
-    const_cast<ECGGraphContainer *>(paused[i])->pause(false);
+    const_cast<ECGGraphContainer *>(paused[i])->pause();
 
 }
 

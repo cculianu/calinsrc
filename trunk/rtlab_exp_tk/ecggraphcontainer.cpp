@@ -33,6 +33,8 @@
 #include <stdio.h>
 #include <math.h>
 
+#include "pause.xpm"
+#include "play.xpm"
 #include "ecggraphcontainer.h"
 
 
@@ -93,12 +95,12 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setMargin(1);
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
-  pauseBox = new QCheckBox("Pause", controlsBox);
-  QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
-                             "actual data acquisition");
-  pauseBox->setChecked(false);
+  pauseBox = new QPushButton ( controlsBox );
+  pauseBox->setPixmap( QPixmap( pause_xpm ) );
   pauseBox->setMaximumSize(pauseBox->sizeHint());
-  connect(pauseBox, SIGNAL(toggled(bool)), this, SLOT(pause(bool)));    
+  QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
+                "actual data acquisition");
+  connect(pauseBox, SIGNAL(pressed()), this, SLOT(pause()));    
 
   // the range settings control
   tmpBox = new QHBox(controlsBox);
@@ -610,11 +612,19 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
   if (hidenshow) xaxis->show();
 }
 
-void ECGGraphContainer::pause(bool pause_on)
+void ECGGraphContainer::pause()
 {
-  if (pause_on) currentIndex->setText("Graph Display PAUSED");
-  if (pause_on != pauseBox->isChecked()) pauseBox->setChecked(pause_on);
-  nothungry = pause_on;
+  if (nothungry) //from pause to play
+    {
+      pauseBox->setPixmap( QPixmap( pause_xpm ) );
+      nothungry = FALSE;
+    }
+  else //from play to pause
+    {
+      currentIndex->setText("Graph Display PAUSED");
+      pauseBox->setPixmap( QPixmap( play_xpm ) );
+      nothungry = TRUE;
+    }
 }
 
 /* returns the xAxis strings as they appeaer in the graph container's

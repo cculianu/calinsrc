@@ -56,7 +56,7 @@ void DSDStream::init(int mode)// throw (FileException)
         else modeChar = 'w';
         errorMsg = (Convert)fileErrorMsg( fNameChar, modeChar );
       }
-    Assert<FileException>(isOpen(), "Internal Error: QIODevice error for DSDStream.", errorMsg);
+    Assert<FileException>(isOpen(), "Internal Error: QIODevice error for DSDStream.", QString("IO Device could not be opened! ").append(errorMsg) );
                           //"Internal Error: QIODevice error for DSDStream.", "IO Device could not be opened!");
   }
 
