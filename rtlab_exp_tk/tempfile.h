@@ -35,8 +35,8 @@ public:
                                         and calls copyTo(int) on the filedes */
 
   operator int() { return fd(); } /* returns the temp file fd */
-  TempFile & operator>>(int fd) { copyTo(fd); } /* appends temp file to fd */
-  TempFile & operator>>(const char *f) { copyTo(f); } 
+  TempFile & operator>>(int fd) { copyTo(fd); return *this; } /* appends temp file to fd */
+  TempFile & operator>>(const char *f) { copyTo(f); return *this; } 
 
 private:
 
