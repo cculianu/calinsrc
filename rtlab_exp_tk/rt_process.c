@@ -66,7 +66,7 @@
 MODULE_LICENSE("GPL"); 
 #endif
 
-MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
+MODULE_AUTHOR("David J. Christini and Calin A. Culianu");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time Sampling Task for use with kcomedilib and the daq_system user program");
 
 MODULE_PARM(ai_device,"s");
@@ -89,7 +89,10 @@ EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
 EXPORT_SYMBOL_NOVERS(rtp_deactivate_function);
 EXPORT_SYMBOL_NOVERS(rtp_activate_function);
+EXPORT_SYMBOL_NOVERS(rtp_set_callback_frequency);
+EXPORT_SYMBOL_NOVERS(rtp_get_callback_frequency);
 EXPORT_SYMBOL_NOVERS(rtp_find_free_rtf);
+EXPORT_SYMBOL_NOVERS(rtp_set_sampling_rate);
 EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
@@ -119,11 +122,19 @@ static int rtlab_proc_register(void);
 struct calib_parms { int iterations; long period; };
 static void *calibrate_jitter(void *arg);
 
+<<<<<<< rt_process.c
+/* Since we can potentially be running at variable sampling rates, we need 
+   to keep track of actual real wall clock time in ms.  This function is called
+   early from inside the realtime loop. */
+static inline void update_wall_clock_times(rtos_time_t current_time);
+
+=======
 /* Since we can potentially be running at variable sampling rates, we need 
    to keep track of actual real wall clock time in ms.  This function is called
    early from inside the realtime loop. */
 static inline void update_time_ms(rtos_time_t current_time);
 
+>>>>>>> 1.40
 /* Cleans up the sampling_rate parameter that comes in as a mod param,
    so that it is a multiple of 1000, or an even factor of 1000 */
 static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate);
@@ -189,9 +200,15 @@ static struct krange_cache krange_cache;
 struct rt_function_list {
   char active_flag;
   rtfunction_t function;
+  uint   time_between_callbacks_us;
+  scan_index_t next_index_for_cb;
   struct rt_function_list *next;
 };
 
+/* Internal helper function that determines if it's time to call
+   this particular function.  Called from withing daq_task */
+static inline void possibly_call_cb (struct rt_function_list *, 
+                                     MultiSampleStruct *);
 static struct rt_function_list 
              *rt_functions, /* circularly linked-list of functions to run
 			       from main rt loop */
@@ -288,8 +305,13 @@ static void *daq_rt_task (void *arg)
        also recomputes task_period in case sampling_rate changed */
     readjust_rt_task_wakeup();
 
+<<<<<<< rt_process.c
+    update_wall_clock_times(loopstart); /* update rtp_shm->time_ms */
+
+=======
     update_time_ms(loopstart); /* update rtp_shm->time_ms */
 
+>>>>>>> 1.40
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
       rtl_printf("Just scanning the channels took %ld nanoseconds\n",(long int)(one_full_scan.acq_end - one_full_scan.acq_start));
@@ -307,8 +329,7 @@ static void *daq_rt_task (void *arg)
          2) putFullScanIntoAIFifo()
       */
       for (curr = rt_functions; curr != &__end_of_func_list; curr=curr->next) 
-        if (curr->active_flag)
-          curr->function(&one_full_scan);
+        possibly_call_cb(curr, &one_full_scan);
       
     }
     
@@ -1160,6 +1181,8 @@ static int __rtp_register_function(rtfunction_t function)
   }
   new->active_flag = 0;
   new->function = function;
+  new->time_between_callbacks_us = 0;
+  new->next_index_for_cb = 0;
   new->next = &__end_of_func_list;
   down(&rt_functions_sem);
   /* now push this function to the end of the list; we use the semaphore
@@ -1255,6 +1278,44 @@ __find_func(rtfunction_t func, struct rt_function_list *start)
   for (curr = start; curr != &__end_of_func_list; curr = curr->next)
     if (curr->function == func) return curr;
   return 0;
+}
+
+int rtp_set_callback_frequency(rtfunction_t f, uint freq)
+{
+  register struct rt_function_list *r = rt_functions;
+  int retval = -EINVAL;
+
+  if (__I_AM_BUSY)  return -EBUSY;
+
+  down(&rt_functions_sem);
+  while ((r = __find_func(f, r))) {    
+    /* keep scanning for this function (as it may appear multiple times!)
+       and set all instances of it to frequency_hz = freq */
+      r->time_between_callbacks_us = MILLION / freq;
+      r = r->next;
+      retval = 0;
+  }
+  up(&rt_functions_sem);   
+  return retval;
+}
+
+int rtp_get_callback_frequency(rtfunction_t f)
+{
+  struct rt_function_list *r = rt_functions;
+  int retval = -EINVAL;
+
+  if (__I_AM_BUSY) return -EBUSY;
+
+  down(&rt_functions_sem);
+  r = __find_func(f, r);  
+  if (r) retval = 
+           (int)(MILLION / 
+                 (r->time_between_callbacks_us
+                  ? r->time_between_callbacks_us
+                  : rtp_shm->nanos_per_scan/1000));
+  up(&rt_functions_sem);   
+
+  return retval;
 }
 
 /* sets active flag on an entry in rt_functions 
@@ -1377,7 +1438,12 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
                "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
+<<<<<<< rt_process.c
+               "Relative Time: %u ms    "
+               "Nanos Per Scan: %u ns\n"
+=======
 	       "Relative Time: %u milliseconds\n"
+>>>>>>> 1.40
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
@@ -1389,7 +1455,12 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "(unimplemented)",
                (uint)rtp_shm->sampling_rate_hz,
                (uint)rtp_shm->scan_index,
+<<<<<<< rt_process.c
+               (uint)rtp_shm->time_ms,
+               (uint)rtp_shm->nanos_per_scan,
+=======
 	       (uint)rtp_shm->time_ms,
+>>>>>>> 1.40
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
@@ -1411,15 +1482,24 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
   PROC_PRINT_DONE;
 }
 
+sampling_rate_t rtp_set_sampling_rate(sampling_rate_t r)
+{
+  /* normalize sampling rate -- DANGEROUS if set too high!!! */
+  rtp_shm->sampling_rate_hz = normalizeSamplingRate(r);
+  computeNanosPerScan();
+  task_period = rtp_shm->nanos_per_scan;
+
+  last_sampling_rate = rtp_shm->sampling_rate_hz;
+
+  return rtp_shm->sampling_rate_hz;
+}
 
 inline void readjust_rt_task_wakeup(void)
 {
   if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
-    /* user changed sampling rate -- DANGEROUS if set too high!!! */
-    rtp_shm->sampling_rate_hz = normalizeSamplingRate(rtp_shm->sampling_rate_hz);
-    computeNanosPerScan();
-    last_sampling_rate = rtp_shm->sampling_rate_hz;
-    task_period = rtp_shm->nanos_per_scan;
+    /* uh-oh.. user changed sampling rate directly in the shm 
+       -- DANGEROUS if set too high!!! */
+    rtp_set_sampling_rate(rtp_shm->sampling_rate_hz);
   }
 
   /* now re-tune the period, note that this is dangerous if set too
@@ -1688,6 +1768,58 @@ static int internal_data_read_delayed( COMEDI_T dev, uint subdev, uint chan,
 	return comedi_do_insn (dev, &insn);
 }
 
+<<<<<<< rt_process.c
+/* Since we can potentially be running at variable sampling rates, we need 
+   to keep track of actual real wall clock time in ms.  This function is called
+   early from the realtime loop. */
+static inline void update_wall_clock_times(rtos_time_t now)
+{
+  
+  static int64         first_call = -1; /* always relative to first_call. */
+  static const int32   nanos_per_micro = 1000L,
+                       micros_per_milli= 1000L;
+  uint64               quotient;
+  uint32               remainder;
+
+  /* TODO FIX THIS TO SOMEHOW USE NATIVE LONG LONG DIVISION!!
+     NOTE: do_div() is in asm/div64.h and is supposedly 64-bit-safe! */
+
+  if (first_call == -1LL) first_call = now; 
+
+  /* rtp_shm->time_us.. */
+  quotient = now - first_call;  
+  remainder = do_div(quotient, nanos_per_micro);
+  if (remainder >= (nanos_per_micro / 2)) quotient++;
+  rtp_shm->time_us = quotient;
+  
+  /* rtp_shm->time_ms.. */
+  remainder = do_div(quotient, micros_per_milli);
+  if (remainder >= (micros_per_milli / 2)) quotient++;
+  rtp_shm->time_ms = quotient;
+}
+
+
+static inline void possibly_call_cb(struct rt_function_list *it, 
+                                    MultiSampleStruct *m)
+{
+  if (it->active_flag) {
+    if (it->time_between_callbacks_us == 0) {
+      /* Special value of '0' for frequency_hz means we always call.. */
+      it->function(m);
+    } else if (it->next_index_for_cb <= rtp_shm->scan_index) {
+      static const uint ns_us = 1000;   /* nanos per microsecond */
+
+      /* TO DO: get rid of next_index_for_cb and base everything off
+         of microsecond absolute times instead!  */
+      it->next_index_for_cb = 
+        rtp_shm->scan_index 
+        + it->time_between_callbacks_us / (rtp_shm->nanos_per_scan / ns_us);
+      it->function(m);
+    }
+  }
+}
+
+=======
 /* Since we can potentially be running at variable sampling rates, we need 
    to keep track of actual real wall clock time in ms.  This function is called
    early from the realtime loop. */
@@ -1711,6 +1843,7 @@ static inline void update_time_ms(rtos_time_t now)
 }
 
 
+>>>>>>> 1.40
 #undef __I_AM_BUSY
 
 #ifdef TIME_RT_LOOP

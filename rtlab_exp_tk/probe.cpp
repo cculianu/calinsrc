@@ -273,7 +273,8 @@ Probe::attach_to_shm_and_stuff()
     if (myname) free(myname); 
     if (attachedname) free(attachedname);
 
-  
+    
+    if (false) // commented out for now.. weird behavior...
     if (num_procs_of_my_exe_no_children() > 1 || 
         have_rt_process && pid && attachedName == myName )  {
       const char *msg =
@@ -297,13 +298,13 @@ Probe::attach_to_shm_and_stuff()
     } catch (ShmException & e) {
       if (have_rt_process) 
 	throw ShmException("Error accessing shared memory device.", 
-			   "Even though the RTLab kernel module is running, "
-			   "the shared memory segment could not be attached.\n\n"
-			   "This could be because the device node is somehow "
-			   "inaccessible.\n\nMake sure that (if you are running "
-			   "RTLinux) /dev/mbuff or (if you are running "
-			   "RTAI) /dev/rtai_shm, exists and that this "
-			   "device file is readable and writable by you.");
+                       "Even though the RTLab kernel module is running, "
+                       "the shared memory segment could not be attached.\n\n"
+                       "This could be because the device node is somehow "
+                       "inaccessible.\n\nMake sure that (if you are running "
+                       "RTLinux) /dev/mbuff or (if you are running "
+                       "RTAI) /dev/rtai_shm, exists and that this "
+                       "device file is readable and writable by you.");
       
       have_rt_process = false;
       shm = 0;

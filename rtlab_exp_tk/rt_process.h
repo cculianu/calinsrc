@@ -114,11 +114,66 @@ extern int rtp_deactivate_function(rtfunction_t function);
 /* activates a function that was previously registered,
    returns 0 on success, EINVAL on error */
 extern int rtp_activate_function(rtfunction_t function);
+
+/* Next two functions: CALLBACK FREQUENCY RELATED FUNCTIONS */
+
+/* rtp_set_callback_frequency --
+
+   Sets how often the callback function is called.  
+
+   Defaults is "called every scan" which is the same as passing 0 for 
+   frequency_hz.  
+
+      param frequency_hz: 
+          The number of times per second this callback will be called.
+
+          If you never set this, the defaults is the special value
+          '0' which means 'call back every scan'.
+
+   Note: frequency_hz _MUST_ be greater than or equal to the current sampling
+   rate.  If it is not no error will be reported, but you will get undefined 
+   behavior.
+   
+   This is because the callback mechanism relies on rtlab's sampling frequency.
+   
+   In other words, the rtlab realtime loop runs at a frequency that is the 
+   current sampling rate, and the callbacks are issued from within that loop.
+
+   For example -- If you are sampling at 1KHz the maximum allowable value
+   for frequency_hz is really 1000, because we can't call the callbacks
+   any faster than the realtime loop runs!
+
+   Also, if frequency_hz is some strange value that is not evenly
+   divisible by, or a multiple of, the sampling rate you will get undefined 
+   behavior.    
+
+   Return values: 0 on success, 
+                  -EINVAL if funtion not found or
+                  -EBUSY if module is busy.
+*/
+extern int rtp_set_callback_frequency(rtfunction_t function,uint frequency_hz);
+/* 
+   Returns the callback frequency, in Hz, for this function.  All
+   functions default to the special value '0' which means
+   "called every scan". 
+
+   Return values: Positive value for frequency of callbacks in Hz on success, 
+                  -EINVAL if funtion not found or
+                  -EBUSY if module is busy.
+*/
+extern int rtp_get_callback_frequency(rtfunction_t function);
+
 /* Finds a free fifo, calls rtf_create(), and puts the minor number in minor.  
    On error a negative errno is returned. 
    Use this to quickly find a free fifos.  Helpful so that don't have to loop
    to find a free. */
+
 extern int rtp_find_free_rtf(int *minor, int size);
+
+
+/* Sets the sampling rate.  Returns the new (possibly normalized) rate. */
+extern sampling_rate_t rtp_set_sampling_rate(sampling_rate_t);
+
 /* 
    EXPORTED VARIABLES:
    Other variables present in rt_process.o: 
