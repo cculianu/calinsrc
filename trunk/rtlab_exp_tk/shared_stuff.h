@@ -233,9 +233,11 @@ static inline sampling_rate_t normalizeSamplingRate(sampling_rate_t rate)
   if (rate > MAX_SAMPLING_RATE_HZ ) ret = MAX_SAMPLING_RATE_HZ;
   else if (rate < MIN_SAMPLING_RATE_HZ ) ret = MIN_SAMPLING_RATE_HZ;
 
-  if (rate > 1000 && (multiple = round(rate / 1000.0))) { /* rate > 1000 */
+  if (rate > 1000 && (multiple = static_cast<int>(round(rate / 1000.0)))) { 
+    /* rate > 1000 */
     ret = multiple * 1000;
-  } else if (rate && (multiple = round(1000.0 / rate)) ) { /* rate < 1000 */
+  } else if (rate && (multiple = static_cast<int>(round(1000.0 / rate))) ) { 
+    /* rate < 1000 */
     ret = 1000 / multiple;
   }
 

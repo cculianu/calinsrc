@@ -134,9 +134,9 @@ void AdvancedOptionsWindow::addToolTipsAndWhatsThis()
 
 ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
                                           DAQSettings &settings,
-                                          QWidget *parent = 0, 
-                                          const char *name = 0, 
-                                          WFlags f = 0) 
+                                          QWidget *parent, 
+                                          const char *name, 
+                                          WFlags f) 
   : 
   QDialog(parent, name, f), 
 
@@ -408,8 +408,8 @@ ConfigurationWindow::validate()
 
 ConfigurationWindow::DeviceListView::
 DeviceListView (const vector<ComediDevice> & v, 
-                QWidget * parent = 0, 
-                const char * name = 0 )  : QListView (parent, name),  devs(v)
+                QWidget * parent, 
+                const char * name)  : QListView (parent, name),  devs(v)
 { 
   setSelectionMode(Single);
   addColumn("Device");      
