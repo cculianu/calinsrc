@@ -1,3 +1,19 @@
+/***************************************************************************
+                          ndstool.cpp  -  Daq System NDS Repair Tool
+                             -------------------
+    begin                : Mon Oct 28 2002
+    copyright            : (C) 2002 by Calin Culianu
+    email                : calin@rtlab.org
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
 #define _GNU_SOURCE 1
 #include <iostream>
 #include <map>
@@ -7,6 +23,7 @@
 #include <qstring.h>
 #include <qfile.h>
 #include "dsdstream.h"
+#include "dsd_repair.h"
 #include "common.h"
 #include "exception.h"
 
@@ -68,6 +85,15 @@ struct InfoOpState: public OpState
   QString filename;
 };
 
+struct RepairOpState: public OpState 
+{
+  RepairOpState() : outfile("RECOVERED.nds") {};
+  bool checkConstraints();
+  int  constraintsError() const;
+  QString filename;
+  QString outfile;
+};
+
 struct SplitOp: public Op 
 {
   SplitOp();
@@ -84,7 +110,7 @@ struct SplitOp: public Op
 
 struct SynopsisOp: public Op 
 {
-  SynopsisOp() { name = "synopsis"; description="Prints options help message";
+  SynopsisOp() { name = "help"; description="Prints this help message";
                  op_state = new SynopsisOpState; }
 
   int doIt();
@@ -101,9 +127,24 @@ struct InfoOp : public Op
   InfoOpState *state() { return dynamic_cast<InfoOpState *>(op_state); }
 };
 
+struct RepairOp : public Op
+{
+  RepairOp() { 
+    name = "repair"; 
+    description = "Attempts to repair a corrupt .nds file";
+    op_state = new RepairOpState; buildAllArgs(); 
+  }
+  
+  int doIt();
+  void buildAllArgs();
+  void filenameArg(const QString &filename);  
+  void outfileArg(const QString &outfile);
+  RepairOpState *state() { return dynamic_cast<RepairOpState *>(op_state); }
+};
+
 static 
 //Op *ops[N_OPS] = {  new SynopsisOp(), new SplitOp(), new InfoOp() };
-Op *ops[] = { new SynopsisOp(), new SplitOp(), new InfoOp(), 0 };
+Op *ops[] = { new SynopsisOp(), new SplitOp(), new InfoOp(), new RepairOp(), 0 };
 
 static 
 Op *DEFAULT_OP = ops[0];
@@ -226,12 +267,12 @@ void SplitOp::buildAllArgs()
 
   allArgs[QString("start")] =
     ArgsMapValue_t(QString("Start index -- scan index to start copying from "
-                           "(defaults to 0, or beginning of file)"),
+                           "(defaults to 0)"),
                    (ArgCallback_t)&SplitOp::startArg);  
 
   allArgs[QString("count")] =
     ArgsMapValue_t(QString("Scan count -- the number of scans to copy "
-                           "(defaults to all until end of file)"),
+                           "(defaults to all of file)"),
                    (ArgCallback_t)&SplitOp::countArg);  
   
 }
@@ -308,6 +349,54 @@ int InfoOp::doIt()
   return 0; /* success */
 }
 
+void RepairOp::buildAllArgs()
+{
+  allArgs["if"] = ArgsMapValue_t(QString("File to recover (required)"),
+                                 (ArgCallback_t)&RepairOp::filenameArg);
+  allArgs["of"] = ArgsMapValue_t(QString("Recovered output file "
+                                         "(defaults to RECOVERED.nds)"),
+                                 (ArgCallback_t)&RepairOp::outfileArg);
+}
+
+void RepairOp::filenameArg(const QString &filename)
+{
+  state()->filename = filename;
+}
+
+void RepairOp::outfileArg(const QString &filename)
+{
+  state()->outfile = filename;
+}
+
+int RepairOp::doIt()
+{
+
+  try {
+    
+    DSDRStream in(state()->filename);
+    DSDOStream out(state()->outfile, 1000);
+
+
+    vector<SampleStruct> scan;
+
+  
+    while (in.readNextScan(scan)) {
+      vector<SampleStruct>::iterator it;
+      
+      for (it = scan.begin(); it != scan.end(); it++) 
+        out.writeSample(&(*it));
+    }
+
+    out.end();
+    cout << "Recovered " << (uint64_to_cstr(out.scanCount())) << " samples." 
+         << endl;
+    return 0;
+
+  } catch (Exception & e) {
+    e.showConsoleError();
+    return EINVAL;
+  }
+}
 
 int SplitOpState::constraintsError() const
 {
@@ -336,6 +425,20 @@ int  InfoOpState::constraintsError() const
   return EINVAL;  
 }
 
+
+bool RepairOpState::checkConstraints()
+{
+  return QFile::exists(filename) && !outfile.isEmpty();
+}
+
+int  RepairOpState::constraintsError() const
+{
+  cerr << "A required argument to 'repair' is missing. " << endl
+       << "You need to specify a valid .nds file." 
+       << endl;
+  return EINVAL;  
+}
+
 int SynopsisOp::doIt()
 {
   return state()->constraintsError();
@@ -343,31 +446,37 @@ int SynopsisOp::doIt()
 
 int SynopsisOpState::constraintsError() const
 {
-  cerr << "Synopsis" << endl
-       << "--------" << endl
-       << "ndstool operation [arg=value ...]" << endl;
+  
+  cerr << endl 
+       << "NDSTool v0.1 by Calin A. Culianu <calin@ajvar.org>" << endl
+       << "(.nds file format utility program)" << endl << endl
+       << "Synopsis: " << endl << endl 
+       << "    ndstool operation [arg=value ...]" << endl;
 
   /* detailed synopsis below... */
   /* build this dynamically based on descriptions */
   cerr << endl 
-       << "Descriptions of available operations" << endl 
-       << "------------------------------------" << endl;
+       << "Descriptions of available operations:" << endl;
 
   for (Op **curr = ops; *curr; curr++) {
     Op *op = *curr;
     /* print option name */
-    cerr << op->name.latin1() << endl
-         << "    Descrption: " <<  op->description.latin1() << endl
-         << "    Possible Arguments: " << endl;
+    cerr << endl 
+         << "----------------------------------------------------------------------------" 
+         << endl << op->name.latin1() << endl
+         << "----------------------------------------------------------------------------" 
+         << endl
+         << op->description.latin1() << endl << endl
+         << "  Possible Arguments: " << endl;
     
     Op::ArgsMap_t::iterator it = op->allArgs.begin();
 
-    if (it == op->allArgs.end()) { cerr << "(No arguments.)" << endl; }
+    if (it == op->allArgs.end()) { cerr << "    (No arguments.)" << endl; }
 
     /* print arg descriptions.. */
     for ( ; it != op->allArgs.end(); it++) {      
-      cerr << "        " << it->first.latin1() << "=(something)" << endl
-           << "            " << it->second.first.latin1() << endl;
+      cerr << "    " << it->first.latin1() << "=(something)" << endl
+           << "        " << it->second.first.latin1() << endl;
     }
     cerr << endl;
   }
