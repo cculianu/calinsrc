@@ -2,6 +2,7 @@
  * This file is part of the RT-Linux Multichannel Data Acquisition System
  *
  * Copyright (C) 1999,2000 David Christini
+ * Copyright (C) 2001,2002 Calin Culianu, David Christini
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
