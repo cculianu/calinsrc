@@ -24,31 +24,89 @@
 #include "shm_mgr.h"
 #include "exception.h"
 #include "shared_stuff.h"
+#include <qobject.h>
+#include <qstring.h>
 #include <mbuff.h>
-
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <linux/major.h>
 
 SharedMemStruct *ShmMgr::shm = NULL;
+const char *ShmMgr::devFileName = MBUFF_DEV_NAME;
+ShmMgr::FailureReason ShmMgr::failureReason = ShmMgr::Unknown;
+
+static const QString failureReasons[] = {
+  QObject::
+  tr("The cause of the error is unknown."),
+  
+  QObject::
+  tr("It is likely that rt_process.o is not loaded, because the shared "
+	 "memory segment could not be found.  If rt_process.o is loaded, "
+	 "check to make sure it is the correct version for this program."),
+  
+  QObject::
+  tr("The compiled version of rt_process.o and this program do not match."),
+
+  QObject::
+  tr("There was an error accessing the mbuff character device.  Possible "
+	 "reasons include permissions problems on the character device "
+	 "and/or the mbuff.o kernel module not being loaded."),
+  0
+};
+
+static RTPException failure_exception = 
+  RTPException(QObject::tr("No exception occurred"), 
+	       QObject::tr("What is the sound of one hand clapping?"));
 
 void 
 ShmMgr::check()
 {
-  static const char * 
-    fullErrorMessage = 
-      "Could not attach to rt_process's shared memory segment named:\""
-      SHARED_MEM_NAME "\"\n"
-      "via the RTL mbuff driver.  Either there is an error with the driver, "
-      "rt_process.o is not loaded, or the compiled version of rt_process.o "
-      "and\nthis program do not match.\n";
+  static const QString fullErrorMessage 
+    (QObject::tr("Could not attach to rt_process's shared memory segment "
+		 "named:\"") +
+     + SHARED_MEM_NAME 
+     + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through ") +
+     "%1).");
 
-  if (!shm) {
-    shm = (SharedMemStruct *) mbuff_attach(SHARED_MEM_NAME, 
-						    sizeof(SharedMemStruct));
+  if (shm == NULL) {
+
+    failureReason = Unknown;   
+
     
-    if (shm == NULL || shm->struct_version != SHD_SHM_STRUCT_VERSION) {
-      throw RTPException(QString("Could to attach to ") + SHARED_MEM_NAME,
-			 fullErrorMessage, Exception::GUI);
-      
+    if (shdMemExists()) {
+
+      shm = (SharedMemStruct *) mbuff_attach(SHARED_MEM_NAME, 
+					     sizeof(SharedMemStruct));
+
+      if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
+	failureReason = WrongStructVersion;
+	mbuff_detach(SHARED_MEM_NAME, shm); 
+	shm = NULL;
+      }
+
+    } else {
+
+      failureReason = (devFileIsValid()
+		       ? RegionNotFound 
+		       : CharacterDevAccessError);
+
     }
+    
+    if (shm == NULL) {
+      failure_exception =
+	RTPException(QObject::tr("Could not attach to ") + SHARED_MEM_NAME,
+		     fullErrorMessage.arg(devFileName) + "\n\n" +
+		     failureReasons[failureReason], 
+		     Exception::GUI);
+      throw failure_exception;
+    }
+    
+    /* If we get to this point, SUCCESS! :) */
+
     /* Just to make sure, we tell rt_process to turn off all the ai channels 
        when we first attach, just as a convenience/convention */
     for (unsigned int i = 0; i < shm->n_ai_chans; i++) {
@@ -74,6 +132,57 @@ ShmMgr::attach()
   try {
     check();
   } catch (RTPException & e) {
+    return false;
+  }
+  return true;
+}
+
+/* returns a string relating to any errors encountered when trying to attach 
+   to the Shm */
+const char *
+ShmMgr::failureMessage() 
+{
+  return failureReasons[failureReason];
+}
+
+/* Same as above method, but give you the exception instead */
+const RTPException &
+ShmMgr::failureException() 
+{
+  return failure_exception;
+}
+
+bool /* true iff rt_process.o is loaded and the mbuff is accessible */
+ShmMgr::shdMemExists() 
+{
+  bool ret = false;
+  int fd;
+  struct mbuff_request_struct req;
+
+  if (!devFileIsValid()) {
+    goto end;
+  }
+  
+  fd = open(devFileName, O_RDWR);
+  strncpy(req.name, SHARED_MEM_NAME, MBUFF_NAME_LEN);
+  req.name[MBUFF_NAME_LEN+1] = 0;
+  ret = ioctl(fd, IOCTL_MBUFF_SELECT, &req) >= 0;
+  close(fd);
+ end:
+  return ret;
+}
+
+bool /* mbuff file exists and is readable */
+ShmMgr::devFileIsValid() 
+{
+  /* since mbuff_attach isn't very good about giving us exactly what 
+     went wrong, we will attempt to figure out if it was a permissions
+     issue or some other error. */
+  struct stat statbuf;
+  int fd = -1;
+  
+  if (stat (devFileName, &statbuf) || !S_ISCHR(statbuf.st_mode)
+      || (fd = open(devFileName, O_RDWR)) < 0 || close(fd)) {
     return false;
   }
   return true;

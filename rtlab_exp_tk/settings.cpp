@@ -63,10 +63,10 @@ DAQSettings::DaqMasterDefaults::DaqMasterDefaults()
     = QString(DAQ_RESOURCES_PREFIX) + DAQ_DIRNAME + "/default.log";
   me [ KEY_DEVICE ] = "/dev/comedi0";
   me [ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
-  me [ KEY_DEFAULT_INPUT_SOURCE ] = QString().setNum(Comedi);
-  me [ KEY_SHOW_CONFIG_ON_STARTUP ] = QString().setNum(true);
+  me [ KEY_DEFAULT_INPUT_SOURCE ] = QString().setNum((int)Comedi);
+  me [ KEY_SHOW_CONFIG_ON_STARTUP ] = QString().setNum((int)true);
   me [ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.bin";
-  me [ KEY_DATA_FORMAT ] = QString().setNum(Binary);
+  me [ KEY_DATA_FORMAT ] = QString().setNum((int)Binary);
 
   /* the following is a  'special' setting.  It is basically
      a special-format list of the format: 
@@ -271,7 +271,7 @@ DAQSettings::getInputSource() const
 void 
 DAQSettings::setInputSource(InputSource source)
 {  
-  settingsMap[KEY_DEFAULT_INPUT_SOURCE] = QString().setNum(source);
+  settingsMap[KEY_DEFAULT_INPUT_SOURCE] = QString().setNum((int)source);
   dirtySettings.insert(KEY_DEFAULT_INPUT_SOURCE);
 }
 
@@ -317,7 +317,7 @@ DAQSettings::getDataFileFormat() const
 void 
 DAQSettings::setDataFileFormat(DataFileFormat format)
 {  
-  settingsMap[KEY_DATA_FORMAT] = QString().setNum(format);
+  settingsMap[KEY_DATA_FORMAT] = QString().setNum((int)format);
   dirtySettings.insert(KEY_DATA_FORMAT);
 }
 

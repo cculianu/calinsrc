@@ -53,8 +53,16 @@ class Exception
   void showError() const;
  
   
-  const QString briefMsg, fullMsg;
-  ErrorReportingMode errorReportingMode;
+ protected:
+  QString _briefMsg, _fullMsg;
+  ErrorReportingMode _errorReportingMode;
+
+ public:
+  const QString & briefMsg() const { return _briefMsg; }
+  const QString & fullMsg() const { return _fullMsg; }
+  ErrorReportingMode & errorReportingMode() { return _errorReportingMode; }
+  ErrorReportingMode errorReportingMode() const { return _errorReportingMode; }
+
 
  private:
   void __showError() const;
@@ -91,6 +99,15 @@ class RTPException : public Exception
 		"kernel module failed!",
 		ErrorReportingMode m = GUI);
 };
+
+/* generic exceptions with respect to /dev/mbuff */
+class MBuffException : public Exception
+{
+ public:
+  MBuffException (const QString & mbuff_file, ErrorReportingMode m = GUI);
+  
+};
+
 
 class SampleDeviceException : public Exception 
 {

@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <linux/module.h> 
 #include "probe.h"
 #include "exception.h"
 #include "comedi_device.h"
@@ -200,6 +201,13 @@ void
 Probe::validate() const
 {
   unsigned int i;
+
+  /* TODO: Fixme.  There needs to be a way to tell if rt_process.o is loaded
+     which is independent of the shm_mgr. */
+  if (!have_rt_process) {    
+    throw ShmMgr::failureException();
+  }
+
   /* try and find at least 1 comedi analog input device */
   for (i = 0; i < probed_devices.size(); i++) {
     if (!probed_devices[i].find(ComediSubDevice::AnalogInput).isNull())
@@ -207,11 +215,15 @@ Probe::validate() const
   }
   
   // we don't have at least 1 analog input device
+
   throw NoComediDeviceException("Missing AI subdevice", 
 				"Required analog input subdevice not found.  "
-				"Comedi may not be installed or loaded, "
-				"you may have an incompatible board, or your "
-				"board may be configured incorrectly.");
+				"You may have an incompatible board, or your "
+				"board may be configured incorrectly.\n\n"
+				"If you are using the rt_process.o driver, "
+				"there maybe have been a problem attaching  "
+				"to the real-time task due to permissions or "
+				"other assored setup issues.");
 }
 
 void
