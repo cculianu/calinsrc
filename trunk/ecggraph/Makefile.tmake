@@ -1,0 +1,6 @@
+TEMPLATE    =	app
+CONFIG      =	qt warn_on debug #release
+INCLUDEPATH =   
+HEADERS     =	ecggraph.h ecggraphcontainer.h main.h
+SOURCES     =	ecggraph.cpp ecggraphcontainer.cpp main.cpp 
+TARGET      =	graphtest
