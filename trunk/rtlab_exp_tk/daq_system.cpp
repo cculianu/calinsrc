@@ -1542,7 +1542,7 @@ void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin,
 
 bool PluginMenu::inspectPlugin(const char *filename, PluginInfo & info) const
 {
-  void *handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
+  void *handle = dlopen(filename, RTLD_NOW);
   const char **n, **d, **a, **r;
   const int *v; 
   
