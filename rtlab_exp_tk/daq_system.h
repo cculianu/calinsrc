@@ -41,10 +41,7 @@
 #include <string.h>
 #include "exception.h"
 #include "configuration.h"
-#include "ecggraph.h"
-#include "ecggraphcontainer.h"
-#include "simple_text_editor.h"
-#include "help_browser.h"
+#include "producer_consumer.h"
 #ifdef __RTLINUX__
 #endif
 
@@ -53,11 +50,17 @@
 class DAQSystem;
 class Plugin;
 
+class ECGGraph;
+class ECGGraphContainer;
+
 class  SampleStructSource;
 class  SampleStructReader;
 class  SampleWriter;
 class  ShmController;
 class  ShmBase;
+
+class ExperimentLog; /* this extends class SimpleTextEditor, 
+                        but it is an opaque type inside daq_system.cpp */
 
 /* A tiling class whose slot, tyle(), can be used to replace the somewhat
    undesirably-implemented tile() in QWorkspace */
@@ -247,8 +250,7 @@ class DAQSystem : public QMainWindow
 
   void windowMenuRemoveWindow(const QWidget *w);
   /* defeat qt's type-dumbness with signals/slots */
-  void windowMenuRemoveWindow(const ECGGraphContainer *w)
-   { windowMenuRemoveWindow(static_cast<const QWidget *>(w)); }
+  void windowMenuRemoveWindow(const ECGGraphContainer *w);
 
   /* yet another really redundant slot:
      1) turns off the graph in the ShmMgr
@@ -295,7 +297,7 @@ class DAQSystem : public QMainWindow
 
   bool daqSystemIsClosingMode;
 
-  SimpleTextEditor log; /* the experiment log window */
+  ExperimentLog * log; /* the experiment log window */
   Tyler tyler;
   
   PluginMenu plugin_menu;

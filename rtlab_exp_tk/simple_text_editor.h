@@ -48,9 +48,9 @@ class SimpleTextEditor: public QWidget
      may prompt the user to specify another file if it can't access
      one of the files passed in.  */
   SimpleTextEditor (const QString & file, 
-                 const QString & log_template = QString::null, 
-                 QWidget * parent = 0, 
-                 const char * name = 0);
+                    const QString & log_template = QString::null, 
+                    QWidget * parent = 0, 
+                    const char * name = 0);
 
   ~SimpleTextEditor();
     
