@@ -419,6 +419,28 @@ DSDStream::readNextScan (map<uint, SampleStruct> & m) //throw (IllegalStateExcep
   return ret;
 }
 
+/* reads the next full scan and modifies v to contain the 
+   SampleStructs in increasing channel order */
+bool
+DSDStream::readNextScan (vector<SampleStruct> & v) //throw (IllegalStateException, FileFormatException, FileException)
+{
+  bool ret = true;
+  uint i = 0;
+
+  if (chans_this_scan == 0)  {
+    SampleStruct s;    
+    ret = readNextSample(s);
+    v.resize(chans_this_scan+1);
+    v[i++] = s;
+  } else {
+    v.resize(chans_this_scan);
+  }
+
+  while(chans_this_scan && ( ret = readNextSample(v[i++]) ) );
+  
+  return ret;
+}
+
 /* here a user can put his own meta-data, which are just name/value pairs */
 void DSDStream::putUserMetaData(QString name, QString value) 
 { 

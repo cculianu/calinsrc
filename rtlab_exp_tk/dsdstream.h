@@ -31,6 +31,7 @@
 
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #include "exception.h"
 #include "shared_stuff.h"
@@ -150,6 +151,9 @@ public:
 
   /* reads the next full scan and modifies m to be channel-id -> SampleStruct */
   bool readNextScan (map<uint, SampleStruct> & m) ;//throw (IllegalStateException, FileFormatException, FileException);
+
+  // this is faster than the above
+  bool readNextScan (vector<SampleStruct> & v) ;//throw (IllegalStateException, FileFormatException, FileException);
 
 
   /* here a user can put his own meta-data, which are just name/value pairs */

@@ -103,7 +103,7 @@ void DSDStream::MaskState::computeChannelsOn()
   for (uint i = 0; i < SHD_MAX_CHANNELS; i++)
     if (mask.isOn(i)) channels_on.push_back(i);
 
-  id_to_pos_map.erase(id_to_pos_map.begin(), id_to_pos_map.end());
+  id_to_pos_map.clear();
   for (uint i = 0; i < channels_on.size(); i++)
     id_to_pos_map[channels_on[i]] = i;
 
@@ -269,6 +269,26 @@ void DSDStream::MaskState::unserialize(const Settings & settings, const QString 
   startIndex = cstr_to_uint64(settings.get(section, key_startIndex).ascii());
   endIndex = cstr_to_uint64(settings.get(section, key_endIndex).ascii());
   computeChannelsOn();
+}
+
+/* this value represents that a particular channel id is off (no position) */
+void DSDStream::MaskState::Id2PosMap::clear()
+{
+  erase(begin(), end());
+}
+
+void DSDStream::MaskState::Id2PosMap::erase(iterator begin, iterator end)
+{
+  for(; begin < end; begin++) *begin = Off;
+}
+
+DSDStream::MaskState::Id2PosMap::iterator 
+DSDStream::MaskState::Id2PosMap::find(Pos chan)
+{
+  if (chan >= SHD_MAX_CHANNELS || data[chan] == Off)
+    return end();
+  
+  return data + chan;
 }
 
 
