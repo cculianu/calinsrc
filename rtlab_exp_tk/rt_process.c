@@ -43,6 +43,7 @@
 #include "stimulator.h"
 #include "user_cmd.h"
 #include "user_to_kernel.h"
+#include "version.h"
 
 #ifdef TIME_RT_LOOP
 #  define I_SHOULD_PRINT_TIME \
@@ -1454,7 +1455,8 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
     else
       sprintf(pidbuf, "(no process attached)");
     pidbuf[23] = 0;
-    PROC_PRINT("RTLab is attached to PID: %s\n"
+    PROC_PRINT("RTLab version %s\n"
+               "RTLab is attached to PID: %s\n"
                "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
                "Sampling Rate: %u Hz    Scan Index: %s\n"
@@ -1466,9 +1468,10 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "AI FIFO Size (bytes): %u    AO FIFO Size (bytes): %u\n"
                "AI FIFO Size (secs) : %u    AO FIFO Size (secs) : %u\n"
                "Realtime Loop Jitter (in nanos): %u\n",
+               VERSION_NUM_STR,
                pidbuf,
                "(unimplmented)",
-               "(unimplemented)",
+               "(unimplemented)",               
                (uint)rtp_shm->sampling_rate_hz,
                si_buf,
                ms_buf,

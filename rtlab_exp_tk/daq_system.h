@@ -276,7 +276,7 @@ class DAQSystem : public QMainWindow
   void closeGraphWindow( int channel_id );
   void closeAllGraphWindows();
 
-  //void about();    /* about the application */
+  void about();    /* about the application */
   void daqHelp( int id );
 
   /* Log-related slots */
@@ -289,6 +289,7 @@ class DAQSystem : public QMainWindow
   void graphChangedRange(uint channel, uint range); 
 
   void setStatusBarScanIndex(scan_index_t index);
+  void setMouseOverSample(double timeSecs, double voltage);
 
   /* window-related */
  public slots:
@@ -361,7 +362,7 @@ class DAQSystem : public QMainWindow
   DAQGraphControls *graphControls;
 
   QStatusBar statusBar;
-  QLabel statusBarScanIndex;
+  QLabel statusBarScanIndex, statusBarMouseOver;
   ReaderLoop readerLoop;
   ShmController & shmCtl; /* this comes directly from readerLoop */
 
@@ -372,7 +373,7 @@ class DAQSystem : public QMainWindow
   
   WindowTemplateDialog *windowTemplateDlg;
 
-  enum HelpMenuIds { help1 = 0, help2, help3, n_help_dests };
+  enum HelpMenuIds { help1 = 0, help2, helpAbout, n_help_dests };
   static const QString helpMenuDestinations[n_help_dests];
 
   uint last_secs_vis_they_picked;

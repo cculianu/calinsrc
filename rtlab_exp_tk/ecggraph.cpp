@@ -277,7 +277,7 @@ void ECGGraph::resizeEvent (QResizeEvent *) {
 }
 
 void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
-  double amplitude;
+  double amplitude, realTime;
   int sampleIndex, x = event->x(), y = event->y();
 
   if (x >= 0 && x <= width() && y >=0 && y <= height() ) {
@@ -285,6 +285,8 @@ void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
     pointToSampleVector (event->pos(), &amplitude, &sampleIndex);
     /* grab the cumulative sample index */
     uint64 cumI = (uint64)cumulateSampleIndex(sampleIndex); 
+    realTime = cumI / static_cast<double>(sampleRateHz()); 
+
 #ifdef DEBUG  
     //    cout << name() << "::mouse is at (" << x << ", " << y << ") "
     //	 << "which is sample vector (" << amplitude << ", " << cumI << ") (a,si)"  << endl;
@@ -292,6 +294,7 @@ void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
     emit mouseOverAmplitude(amplitude);
     emit mouseOverSampleIndex(cumI);
     emit mouseOverVector(amplitude, cumI);
+    emit mouseOverTimeAndVoltage(realTime, amplitude);
   }
 }
 
@@ -471,11 +474,18 @@ void ECGGraph::pointToSampleVector(const QPoint &point, double *amplitude, int *
 }
 
 long long ECGGraph::cumulateSampleIndex(int s) {
-  if (s > currentSampleIndex) {
+  /*  if (s > currentSampleIndex) {
     // wrap around..
     return (_totalSampleCount-1 - currentSampleIndex) - (numSamples-1 - s);
   }
   return _totalSampleCount-1 - (currentSampleIndex - s);
+  */
+  if (s > currentSampleIndex) {
+    // wrap around..
+    return outside_concept_of_a_sample_index 
+            - (currentSampleIndex) - (numSamples-s);
+  }
+  return outside_concept_of_a_sample_index - (currentSampleIndex-s);
 }
 
 void ECGGraph::computeSpikeTHoldPoints () {
