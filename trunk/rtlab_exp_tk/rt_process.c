@@ -348,7 +348,6 @@ static int init_shared_mem(int im, int is, int iF, int om, int os, int oF)
   /* num AI channels in use */
   sh_mem->n_ai_chans = comedi_get_n_channels(sh_mem->ai_minor, 0); 
   sh_mem->n_ao_chans = comedi_get_n_channels(sh_mem->ao_minor, 0);
-  sh_mem->n_ao_chans = 0;
   sh_mem->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
   sh_mem->scan_index = 0;
 
