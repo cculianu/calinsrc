@@ -81,7 +81,6 @@ string fileErrorMsg ( const char *file_name, char mode = 'r' )
     if ( file != -1 )
       {
         close( file );
-        cout <<"No error";
         return ""; 
       }
     if ( errno == EACCES ) //check file permissions

@@ -144,11 +144,49 @@ Settings::Section Settings::getSection(const QString & section_name) const
   return Section();
 }
 
+vector<QString> Settings::sections() const
+{
+  SettingsMap::const_iterator it;
+  vector<QString> ret;
+
+  for (it = settingsMap.begin(); it != settingsMap.end(); it++) 
+    ret.push_back(it->first);
+  
+  return ret;
+}
+
+Settings & Settings::operator<<(const Settings & from)
+{
+  return merge(from);
+}
+
+Settings & Settings::merge(const Settings & from)
+{
+  vector<QString> from_secs = from.sections();
+  vector<QString>::iterator it;
+
+  for ( it = from_secs.begin(); it != from_secs.end(); it++)
+    mergeSection(*it, from.getSection(*it));
+
+  return *this;
+}
+
 void Settings::putSection(const QString & section_name, const Section & section)
 {
   settingsMap[section_name] = section;
   for (Section::const_iterator it = section.begin(); it != section.end(); it++)
     dirtySettings[section_name].insert(it->first);
+}
+
+void Settings::mergeSection(const QString & section_name, 
+                            const Section & section)
+{
+  Section::const_iterator it;
+
+  setSection(section_name);
+  
+  for (it = section.begin(); it != section.end(); it++)
+    put(it->first, it->second);
 }
 
 void
