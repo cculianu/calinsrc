@@ -45,10 +45,12 @@
 #include <qlistview.h>
 #include <qtextview.h>
 #include <qlineedit.h>
-#include "daq_settings.h"
-#include "probe.h"
 #include "comedi_device.h"
 #include "output_file_w.h"
+
+
+class Probe;
+class DAQSettings;
 
 /* 
    ToDo: 

@@ -23,13 +23,15 @@
 #include <comedilib.h>
 #include <qstring.h>
 #include <vector>
+#include <iostream>
+using namespace std;
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "probe.h"
 #include "exception.h"
 #include "comedi_device.h"
-#include "shm_mgr.h"
+#include "shm.h"
 
 #ifdef TEST_PROBE
 QString
@@ -139,11 +141,10 @@ Probe::find(const QString & dev) const
 void
 Probe::do_probe(const QString & filename) 
 {
-  using ShmMgr::shm;
-
   ComediDevice dev(filename);
+  
   comedi_t *it = comedi_open(dev.filename.latin1());
-
+  
   if (!it) {
     throw NoComediDeviceException(QString("No comedi devices found at ") 
 				  + filename, 
@@ -151,6 +152,8 @@ Probe::do_probe(const QString & filename)
 				  "DAQ board correctly. Also, verify your "
 				  "DAQ System program settings.");
   }
+
+  cerr << "If you see any BUG error messages above, please ignore them!" << endl;
 
   /* try and determine the minor number */
   struct stat statbuf;
@@ -181,7 +184,7 @@ Probe::do_probe(const QString & filename)
     }
 
     sdev.used_by_rt_process = 
-      have_rt_process && (i == 0 ? shm->ai_minor : shm->ao_minor) == dev.minor;
+      have_rt_process && (i == 0 ? rtpshm->ai_minor : rtpshm->ao_minor) == dev.minor;
     sdev.can_be_locked = comedi_lock(it, sdev.id) >= 0;
     comedi_unlock(it, sdev.id);
 
@@ -202,9 +205,9 @@ Probe::validate() const
   uint i;
 
   /* TODO: Fixme.  There needs to be a way to tell if rt_process.o is loaded
-     which is independent of the shm_mgr. */
+     which is independent of the RTPShm. */
   if (!have_rt_process) {    
-    throw ShmMgr::failureException();
+    throw ShmBase::exception();
   }
 
   /* try and find at least 1 comedi analog input device */
@@ -216,25 +219,25 @@ Probe::validate() const
   // we don't have at least 1 analog input device
 
   throw NoComediDeviceException("Missing AI subdevice", 
-				"Required analog input subdevice not found.  "
-				"You may have an incompatible board, or your "
-				"board may be configured incorrectly.\n\n"
-				"If you are using the rt_process.o driver, "
-				"there maybe have been a problem attaching  "
-				"to the real-time task due to permissions or "
-				"other assored setup issues.");
+                                "Required analog input subdevice not found.  "
+                                "You may have an incompatible board, or your "
+                                "board may be configured incorrectly.\n\n"
+                                "If you are using the rt_process.o driver, "
+                                "there maybe have been a problem attaching  "
+                                "to the real-time task due to permissions or "
+                                "other assored setup issues.");
 }
 
 void
 Probe::attach_to_shm_and_stuff()
 {
-  have_rt_process = ShmMgr::attach();
+  have_rt_process = (rtpshm = new RTPShm()) != 0;
 }
 
 void
 Probe::kill_shm() /* Only to be called if instance initialization is done! */
 {
-  ShmMgr::detach();
+  if (rtpshm) delete rtpshm;
 }
 
 

@@ -25,6 +25,7 @@
 #include "plugin.h"
 
 class DAQSystem;
+class ShmController;
 class ECGGraph;
 class QWidget;
 struct AVNShared;
@@ -69,6 +70,7 @@ private slots:
   void gAdjManualOnly(int);
   void changeG(const QString &);
   void changeDG(int);  
+  void changeNomNumStims(int);
 
   void save();
   void saveAs();
@@ -82,6 +84,8 @@ private:
   bool need_to_save;
   QString outFile;
 
+  const ShmController *daq_shmCtl; /* from daqSystem */
+
   /* Layout/UI related-stuff */
   QWidget *window;  /* this contains the whole shebang */
   QWidget *graphs, *controls; /* dummy containers for all the graphs */
@@ -94,8 +98,8 @@ private:
 
   ECGGraph *rr_graph, *stim_graph, *g_graph;
 
-  QLabel *current_rri,     *current_rrt,    *current_stim,       *current_g, 
-         *last_beat_index, *current_rr_avg, *current_num_rr_avg, 
+  QLabel *current_rri,     *current_rrt,    *current_stim,   *current_nom_stim,
+         *current_g,   *last_beat_index, *current_rr_avg, *current_num_rr_avg, 
          *current_g2small, *current_g2big,  *current_delta_g,
          *delta_g_bar_value, *num_rr_avg_bar_value;
 

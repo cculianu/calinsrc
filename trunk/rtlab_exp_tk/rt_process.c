@@ -38,12 +38,12 @@
 #include <rtl_fifo.h>
 #include <rtl_sched.h>
 #include <rtl_sync.h>
-#include <mbuff.h> 
+#include <mbuff.h>
 
 #ifdef TIME_RT_LOOP
 #  include <rtl_time.h>
 #  define I_SHOULD_PRINT_TIME \
-         (!(sh_mem->scan_index % (sh_mem->sampling_rate_hz * 10)))
+         (!( ((uint)rtp_shm->scan_index) % 10000))
 #endif
 
 #include <linux/comedilib.h>
@@ -83,6 +83,10 @@ static int init_shared_mem(void);
 /* sets up the krange cache */
 static int build_krange_cache(void) ;
 
+/* thread to calibrate RT jitter... */
+struct calib_parms { int iterations; hrtime_t period; };
+static void *calibrate_jitter(void *arg);
+
 static void cleanup_krange_cache(void);
 static void cleanup_fifos(void);
 static void cleanup_comedi_stuff(void);
@@ -103,6 +107,7 @@ typedef enum SubDevT {
 inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t data);
 
 static pthread_t daq_task = 0;          /* main RT task */
+static void     *daq_task_stack = 0;    /* main RT task stack */
 
 struct krange_cache {
   comedi_krange *ai_ranges;
@@ -149,10 +154,10 @@ static int ai_minor = -1, ao_minor = -1, ai_subdev = -1, ao_subdev = -1;
 SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
 struct spike_info spike_info;            /* Exported spike information     */
 
-
 /* some vars to keep track of the rt task period/rate */
-static hrtime_t task_period = 0;
-static sampling_rate_t last_sampling_rate = 0;
+static hrtime_t task_period = 0; 
+
+static volatile sampling_rate_t last_sampling_rate = 0;
 /* readjusts the period of pthread_t daq_task based on changes in 
    rtp_shm->sampling_rate_hz, changes: task_period and last_sampling_rate */
 inline int readjust_rt_task_period(void);
@@ -169,11 +174,14 @@ static const char *errorMessage = "Success";
    all of the functions registered in rt_functions linked list */
 static void *daq_rt_task (void *arg) 
 {
-  register hrtime_t loopstart = 0;    /* used to calibrate timing on
-                                         sampling rate changes            */
-
   /* below is used to put upper limit on the array in one_full_scan */
   struct rt_function_list *curr;
+  register hrtime_t loopstart = 0,     /* used to calibrate timing on
+                                          sampling rate changes            */
+                    lastloopstart = 0;
+
+  register int  jitter_diff = 0;
+
 #ifdef TIME_RT_LOOP
   register hrtime_t looptime = 0, max = 0, min = HRTIME_INFINITY;
   uint avg_total_time = 0;
@@ -189,11 +197,22 @@ static void *daq_rt_task (void *arg)
     
   }
 
-  while (1) {
 
+  while (1) {
     loopstart = gethrtime();
-    
+
+    if (lastloopstart > 0LL) {
+    /* compute jitter */
+      jitter_diff = (lastloopstart + task_period) - loopstart;
+      if (jitter_diff < 0) jitter_diff = -jitter_diff;
+      if (((uint)jitter_diff) > rtp_shm->jitter_ns) 
+        rtp_shm->jitter_ns = jitter_diff;
+      
+    }
+
+    /* recomputer period in case sampling_rate changed */
     readjust_rt_task_period();
+
 
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
@@ -211,10 +230,10 @@ static void *daq_rt_task (void *arg)
          1) grabScanOffBoard()
          2) putFullScanIntoAIFifo()
       */
-      for (curr = rt_functions; curr != &__end_of_func_list; curr=curr->next) {
-	if (curr->active_flag)
-	  curr->function(&one_full_scan);
-      }
+      for (curr = rt_functions; curr != &__end_of_func_list; curr=curr->next) 
+        if (curr->active_flag)
+          curr->function(&one_full_scan);
+      
     }
 
 #ifdef TIME_RT_LOOP
@@ -227,7 +246,7 @@ static void *daq_rt_task (void *arg)
 
     avg_total_time -= 
       ((uint)(avg_total_time - looptime)) 
-      / (rtp_shm->scan_index + 1);
+      / ((uint)(rtp_shm->scan_index + 1));
 
 
     if ( I_SHOULD_PRINT_TIME ) {
@@ -246,6 +265,7 @@ static void *daq_rt_task (void *arg)
     /* increment scan_index counter */
     ++rtp_shm->scan_index; 
 
+    lastloopstart = loopstart;
     pthread_wait_np();
   }
 
@@ -254,8 +274,6 @@ static void *daq_rt_task (void *arg)
 
 int init_module(void) 
 {
-  pthread_attr_t attr;
-  struct sched_param sched_param;
   int i;
 
   error = -EBUSY;
@@ -310,17 +328,53 @@ int init_module(void)
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
- 
 
-  /* create the realtime task */
-  pthread_attr_init(&attr);
-  pthread_attr_setfp_np(&attr, 1);
-  sched_param.sched_priority = 1;
-  pthread_attr_setschedparam(&attr, &sched_param);  
-  if ( (error = pthread_create(&daq_task, &attr, 
-			       daq_rt_task, (void *)0) ) ) {
-    errorMessage = "Cannot create the daq pthread";
+  if ( !(daq_task_stack = kmalloc(RTL_PTHREAD_STACK_MIN, GFP_KERNEL)) ) {
+    error = -ENOMEM;
+    errorMessage = "Cannot allocate memory for the daq task's stack.";
     goto init_error;
+  }
+
+  { /* calibrate jitter... */
+    pthread_attr_t attr;
+    pthread_t calibration_thread;
+    struct sched_param sched_param;
+    struct calib_parms calib_parms = { iterations:5000, period: 200000LL };
+
+    /* create the calibration thread */
+    pthread_attr_init(&attr);
+    pthread_attr_setfp_np(&attr, 1);
+    pthread_attr_setstackaddr(&attr, daq_task_stack);
+    pthread_attr_setstacksize(&attr, RTL_PTHREAD_STACK_MIN);
+    sched_param.sched_priority = SCHED_FIFO;
+    pthread_attr_setschedparam(&attr, &sched_param);  
+    if ( (error = pthread_create(&calibration_thread, &attr, 
+                                 calibrate_jitter, &calib_parms) ) ) {
+      errorMessage = "Cannot create the jitter calibration pthread";
+      goto init_error;
+    }
+    printk(RT_PROCESS_MODULE_NAME": Calibrating realtime jitter...\n");
+    pthread_join(calibration_thread, 0);
+  }
+
+  printk(RT_PROCESS_MODULE_NAME": Jitter calibrated to %u nanoseconds\n", 
+         rtp_shm->jitter_ns);
+
+  { /* create the main daq RT thread.. */
+    pthread_attr_t attr;
+    struct sched_param sched_param;
+
+    /* create the realtime task */
+    pthread_attr_init(&attr);
+    pthread_attr_setfp_np(&attr, 1);
+    pthread_attr_setstackaddr(&attr, daq_task_stack);
+    pthread_attr_setstacksize(&attr, RTL_PTHREAD_STACK_MIN);
+    sched_param.sched_priority = SCHED_FIFO;
+    pthread_attr_setschedparam(&attr, &sched_param);  
+    if ( (error = pthread_create(&daq_task, &attr, 
+                                 daq_rt_task, (void *)0) ) ) {
+      errorMessage = "Cannot create the daq pthread";
+    }
   }
 
   /* assumption for readjust_rt_task_period () is rtp_shm is initialized.. */
@@ -339,6 +393,30 @@ int init_module(void)
   printk (RT_PROCESS_MODULE_NAME ": Failure -- can't initalize RT task (%s)\n", 
 	  errorMessage);
   return error;
+}
+
+static void *calibrate_jitter(void *arg) 
+{
+  const int iterations = ((struct calib_parms *)arg)->iterations;
+  const hrtime_t period = ((struct calib_parms *)arg)->period;
+  hrtime_t last_iter = 0, max_jitter = 0, curr_jitter = 0;
+  int i; 
+
+  pthread_make_periodic_np(pthread_self(), gethrtime() + period, period);
+
+  for (i = 0; i < iterations; i++, pthread_wait_np()) {
+    curr_jitter = gethrtime() - (last_iter + period);
+    if (last_iter > 0LL) {
+      if (curr_jitter < 0) curr_jitter = -curr_jitter;
+      if (curr_jitter > max_jitter) max_jitter = curr_jitter;
+    }
+    last_iter = gethrtime();
+  }
+  
+  rtp_shm->jitter_ns = max_jitter;
+
+  pthread_exit((void *)rtp_shm->jitter_ns);
+  return (void *)rtp_shm->jitter_ns;
 }
 
 /* returns error if file is not a (configured) comedi device */
@@ -600,11 +678,19 @@ void cleanup_module(void)
 { 
   /* delete daq_task */
   if (daq_task) {
-    if (!pthread_delete_np(daq_task)) 
-      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles.\n",
-	      (unsigned long int)(rtp_shm ? rtp_shm->scan_index + 1 : 0));
+    if ( pthread_cancel(daq_task) ) 
+      printk (RT_PROCESS_MODULE_NAME": cannot cancel RT task (it died?).\n");
+    else if ( pthread_join(daq_task, 0) )
+      printk (RT_PROCESS_MODULE_NAME": cannot join to RT thread! Argh!\n");
     else 
-      printk (RT_PROCESS_MODULE_NAME": cannot find RT task (it died?).\n");
+      printk (RT_PROCESS_MODULE_NAME": deleted RT task after %lu cycles.\n",
+              (unsigned long int)(rtp_shm ? rtp_shm->scan_index : 0));    
+  }
+
+  /* delete the daq_task's stack */
+  if (daq_task_stack) {
+    kfree(daq_task_stack);
+    daq_task_stack = 0;
   }
 
   __rtp_unregister_function(detectSpikes);
@@ -624,11 +710,10 @@ void cleanup_module(void)
   /* release memory for the krange */
   cleanup_krange_cache();
 
-  if (rtp_shm) {
+  if (rtp_shm) 
     /* free up shared memory */
     mbuff_free(SHARED_MEM_NAME,(void *)rtp_shm);
-  }
-
+  
 }
 
 static void cleanup_fifos (void) 
@@ -710,7 +795,7 @@ static void grabScanOffBoard (MultiSampleStruct *m)
   (Note to self: Ok, it's not tough, but requires some probing in 
   init_module to determine some minimum values for the comedi_cmd struct)
 ---------------------------------------------------------------------------*/
-  memcpy(m->channel_mask, rtp_shm->ai_chans_in_use, CHAN_MASK_SIZE);
+  memcpy(m->channel_mask, (const char *)rtp_shm->ai_chans_in_use, CHAN_MASK_SIZE);
   m->acq_start = gethrtime();
   for (i = 0, m->n_samples = 0; i < rtp_shm->n_ai_chans; i++) {
     if (is_chan_on(i, m->channel_mask)) {
@@ -734,17 +819,18 @@ static void grabScanOffBoard (MultiSampleStruct *m)
 
 static void detectSpikes (MultiSampleStruct *m)
 {
-  register uint chan, i;
+  register uint chan, i, elapsed;
   register const uint avg_chan_time =
     ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
-  register hrtime_t this_chan_time;
+  register hrtime_t this_chan_time;  
   
   for (i = 0; i < m->n_samples; i++) {
     chan = m->samples[i].channel_id;
     this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
-    if (_test_bit(chan, rtp_shm->spike_params.enabled_mask) 
-        &&  (this_chan_time - spike_info.last_spike_time[chan]
-            >= rtp_shm->spike_params.blanking[chan] * MILLION) ) {
+    elapsed = (uint)(this_chan_time - spike_info.last_spike_time[chan]);
+
+    if (test_bit(chan, rtp_shm->spike_params.enabled_mask) 
+        &&  elapsed  >= rtp_shm->spike_params.blanking[chan] * MILLION ) {
       switch (_test_bit(chan, rtp_shm->spike_params.polarity_mask)) {
       case Positive: /* from enum SpikePolarity */
         m->samples[i].spike = 
@@ -763,13 +849,15 @@ static void detectSpikes (MultiSampleStruct *m)
 
       if (m->samples[i].spike) {
         m->samples[i].spike_period = spike_info.period[chan] =
-          (this_chan_time - spike_info.last_spike_time[chan]) 
-           * ((double)0.000001);
+          elapsed * ((double)0.000001);
         spike_info.last_spike_time[chan] = this_chan_time;
       }
       
     }
-    _set_bit(chan, spike_info.spikes_this_scan, m->samples[i].spike);
+    if (m->samples[i].spike)
+      set_bit(chan, spike_info.spikes_this_scan);
+    else
+      clear_bit(chan, spike_info.spikes_this_scan);
   }
 }
 
@@ -1020,14 +1108,15 @@ inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
 
 inline int readjust_rt_task_period(void)
 {
+  static const hrtime_t undersleep = 0LL;
   if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
     /* user changed sampling rate -- DANGEROUS if set too high!!! */
     last_sampling_rate = rtp_shm->sampling_rate_hz;
-    task_period = ((1000 / (double)last_sampling_rate) * MILLION);
+    task_period = ((1000.0 / (double)last_sampling_rate) * MILLION);
     /* now re-tune the period, note that this is dangerous if set too
        fast, as the user task may never get to run! */
-    return pthread_make_periodic_np (daq_task, gethrtime() + task_period, 
-                                     task_period);
+    return pthread_make_periodic_np (daq_task, gethrtime() + task_period  - undersleep, 
+                                     task_period  - undersleep);
   }
   return 0;
 }

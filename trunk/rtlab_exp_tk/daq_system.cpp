@@ -59,7 +59,7 @@
 #include "sample_source.h"
 #include "sample_reader.h"
 #include "sample_writer.h"
-#include "shm_mgr.h"
+#include "shm.h"
 #include "shared_stuff.h"
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
@@ -85,6 +85,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   statusBar(this),
   statusBarScanIndex(&statusBar),
   readerLoop(this),
+  shmCtl(*readerLoop.shmCtl),
   daqSystemIsClosingMode(false), /* for now, this becomes true when
                                     daq system is closing */
   log(0, "Log Window"),
@@ -343,7 +344,8 @@ DAQSystem::queryOpen(uint & chan, uint & range,
   return retval;
 }
 
-static void defaultifyChannelParams (ECGGraphContainer *gcont)
+static void defaultifyChannelParams (ECGGraphContainer *gcont, 
+                                     ShmController & shmCtl)
 {
   const uint & chan = gcont->channelId;
   ECGGraph *& graph = gcont->graph;
@@ -351,9 +353,9 @@ static void defaultifyChannelParams (ECGGraphContainer *gcont)
   graph->unsetSpikeThreshold();
   gcont->setSpikeBlanking( static_cast<int>(DEFAULT_SPIKE_BLANKING) );
   gcont->setSpikePolarity( Positive );
-  ShmMgr::setSpikeEnabled ( chan, false );
-  ShmMgr::setSpikeBlanking( chan, DEFAULT_SPIKE_BLANKING ); 
-  ShmMgr::setSpikePolarity( chan, Positive );
+  shmCtl.setSpikeEnabled ( chan, false );
+  shmCtl.setSpikeBlanking( chan, DEFAULT_SPIKE_BLANKING ); 
+  shmCtl.setSpikePolarity( chan, Positive );
 }
 
 void
@@ -412,7 +414,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   }
 
   /* set chan params to default values .. */
-  defaultifyChannelParams(gcont); /* static function */
+  defaultifyChannelParams(gcont, shmCtl); /* static function */
   
   if (! chanParams.isNull() ) { /* means we had a default setting */
 
@@ -427,8 +429,8 @@ DAQSystem::openChannelWindow(uint chan, uint range,
                               ? Positive 
                               : Negative) );
     gcont->setSpikeBlanking( static_cast<int>(chanParams.spike_blanking) );
-    ShmMgr::setSpikeBlanking( chan, chanParams.spike_blanking );
-    ShmMgr::setSpikePolarity( chan, (chanParams.spike_polarity 
+    shmCtl.setSpikeBlanking( chan, chanParams.spike_blanking );
+    shmCtl.setSpikePolarity( chan, (chanParams.spike_polarity 
                                      ? Positive 
                                      : Negative));
 
@@ -438,7 +440,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   resynch(); /* synchronize all the graph displays */
 
   /* ladies and gentlemen, start your samplings!! */
-  ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, true);
+  shmCtl.setChannel(ComediSubDevice::AnalogInput, chan, true);
   emit channelOpened(chan);
 
 }
@@ -467,8 +469,8 @@ DAQSystem::saveGraphSettings(const ECGGraphContainer  *gcont)
     cp.range = gcont->currentRange();
     cp.spike_on = graph->spikeMode();
     cp.spike_thold = graph->spikeThreshold();
-    cp.spike_polarity = ShmMgr::spikePolarity(chan);
-    cp.spike_blanking = ShmMgr::spikeBlanking(chan); 
+    cp.spike_polarity = shmCtl.spikePolarity(chan);
+    cp.spike_blanking = shmCtl.spikeBlanking(chan); 
     cp.setNull(false);
     settings.setChannelParameters(chan, cp);
   } else {
@@ -510,8 +512,8 @@ void
 DAQSystem::
 graphChangedRange(uint channel, int range)
 {
-  ShmMgr::setChannelRange(ComediSubDevice::AnalogInput, channel, 
-			  (uint)range);
+  shmCtl.setChannelRange(ComediSubDevice::AnalogInput, channel, 
+                         (uint)range);
 }
 
 void
@@ -540,7 +542,7 @@ void DAQSystem::spikePolarityChanged(SpikePolarity p)
     dynamic_cast<const ECGGraphContainer *>(this->sender());
   
   if ( sender )
-    ShmMgr::setSpikePolarity(sender->channelId, p);
+    shmCtl.setSpikePolarity(sender->channelId, p);
 }
 
 void DAQSystem::spikeBlankingChanged(uint b) 
@@ -549,7 +551,7 @@ void DAQSystem::spikeBlankingChanged(uint b)
     dynamic_cast<const ECGGraphContainer *>(this->sender());
 
   if ( sender )
-    ShmMgr::setSpikeBlanking(sender->channelId, b);
+    shmCtl.setSpikeBlanking(sender->channelId, b);
 }
 
 void DAQSystem::spikeThresholdSet(double value) 
@@ -561,8 +563,8 @@ void DAQSystem::spikeThresholdSet(double value)
         : 0 );
   
   if ( gc ) {
-    ShmMgr::setSpikeThreshold(gc->channelId, value);
-    ShmMgr::setSpikeEnabled(gc->channelId, true);
+    shmCtl.setSpikeThreshold(gc->channelId, value);
+    shmCtl.setSpikeEnabled(gc->channelId, true);
   }
 }
 
@@ -575,7 +577,7 @@ void DAQSystem::spikeThresholdOff()
         : 0 );
 
   if ( gc )
-    ShmMgr::setSpikeEnabled(gc->channelId, false);
+    shmCtl.setSpikeEnabled(gc->channelId, false);
 }
 
 int /* returns the window id */
@@ -615,7 +617,7 @@ DAQSystem::windowMenuRemoveWindow(const QWidget *w)
 void
 DAQSystem::graphOff(const ECGGraphContainer * gcont)
 {
-  ShmMgr::setChannel(ComediSubDevice::AnalogInput, gcont->channelId, false);
+  shmCtl.setChannel(ComediSubDevice::AnalogInput, gcont->channelId, false);
   /* this is necessary so as to inform sample writer in some cases.. */
   readerLoop.turnOffChannel(gcont->channelId); 
   emit channelClosed(gcont->channelId);
@@ -820,10 +822,10 @@ ReaderLoop(DAQSystem *d) :
 {
   switch (d->settings.getInputSource()) {
   case DAQSettings::RTProcess:
-    ShmMgr::check();
-    ShmMgr::clearSpikeSettings();
+    shm = new RTPShm();
+    shmCtl = new ShmController(shm);
 
-    source = new SampleStructRTFSource(ShmMgr::aiFifoMinor());
+    source = new SampleStructFIFOSource(string("/dev/rtf") + shmCtl->aiFifoMinor());
     source->flush();
 
     /* build a non-blocking sample reader */
@@ -832,13 +834,17 @@ ReaderLoop(DAQSystem *d) :
     /* build the sample writer */
     switch(d->settings.getDataFileFormat()) {
     case DAQSettings::Binary:
-      writer = new SampleBinWriter(d->settings.getDataFile().latin1());
+      writer = new SampleBinWriter(shmCtl->samplingRateHz(), 
+                                   d->settings.getDataFile().latin1());
       break;
     case DAQSettings::Ascii:
-      writer = new SampleGZWriter(d->settings.getDataFile().latin1());
+      writer = new SampleGZWriter(shmCtl->samplingRateHz(), 
+                                  d->settings.getDataFile().latin1());
       break;
     default:
-      throw UnimplementedException("INTERNAL ERROR", "Unknown data file format specified in settings");
+      throw UnimplementedException("INTERNAL ERROR", 
+                                   "Unknown data file format specified in "
+                                   "settings");
       break;
     }
 
@@ -869,6 +875,8 @@ ReaderLoop::~ReaderLoop()
   delete reader; reader = 0;
   delete source; source = 0;
   delete writer; writer = 0;
+  delete shmCtl; shmCtl = 0;
+  delete shm; shm = 0;
 }
 
 void
@@ -898,8 +906,8 @@ ReaderLoop::loop()
   }
     
   { /* emit scan index update every 1 second */
-    if (ShmMgr::scanIndex() - saved_curr_index > ShmMgr::samplingRateHz()) {
-      saved_curr_index = ShmMgr::scanIndex();
+    if (shmCtl->scanIndex() - saved_curr_index > shmCtl->samplingRateHz()) {
+      saved_curr_index = shmCtl->scanIndex();
       emit scanIndexChanged(saved_curr_index);
     }
   }

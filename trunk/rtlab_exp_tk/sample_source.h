@@ -1,7 +1,6 @@
 #ifndef _SAMPLE_SOURCE_H
 #define _SAMPLE_SOURCE_H
 
-#include <qdatetime.h>
 #include <string>
 #include "shared_stuff.h"
 #include "common.h"
@@ -21,7 +20,7 @@ class SampleStructSource {
 
   /* time in ms that this source suggests the reading process should
      spend waiting for more data, for maximal efficiency */
-  virtual int suggestPollWaitTime() const { return 0; };
+  virtual int suggestPollWaitTime() const { return 1; };
 
  protected:
   SampleStructSource(); /* abstract class.. no public constructors */
@@ -34,24 +33,27 @@ class SampleStructFileSource : public SampleStructSource {
 
  public:
   SampleStructFileSource(const string & filename);
+  SampleStructFileSource(unsigned int filedes);
   virtual ~SampleStructFileSource();
 
   virtual size_t numBytesReady() const; // throws device exception
   virtual int numSamplesReady() const; // is this really useful?
   virtual const SampleStruct * read(int b_time = -1); // throws eof, others  
+  virtual void flush() { /* no meaning */ }
 
   /* negative seconds indicates infinite waiting time */
   virtual void waitForNewData(int num_secs_to_wait = -1);  // throws eof
 
  protected:
   SampleStructFileSource() : fd(0) {} /* do not instantiate explicitly */
-  virtual void init(const string & filename); // calls open()
-  virtual void destruct(); // calls close()
   virtual void open(const string & filename); // throws some exception
   virtual void close(); 
   
   int fd;
-
+ 
+ private:
+  bool i_opened_fd;
+ 
 };
 
 /* 
@@ -72,15 +74,12 @@ class SampleStructFileSource : public SampleStructSource {
 */
 #define DESIRED_FIFO_FEEL_MS 30
 
-class SampleStructRTFSource : public SampleStructFileSource {
+class SampleStructFIFOSource : public SampleStructFileSource {
  public:
-  SampleStructRTFSource(unsigned short minor = 0);
+  SampleStructFIFOSource(unsigned int filedes);
+  SampleStructFIFOSource (const string & filename);
+  virtual ~SampleStructFIFOSource();
   void flush(); // flush old/stale data that may be in fifo, throws exceptions
-  const SampleStruct * read(int b_time=-1); // throws eof, others  
-  int suggestPollWaitTime() const;
-
- private:
-  QTime pollWaitTimer;
 };
 
 #endif

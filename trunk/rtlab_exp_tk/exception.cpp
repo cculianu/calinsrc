@@ -74,6 +74,15 @@ NoComediDeviceException::NoComediDeviceException
 ) 
   : Exception(brief, full, m) {}
 
+
+ShmException::ShmException 
+(
+ const QString & brief,
+ const QString & full,
+ ErrorReportingMode m
+) 
+  : Exception  (brief, full, m) {}
+
 RTPException::RTPException 
 (
  const QString & brief,

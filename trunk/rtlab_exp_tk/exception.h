@@ -90,6 +90,16 @@ class NoComediDeviceException : public Exception
 			   ErrorReportingMode m = GUI); 
 };
 
+/* generic exceptions with respect to shared memory */
+class ShmException : public Exception
+{
+ public:
+  ShmException (const QString & brief = "Error occurred with shared memory",
+                const QString & full = "An operation upon/with shared memor "
+                                       "failed or was invalid!",
+                ErrorReportingMode m = GUI);
+};
+
 /* generic exceptions with respect to rt_process */
 class RTPException : public Exception
 {

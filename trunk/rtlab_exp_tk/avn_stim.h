@@ -58,6 +58,7 @@ struct AVNLiebnitz {
   int rr_target; /* ui-controlled */
   float delta_g; /* ui-controlled */
   int num_rr_avg; /* ui-controlled */
+  int nom_num_stims; /* ui-controlled */
   char stim_on;    /* ui-controlled */
   char g_adjustment_mode; /* ui-controlled */
 };
@@ -79,6 +80,8 @@ struct AVNShared {
   volatile float delta_g; /* the amount we modify g each time we do control */
   volatile int num_rr_avg; /* the number of recent beats we take into account 
                               to reach rr_avg (see AVLiebnitz::rr_avg) */
+  volatile int nom_num_stims; /* the number of stims that we +/- around in our
+                                 control algorithm */
   char stim_on;    /* if nonzero, do the actual stimulations */
   char g_adjustment_mode; /* see above #defines */
   int fifo_minor; 
@@ -102,6 +105,9 @@ struct AVNShared {
 #define AVN_NUM_RR_AVG_MIN 1
 #define AVN_DELTA_G_MIN ((float)0.01)
 #define AVN_DELTA_G_MAX ((float)0.5)
+#define AVN_MAX_NUM_STIMS  150 /* maximum number stims in AO   */
+#define AVN_MIN_NUM_STIMS  0   /* obvious, but still set here  */
+
 static inline   int avn_delta_g_toint(float x) { return (int)(x * 100); }
 static inline float avn_delta_g_fromint(int x) { return x / 100.0; }
 

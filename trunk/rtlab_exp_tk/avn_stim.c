@@ -77,7 +77,7 @@ static void calc_stim(void);
 static void stimulate(int new_stim); /* if true, a new stim is started */
 static void calc_g(void);
 static void out_to_fifo(void);
-static int find_free_chan(char *, unsigned int);
+static int find_free_chan(volatile char *, unsigned int);
 
 module_init(avn_stim_init);
 module_exit(avn_stim_cleanup);
@@ -97,6 +97,7 @@ static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
 #define CURR          (&working_liebnitz)
 #define RRI_CURR      CURR->rr_interval
 #define STIM_CURR     CURR->stimuli
+#define NOM_STIM_CURR CURR->nom_num_stims
 #define G_VAL_CURR    CURR->g_val
 #define SI_CURR       CURR->scan_index
 #define RR_AVG_CURR   CURR->rr_avg
@@ -111,7 +112,7 @@ static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
 /*---------------------------------------------------------------------------- 
   Some initial values or otherwise private constants...                 
 -----------------------------------------------------------------------------*/
-static const   int MAX_NUM_STIMS      = 30;  /* maximum number stims in AO   */
+static const   int INIT_NOM_NUM_STIMS = 20;  /* the nominal num_stims value  */
 static const   int STIM_PERIOD        = 5;   /* in milliseconds              */
 static const   int STIM_SUSTAIN       = 1;   /* in milliseconds              */
 static const float INITIAL_DELTA_G    = 0.1; /* for AVNShared init.          */
@@ -219,6 +220,7 @@ static int init_shared_mem(void)
   shm->spike_channel = -1;
   shm->delta_g = INITIAL_DELTA_G;
   shm->num_rr_avg = INITIAL_NUM_RR_AVG;
+  shm->nom_num_stims = INIT_NOM_NUM_STIMS;
   
   if ( (shm->ao_chan = 
         find_free_chan(rtp_shm->ao_chans_in_use, rtp_shm->n_ao_chans)) < 0) 
@@ -304,11 +306,11 @@ static void calc_stim(void)
        in case they set shm->num_rr_avg to 0  */
     RR_AVG_CURR = ( factor != 0 ? sum / factor : shm->rr_target);   
     
-    STIM_CURR = (RR_AVG_CURR - shm->rr_target) * g;
+    STIM_CURR = NOM_STIM_CURR  +  (shm->rr_target - RR_AVG_CURR) * g;
 
-    if (STIM_CURR < 0) STIM_CURR = -STIM_CURR;
+    if (STIM_CURR < AVN_MIN_NUM_STIMS) STIM_CURR = AVN_MIN_NUM_STIMS;
 
-    if (STIM_CURR > MAX_NUM_STIMS) STIM_CURR = MAX_NUM_STIMS;
+    if (STIM_CURR > AVN_MAX_NUM_STIMS) STIM_CURR = AVN_MAX_NUM_STIMS;
 
 }
 
@@ -372,6 +374,7 @@ static void calc_g(void)
      if out G_INC_COUNT threshold is reached, we increase G by DG_CURR */
   G_VAL_CURR -= DG_CURR * (G_2BIG_CURR   >= G_MOD_THRESHOLD);
   G_VAL_CURR += DG_CURR * (G_2SMALL_CURR >= G_MOD_THRESHOLD);
+  if (G_VAL_CURR < 0.0) G_VAL_CURR = 0.0; /* g cannot be less than 0 */
   shm->g_val = G_VAL_CURR;
 }
 
@@ -380,7 +383,7 @@ static void out_to_fifo(void)
   rtf_put(shm->fifo_minor, CURR, sizeof(*CURR));
 }
 
-static int find_free_chan(char *chans, unsigned int n_chans)
+static int find_free_chan(volatile char *chans, unsigned int n_chans)
 {
   unsigned int i;
 
@@ -403,6 +406,9 @@ static void do_pre_control_stuff(void)
 
   if (shm->num_rr_avg < AVN_NUM_RR_AVG_MIN) shm->num_rr_avg = AVN_NUM_RR_AVG_MIN;
   else if (shm->num_rr_avg > AVN_NUM_RR_AVG_MAX) shm->num_rr_avg = AVN_NUM_RR_AVG_MAX;
+
+  if (shm->nom_num_stims > AVN_MAX_NUM_STIMS) shm->nom_num_stims = AVN_MAX_NUM_STIMS;
+  else if (shm->nom_num_stims < AVN_MIN_NUM_STIMS) shm->nom_num_stims = AVN_MIN_NUM_STIMS;
     
   G_VAL_CURR = shm->g_val;
   SI_CURR = rtp_shm->scan_index;
@@ -411,6 +417,7 @@ static void do_pre_control_stuff(void)
   N_AVG_CURR = shm->num_rr_avg;
   G_ADJ_CURR = shm->g_adjustment_mode;
   STIM_ON_CURR = shm->stim_on;
+  NOM_STIM_CURR = shm->nom_num_stims;
   /* will be set later...
      RRI_CURR = 
      STIM_CURR = 

@@ -37,7 +37,8 @@ class SampleWriter: public QObject, public SampleConsumer
   Q_OBJECT
 
 public:
-  SampleWriter() { _periodicFlush = flushPending = false; };
+
+  SampleWriter(uint sampling_rate_hz);
   virtual ~SampleWriter() {};
 
   // Pure Virtual
@@ -51,14 +52,19 @@ public slots:
 
   virtual void channelStateChanged(uint channel_id, bool on_or_off = true) = 0;
 
+  virtual void samplingRateChanged(uint new_rate_hz);
+  virtual void scanIndexChanged(scan_index_t new_index);
+
   // Pure Virtual
   virtual void flushBuffer() = 0; /* called by a QTimer from schedulePeriodicFlush */
 
 protected:
+
   bool flushPending,   /* if this is false, we need to schedule a flush */
        _periodicFlush; /* this needs to be true for the timed flushes to
                           be enabled -- default is false */
-
+  uint sampling_rate_hz;
+  scan_index_t scan_index;
 };
 
 class SampleGZWriter: public SampleWriter
@@ -66,9 +72,10 @@ class SampleGZWriter: public SampleWriter
   Q_OBJECT
 
  public:
-  SampleGZWriter();
-  SampleGZWriter(const char *filename);
+
+  SampleGZWriter(uint sampling_rate_hz, const char * filename = 0);
   ~SampleGZWriter();
+
   void setFile(const char *filename);
   void consume(const SampleStruct *s);
 
@@ -78,17 +85,18 @@ class SampleGZWriter: public SampleWriter
   void flushBuffer(); /* called by a QTimer from schedulePeriodicFlush */
 
  private:
+
   void init();
   void putStateChangeInfo(const SampleStruct *s);
 
   gzFile file;
   set<int> channel_ids_that_have_a_committed_state;
   static const uint 
-    BUFSIZE = 65536,  /* the number of bytes in our little buffer cache */
+    BUFSIZE = 65536, /* the number of bytes in our little buffer cache */
     STATE_CH_STRING_SIZE = 46, /* the size of the format string, 
-				  sans null but with terminating newline */
+                                  sans null but with terminating newline */
     DATALINE_STRING_SIZE = 50; /* the size of each data line string, 
-				  sans null but with terminating newline */
+                                  sans null but with terminating newline */
   static const char 
     * const stateChangeFormat = "State Changed: C[%03u] R[%010u] SI[%020llu]\n",
     * const dataLineFormat = "C[%03u] SI[%020llu] D[%#.14g]\n";
@@ -101,14 +109,15 @@ class SampleBinWriter: public SampleWriter
 {
   Q_OBJECT
 public:
-  SampleBinWriter ();
-  SampleBinWriter (const char * file);
+
+  SampleBinWriter (uint sampling_rate_hz, const char * file = 0);
   ~SampleBinWriter();
 
   void setFile(const char *filename);
   void consume(const SampleStruct *s);
 
 public slots:
+
   void channelStateChanged(uint channel_id, bool on_or_off = true);
   void flushBuffer() { /* does nothing */ };
 
