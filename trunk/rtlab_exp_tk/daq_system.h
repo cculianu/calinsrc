@@ -42,7 +42,7 @@
 #include "sample_writer.h"
 #include "ecggraph.h"
 #include "daq_ecggraphcontainer.h"
-#include "log.h"
+#include "simple_text_editor.h"
 #ifdef __RTLINUX__
 #endif
 
@@ -140,10 +140,6 @@ class DAQSystem : public QMainWindow
   void windowMenuRemoveWindow(const DAQECGGraphContainer *w) 
     {windowMenuRemoveWindow((const QWidget *)w); } 
 
-  /* Simply enables and disables some menu options based on the
-     current window */
-  void windowActivated (QWidget *w);
-
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
@@ -158,11 +154,7 @@ class DAQSystem : public QMainWindow
 
   QWorkspace ws;
   QMenuBar _menuBar;
-  QPopupMenu fileMenu, editMenu, logMenu, channelsMenu, windowMenu, helpMenu;
-
-  /* I don't even want to explain this.. but this stuff helps manage
-     the blurring and enabling of the edit menu based on context */
-  set<int> editMenuItemsToDisableWhenNoLog; QWidget *last_to_activate;
+  QPopupMenu fileMenu, logMenu, channelsMenu, windowMenu, helpMenu;
 
   /* keeps track of windowMenu indexes -> MDI windows so that the 
      Window menu works */
@@ -176,7 +168,7 @@ class DAQSystem : public QMainWindow
 
   bool daqSystemIsClosingMode;
 
-  ExperimentLog log; /* the experiment log window */
+  SimpleTextEditor log; /* the experiment log window */
 
 };
 

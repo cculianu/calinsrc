@@ -72,22 +72,10 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   statusBar.addWidget(&statusBarScanIndex);
 
   { /* build menus */
-    set<int> & e = editMenuItemsToDisableWhenNoLog;
     fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
     fileMenu.insertSeparator();
     fileMenu.insertItem("&Quit", this, SLOT( close() ) );
-    QMultiLineEdit & mle = log.embeddedMultiLineEditorWidget();
-    e.insert(editMenu.insertItem("&Undo", &mle, SLOT ( undo() ), CTRL + Key_Z));
-    e.insert(editMenu.insertItem("&Redo", &mle, SLOT ( redo() ), CTRL + SHIFT + Key_Z));
-    e.insert(editMenu.insertSeparator());
-    e.insert(editMenu.insertItem("Cu&t", &mle, SLOT(cut()), CTRL + Key_X));
-    e.insert(editMenu.insertItem("&Copy", &mle, SLOT(copy()), CTRL + Key_C));
-    e.insert(editMenu.insertItem("&Paste", &mle, SLOT(paste()), CTRL + Key_V));
-    e.insert(editMenu.insertItem("C&lear", &mle, SLOT ( clear() ), CTRL + Key_U));
-    logMenu.insertItem("&Load...", &log, SLOT( load() ));
-    logMenu.insertItem("&Save", &log, SLOT( save() ), CTRL + Key_S);
-    logMenu.insertItem("Save &As...", &log, SLOT( saveAs() ));
-    logMenu.insertItem("&Revert", &log, SLOT ( revert() ));
+
     logMenu.insertSeparator();
     logMenu.insertItem("Insert &Timestamp", this, SLOT (logTimeStamp()), CTRL + Key_T);
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ), CTRL + Key_A );
@@ -101,7 +89,6 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     helpMenu.insertItem("&About", this, SLOT( about() ) );
 
     _menuBar.insertItem("&File", &fileMenu);
-    _menuBar.insertItem("&Edit", &editMenu);
     _menuBar.insertItem("&Log", &logMenu);
     _menuBar.insertItem("&Channels", &channelsMenu);
     _menuBar.insertItem("&Window", &windowMenu);
@@ -113,16 +100,12 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   log.loadTemplate(settings.getTemplateFileName());
   windowMenuAddWindow(&log); /* add this window to the windowMenu QPopupMenu */
 
-  /* manage the correct enabling and disabling of edit menu items
-     based on the current window in the workspace */
-  connect(&ws, SIGNAL(windowActivated(QWidget *)), 
-          this, SLOT(windowActivated(QWidget *)));
 
   { /* add toolbar */
     addChannelB.setText("Add Channel...");
     connect(&addChannelB, SIGNAL(clicked()), this, SLOT (addChannel()));
     
-    timeStampB.setText("Insert Timestamp in Log");
+    timeStampB.setText("Insert Timestamp into Log");
     connect(&timeStampB, SIGNAL(clicked()), this, SLOT (logTimeStamp()));
 
     setDockEnabled(Top, true);   setDockEnabled(Bottom, true);
@@ -423,22 +406,6 @@ DAQSystem::windowMenuRemoveWindow(const QWidget *w)
       return;
     }
   }
-}
-
-void
-DAQSystem::windowActivated(QWidget *w)
-{
-  bool enable( (w == &log) );
-  
-  if ((enable && last_to_activate != &log) ||
-      (!enable && last_to_activate == &log)) {
-    set<int> & e = editMenuItemsToDisableWhenNoLog;
-    for (set<int>::iterator i = e.begin(); i != e.end(); i++) {
-      editMenu.setItemEnabled(*i, enable);
-    }
-  }
-  last_to_activate = w;
-
 }
 
 /* populates the graphcontianer with the correct range options for this 

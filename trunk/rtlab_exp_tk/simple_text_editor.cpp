@@ -27,23 +27,24 @@
 #include <qcstring.h>
 #include <qtextstream.h>
 
-#include "log.h"
+#include "simple_text_editor.h"
 #include "exception.h"
 
 #define LOG_CLASS_CONSTRUCTOR_INIT_LIST \
-  QWidget(p, n), layout (this, 2, 2), mle(this), \
-  fileNameLabel("(untitled)", this), changedLabel("MOD", this)
+  QWidget(p, n), layout (this, 3, 2), menuBar(this), mle(this), \
+  fileNameLabel(QString::null, this), changedLabel("MOD", this)
 
 
-ExperimentLog::
-ExperimentLog(QWidget * p = 0, const char * n = 0) 
+SimpleTextEditor::
+SimpleTextEditor(QWidget * p = 0, const char * n = 0) 
   : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
   init();
+  setOutFile(QString::null);
 }
 
-ExperimentLog::
-ExperimentLog (const QString & f, const QString & t = QString::null, 
+SimpleTextEditor::
+SimpleTextEditor (const QString & f, const QString & t = QString::null, 
                QWidget * p = 0, const char * n = 0)
   : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
@@ -55,7 +56,7 @@ ExperimentLog (const QString & f, const QString & t = QString::null,
 #undef LOG_CLASS_CONSTRUCTOR_INIT_LIST
 
 void
-ExperimentLog::
+SimpleTextEditor::
 init() /* initialization routine shared by constructors */
 {
   setUnsavedStatus(false);
@@ -71,34 +72,69 @@ init() /* initialization routine shared by constructors */
   fileNameLabel.setFont(QFont("Helvetica", 8));
   changedLabel.setFont(QFont("Helvetica", 8));
 
-  layout.setRowStretch(0,1);
+  layout.setRowStretch(1,1);
   layout.setColStretch(0,1);
-  layout.addMultiCellWidget(&mle, 0, 0, 0, 1);
-  layout.addWidget(&fileNameLabel, 1, 0);
-  layout.addWidget(&changedLabel, 1, 1);
+  layout.addMultiCellWidget(&menuBar, 0, 0, 0, 1);
+  layout.addMultiCellWidget(&mle, 1, 1, 0, 1);
+  layout.addWidget(&fileNameLabel, 2, 0);
+  layout.addWidget(&changedLabel, 2, 1);
+
+  
+  fileMenu.insertItem("&Load...", this, SLOT( load() ));
+  saveMenuItemId = 
+    fileMenu.insertItem("&Save", this, SLOT( save() ), CTRL + Key_S);
+  fileMenu.insertItem("Save &As...", this, SLOT( saveAs() ));
+  revertMenuItemId = 
+    fileMenu.insertItem("&Revert", this, SLOT ( revert() ));
+
+  undoMenuItemId =
+    editMenu.insertItem("&Undo", &mle, SLOT ( undo() ), CTRL + Key_Z);
+  redoMenuItemId =
+    editMenu.insertItem("&Redo", &mle, SLOT ( redo() ), CTRL + SHIFT + Key_Z);
+  editMenu.insertSeparator();
+  cutMenuItemId =
+    editMenu.insertItem("Cu&t", &mle, SLOT(cut()), CTRL + Key_X);
+  copyMenuItemId =
+    editMenu.insertItem("&Copy", &mle, SLOT(copy()), CTRL + Key_C);
+  editMenu.insertItem("&Paste", &mle, SLOT(paste()), CTRL + Key_V);
+  editMenu.insertItem("C&lear All", &mle, SLOT ( clear() ), CTRL + Key_U);
+
+  menuBar.insertItem("&File", &fileMenu);
+  menuBar.insertItem("&Edit", &editMenu);
+
+  copyAvail(false); undoAvail(false), redoAvail(false);
+  connect(&mle, SIGNAL(copyAvailable(bool)), this, SLOT(copyAvail(bool)));
+  connect(&mle, SIGNAL(undoAvailable(bool)), this, SLOT(undoAvail(bool)));
+  connect(&mle, SIGNAL(redoAvailable(bool)), this, SLOT(redoAvail(bool)));
 
 }
 
-ExperimentLog::
-~ExperimentLog()
+SimpleTextEditor::
+~SimpleTextEditor()
 {
   /* nothing */
 }
 
 /* Sets the save file.   */
 void 
-ExperimentLog::
+SimpleTextEditor::
 setOutFile (const QString &f)
 { 
   _outFile = f; 
-  fileNameLabel.setText(_outFile.section('/',-1));
+  if (_outFile.isNull() ) {
+    fileNameLabel.setText("(untitled)");
+    fileMenu.setItemEnabled(saveMenuItemId, false);
+  } else {
+    fileNameLabel.setText(_outFile.section('/',-1));
+    fileMenu.setItemEnabled(saveMenuItemId, true);
+  }
 }
 
 /* attempts to use contents of file as the current text.  This implicitly
    replaces the text buffer with the contents of the file.
    If file isn't valid, it just blanks out the buffer. */     
 void
-ExperimentLog::
+SimpleTextEditor::
 loadTemplate(const QString & file)
 {
   if (!checkUnsaved()) /* user cancelled */ return;
@@ -108,7 +144,7 @@ loadTemplate(const QString & file)
 
 
 void
-ExperimentLog::
+SimpleTextEditor::
 load()
 { 
   if (!checkUnsaved()) /* user cancelled */ return;
@@ -126,7 +162,7 @@ load()
 }
 
 void
-ExperimentLog::
+SimpleTextEditor::
 save()
 {
 
@@ -143,7 +179,7 @@ save()
 }
 
 void 
-ExperimentLog::
+SimpleTextEditor::
 saveAs()
 {
   QString f( QFileDialog::getSaveFileName( outFile(), 
@@ -155,7 +191,7 @@ saveAs()
 }
 
 void
-ExperimentLog::
+SimpleTextEditor::
 revert()
 {
   if (!outFile().isNull()) {
@@ -164,7 +200,7 @@ revert()
 }
 
 void
-ExperimentLog::insertAtCursor (const QString & text) 
+SimpleTextEditor::insertAtCursor (const QString & text) 
 {
   int row, col;
   mle.getCursorPosition(&row, &col);
@@ -172,7 +208,7 @@ ExperimentLog::insertAtCursor (const QString & text)
 }
 
 bool
-ExperimentLog::
+SimpleTextEditor::
 checkUnsaved() 
 {  
   if (unsavedStatus()) {
@@ -204,7 +240,7 @@ checkUnsaved()
 /* attempts to save the text() buffer to the output file -- may throw
    an application exception on error!! */
 void
-ExperimentLog::
+SimpleTextEditor::
 saveOutFile()
 {
   QFile out(outFile());
@@ -229,7 +265,7 @@ saveOutFile()
    returns a QString::null if there was a problem reading the file or
    it was empty */
 QString
-ExperimentLog::
+SimpleTextEditor::
 readFile(const QString & fileName) 
 {
   QFile f(fileName);
@@ -251,7 +287,7 @@ readFile(const QString & fileName)
 }
 
 const QString
-ExperimentLog::
+SimpleTextEditor::
 getQFileMessage(int status) 
 {
   QString msg;
