@@ -48,6 +48,7 @@ class  QRadioButton;
 class  QSpinBox;
 class  QLabel;
 class  QPushButton;
+class  QCheckBox;
 
 class ECGGraphContainer;
 
@@ -90,6 +91,8 @@ class DAQGraphControls : public QToolBar
   void spikeBlankingChanged( uint id, uint ms );
   void spikePolarityChanged( uint id, SpikePolarity p );
   void pausedUnpaused(uint id, bool paused);
+  void axesOnChanged(bool);
+  void statusBarOnChanged(bool);
   
  public slots:    
 
@@ -105,6 +108,8 @@ class DAQGraphControls : public QToolBar
   void setSpikePolarityButton(SpikePolarity p); // just changes the button
   void togglePause();
   void setPausePlayButton(bool paused);
+  void setAxesOn(bool);
+  void setStatusBarOn(bool);
 
 
   void windowActivated(QWidget *);
@@ -149,7 +154,9 @@ class DAQGraphControls : public QToolBar
   QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
   QPushButton *pauseButton, *polarityButton;
   QSpinBox *spikeBlanking;
-
+  QCheckBox *axesOn, *statusBarOn;
+  
+  
   typedef vector<QWidget *> WidgetVector;
   WidgetVector guisToDisableEnable;
   QWorkspace *ws;

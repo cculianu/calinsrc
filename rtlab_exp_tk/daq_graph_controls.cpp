@@ -29,6 +29,7 @@
 #include <qlabel.h>
 #include <qspinbox.h>
 #include <qcombobox.h>
+#include <qcheckbox.h>
 
 #include <qworkspace.h>
 #include <qpixmap.h>
@@ -117,6 +118,8 @@ addGraph( ECGGraphContainer * g, const DAQChannelParams & p)
   setSpikePolarity(p.spikePolarity);
   setSpikeBlanking(p.spikeBlanking);
   setSecondsVisible(p.secondsVisible);
+  setAxesOn(p.axesOn);
+  setStatusBarOn(p.statusBarOn);
 
   return ret;
 }
@@ -297,6 +300,29 @@ void DAQGraphControls::setPausePlayButton(bool paused)
     pauseButton->toggle();    
 }
 
+void DAQGraphControls::setAxesOn(bool on)
+{
+  axesOn->setChecked(on);
+
+  graphs[current].axesOn = on;
+  
+  graphs[current].graph->setXAxis(on);
+  //graphs[current].graph->setYAxis(on);
+
+  emit axesOnChanged(on);
+}
+
+void DAQGraphControls::setStatusBarOn(bool on)
+{
+  statusBarOn->setChecked(on);
+
+  graphs[current].statusBarOn = on;
+  graphs[current].graph->setStatusBar(on);
+
+  emit statusBarOnChanged(on);  
+}
+
+
 void
 DAQGraphControls::
 init ()
@@ -324,6 +350,10 @@ void DAQGraphControls::sti()
           this, SLOT(toggleSpikePolarity()));
   connect(spikeBlanking, SIGNAL(valueChanged(int)),
           this, SLOT(setSpikeBlanking(int)));
+  connect(axesOn, SIGNAL(toggled(bool)),
+          this, SLOT(setAxesOn(bool)));
+  connect(statusBarOn, SIGNAL(toggled(bool)),
+          this, SLOT(setStatusBarOn(bool)));
 }
 
 void DAQGraphControls::cli()
@@ -336,6 +366,11 @@ void DAQGraphControls::cli()
              this, SLOT(toggleSpikePolarity()));
   disconnect(spikeBlanking, SIGNAL(valueChanged(int)),
              this, SLOT(setSpikeBlanking(int)));
+  disconnect(axesOn, SIGNAL(toggled(bool)),
+             this, SLOT(setAxesOn(bool)));
+  disconnect(statusBarOn, SIGNAL(toggled(bool)),
+             this, SLOT(setStatusBarOn(bool)));
+
 }
 
 void DAQGraphControls::constructGUIs()
@@ -423,6 +458,18 @@ void DAQGraphControls::constructGUIs()
 
   guisToDisableEnable.push_back(spikeBlanking);
 
+  addSeparator();
+
+  axesOn = new QCheckBox("X-Axis  ", this);
+  statusBarOn = new QCheckBox("Status bar  ", this);
+
+  QToolTip::add(axesOn, "Toggle the x-axis (seconds indicator) of the graph.");
+  QToolTip::add(statusBarOn, "Toggle the status bar at the bottom of the graph.");
+
+  guisToDisableEnable.push_back(axesOn);
+  guisToDisableEnable.push_back(statusBarOn);
+  
+
   disableGUIs();
 }
 
@@ -462,6 +509,8 @@ void DAQGraphControls::populateGUIs()
                                       ? DAQImages::spike_plus_img
                                       : DAQImages::spike_minus_img) );
   spikeBlanking->setValue(graphs[current].spikeBlanking);
+  axesOn->setChecked(graphs[current].axesOn);
+  statusBarOn->setChecked(graphs[current].statusBarOn);
   sti();  /* turns on private slot-bound signal processing */
 }
 

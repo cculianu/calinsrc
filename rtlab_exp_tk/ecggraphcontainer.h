@@ -106,6 +106,10 @@ public slots:
   void pauseUnpause(); /* pauses the graph 
                           -- 'disables' it as a consumer */
 
+  void setXAxis(bool on);
+  void setYAxis(bool on);
+  void setStatusBar(bool on);
+
  protected:
 
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
@@ -120,7 +124,7 @@ public slots:
   
   QGridLayout *layout;
 
-  QLabel *topYLabel, *middleYLabel, *bottomYLabel;
+  QLabel *topYLabel, *middleYLabel, *bottomYLabel, *xaxisLabel;
 
   QVBox *labelBox; // for the y axis labels
  

@@ -30,7 +30,8 @@ const DAQChannelParams DAQChannelParams::null;
 DAQChannelParams::DAQChannelParams(const ComediSubDevice *dev)
   : id(0), rangeSetting(0), secondsVisible(5), 
     spikeBlanking(10), spikePolarity(Positive), paused(false),
-    spikeThold(0.0), spikeOn(false), isnull(true)
+    spikeThold(0.0), spikeOn(false), axesOn(true), statusBarOn(true),
+    isnull(true)
 {
   if (dev) {
     buildRangeStrings(dev);  

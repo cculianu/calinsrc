@@ -45,6 +45,8 @@ struct DAQChannelParams {
     bool paused;
     double spikeThold;
     bool spikeOn;
+    bool axesOn;
+    bool statusBarOn;
   
   
     DAQChannelParams(const ComediSubDevice *dev = 0);

@@ -438,26 +438,27 @@ DAQSettings::parseChannelParameters(QString cp)
 {
   map<uint, DAQChannelParams> ret;
 
-  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+[.0-9e-]*,\\d+,\\d+;");
+  QRegExp chanparmsRE("(\\d+):(\\d+),(\\d+),(\\d+),(-?\\d+[.0-9e-]*),(\\d+),(\\d+)(,(\\d+),(\\d+))?;");
   int curr_match = 0, len = 0;
-  while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
+  while ( (curr_match = chanparmsRE.match(cp, curr_match+len, &len)) > -1 ) {
     DAQChannelParams c; 
-    int chan, tmp; chan = tmp = -1;
-    QString match = cp.mid(curr_match, len);
-    chan = match.left((tmp = match.find(':'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.secondsVisible = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.rangeSetting = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spikeOn = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spikeThold = match.left((tmp = match.find(','))).toDouble(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spikePolarity = (match.left((tmp = match.find(','))).toInt() == Negative ? Negative : Positive); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spikeBlanking = match.left((tmp = match.find(';'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
+    int chan = -1;
+    QStringList caps = chanparmsRE.capturedTexts();
+
+    chan = caps[1].toInt();
+    c.secondsVisible = caps[2].toInt(); // parse number
+    c.rangeSetting = caps[3].toInt();
+    c.spikeOn = caps[4].toInt();
+    c.spikeThold = caps[5].toDouble();
+    c.spikePolarity = (caps[6].toInt() == Negative ? Negative : Positive);
+    c.spikeBlanking = caps[7].toInt();
+    if (caps[8].length()) {
+      /* this is for optional channel params (these params _didn't_ exist in
+         legacy daq_system code so we optionally parse them here */
+      c.axesOn = caps[9].toInt();
+      c.statusBarOn = caps[10].toInt();
+    }
+
     c.setNull(false);
     ret[ chan ] = c; // add channel params to map
   }
@@ -491,7 +492,9 @@ generateChannelParametersString(const map<uint, DAQChannelParams> & cp)
       QString::number((short)c.spikeOn) + "," +
       QString::number(c.spikeThold) + "," +
       QString::number((short)c.spikePolarity) + "," +
-      QString::number(c.spikeBlanking) + ";";
+      QString::number(c.spikeBlanking) + "," +
+      QString::number((short)c.axesOn) + "," +
+      QString::number((short)c.statusBarOn) + ";";
   }
   return out;
 }
