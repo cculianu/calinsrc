@@ -36,6 +36,7 @@ using namespace std;
 #include <qstring.h>
 #include <qregexp.h>
 #include <qfile.h>
+#include <qmessagebox.h>
 
 #ifdef TEST_PROBE
 QString
@@ -274,16 +275,22 @@ Probe::attach_to_shm_and_stuff()
     if (attachedname) free(attachedname);
 
     
-    if (false) // commented out for now.. weird behavior...
+    // this condition SHOULD have worked but appeared buggy sometimes
+    // so I went with out throwing the exception, just showing the error msg..
     if (num_procs_of_my_exe_no_children() > 1 || 
         have_rt_process && pid && attachedName == myName )  {
       const char *msg =
-        "It appears that another instance of this program may already be "
-        "running!\n\n"
-        "Please quit the other instance and try again.\n";
-
-      /* there _is_ another DAQSystem running! */
-      throw UniqueResourceException("DAQ System already running!",  msg);
+        "It appears that either another instance of this program is running, "
+        "or that a previous instance may have exited uncleanly.\n\n"
+        "It is recommended that you make sure there are no other instances "
+        "running.\n",
+        *title = "DAQ System already running!";
+      //int warning ( QWidget * parent, const QString & caption, const QString & text, const QString & button0Text = QString::null, const QString & button1Text = QString::null, const QString & button2Text = QString::null, int defaultButtonNumber = 0, int escapeButtonNumber = -1 )
+      /* there _is_ another DAQSystem running! But we will just warn them.. */
+      //UniqueResourceException(title,  msg).showError();
+      if (QMessageBox::warning(0, title, msg, QMessageBox::Ignore, 
+                               QMessageBox::Cancel, QMessageBox::NoButton) 
+          == QMessageBox::Cancel) abort();
     }
   }
 
