@@ -33,10 +33,13 @@
 #include <stdio.h>
 #include <math.h>
 
-#include "pause.xpm"
-#include "play.xpm"
 #include "ecggraphcontainer.h"
 
+/* Icons */
+#include "pause.xpm"
+#include "play.xpm"
+#include "spike_plus.xpm"
+#include "spike_minus.xpm"
 
 /* ugly non-class-specific static constants but this saves needing to 
    duplicate this work in the .h file */
@@ -150,27 +153,10 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   tmpBox->setSpacing(2);
 
   spikePolarityLabel = new QLabel("Spike 'Polarity': ", tmpBox);
-  spikePolarityButtons = new QButtonGroup();
-  spikePolarityButtons->setRadioButtonExclusive(true);
-  spikePolarityButtons->hide();
-  polarityPlusButton = new QRadioButton("Positive", tmpBox);
-  polarityMinusButton = new QRadioButton("Negative", tmpBox);
-  spikePolarityButtons->insert(polarityPlusButton, Positive);
-  spikePolarityButtons->insert(polarityMinusButton, Negative);
 
   QToolTip::add(spikePolarityLabel, 
                 "Set the spike polarity by selecting either positive or "
                 "negative spike polarity.");
-  QToolTip::add(polarityPlusButton, 
-                "A positive spike polarity means that a spike is detected if "
-                "the amplitude is greater than or equal to the spike "
-                "threshold.");
-  QToolTip::add(polarityMinusButton, 
-                "A negative spike polarity means that a spike is detected if "
-                "the amplitude is less than or equal to the spike "
-                "threshold.");
-  connect(spikePolarityButtons, SIGNAL(clicked(int)), 
-          this, SLOT(emitSpikePolarity(int)));
   
   QString tmpStr("Set the spike blanking, which is defined as the number of\n"
                  "milliseconds to wait before detecting a new spike.  If\n"
@@ -178,6 +164,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
                  "you may not be able to keep track of them as they will\n"
                  "come in too fast.  If this is set too high you may lose\n"
                  "some spikes you would have otherwise been interested in.");
+
+  polarityButton = new QPushButton( tmpBox );
+  connect(polarityButton, SIGNAL(clicked()), 
+          this, SLOT(swapSpikePolarity()));
+  setSpikePolarity( Positive );
 
   tmpLabel = new QLabel("  Spike Blanking (ms):", tmpBox);
   spikeBlanking = new QSpinBox(10, 1000000, 10, tmpBox);
@@ -294,14 +285,6 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
             this, SLOT(unsetSpikeThresholdStatus()));
   }
 
-}
-  
-ECGGraphContainer::~ECGGraphContainer() {
-  /* QObject::~QObject() will delete all member/child widgets here */
-  if (spikePolarityButtons) {  // this has no real parent
-    delete spikePolarityButtons; 
-    spikePolarityButtons = 0; 
-  }    
 }
 
 void
@@ -437,6 +420,37 @@ ECGGraphContainer::setSecondsVisible(int secs)
     graph->setSecondsVisible(secs);
 }
 
+void ECGGraphContainer::swapSpikePolarity() 
+    { 
+      if ( polarity == Positive )
+        setSpikePolarity( Negative );
+      else setSpikePolarity( Positive );
+    }
+
+void ECGGraphContainer::setSpikePolarity(SpikePolarity p)
+{
+  polarity = p;
+  if ( polarity == Positive )
+    {
+      polarityButton->setPixmap( spike_plus_xpm );
+      QToolTip::remove(polarityButton);
+      QToolTip::add(polarityButton, 
+                    "A positive spike polarity means that a spike is detected if\n"
+                    "the amplitude is greater than or equal to the spike "
+                    "threshold.");      
+    }
+  else
+    {
+      polarityButton->setPixmap( spike_minus_xpm );
+      QToolTip::remove(polarityButton);
+      QToolTip::add(polarityButton, 
+                    "A negative spike polarity means that a spike is detected if\n"
+                    "the amplitude is less than or equal to the spike "
+                    "threshold.");
+    }
+  emit spikePolarityChanged( polarity );
+
+}
 void
 ECGGraphContainer::
 detectSpike(const SampleStruct *s)

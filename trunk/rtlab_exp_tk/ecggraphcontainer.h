@@ -62,8 +62,6 @@ public:
                     scan_index_t scanIndexStatusIncrement = 1000,
                     uint seconds_visible_step = 5);
   
-  virtual ~ECGGraphContainer();
-
   ECGGraph *graph;
   uint channelId;
 
@@ -138,9 +136,8 @@ public slots:
       signal in the ECGGraph instance bound to this object instance */
   void updateYAxisLabels(double rangeMin, double rangeMax);
 
-  void setSpikePolarity(SpikePolarity p)
-    {spikePolarityButtons->setButton(p);};
-
+  void setSpikePolarity(SpikePolarity p);
+ 
   void setSpikeBlanking(int b)
     {spikeBlanking->setValue(b);}
 
@@ -176,9 +173,8 @@ public slots:
   void mouseDownInGraph();
 
   void emitSpikeBlanking(int i) { emit spikeBlankingChanged(static_cast<uint>(i)); }
-  void emitSpikePolarity(int i) 
-    { emit spikePolarityChanged(static_cast<SpikePolarity>(i)); }
 
+  void swapSpikePolarity(); 
   void setXAxisLabels(const vector<uint64> &);
 
  private:
@@ -205,25 +201,24 @@ public slots:
   QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
   uint seconds_visible_step; /* defaults to 5 */
   QLabel *spikePolarityLabel;
-  QButtonGroup *spikePolarityButtons;
-  QRadioButton *polarityPlusButton, *polarityMinusButton;
+  QPushButton *polarityButton;
   QSpinBox *spikeBlanking;
 
   /* status bar related stuff */
- QStatusBar *statusBar;
- QWidget *xaxis;
- QGridLayout *xaxis_layout;
- vector<QLabel *> xaxis_labels;
- vector<uint64> saved_sample_indices;
-
- QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
-         *spikeFrequency;
-
- 
+  QStatusBar *statusBar;
+  QWidget *xaxis;
+  QGridLayout *xaxis_layout;
+  vector<QLabel *> xaxis_labels;
+  vector<uint64> saved_sample_indices;
+  
+  QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
+    *spikeFrequency;
+  
+  
   const scan_index_t scan_index_threshold; // internal
   scan_index_t last_scan_index, 
                last_spike_index; /* for computing instantaneous hz */
-
+  SpikePolarity polarity;
 };
 
 #endif
