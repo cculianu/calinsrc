@@ -10,8 +10,8 @@ RTL_MK = /usr/src/rtlinux/rtl.mk
 TEMPLATE    =	daq_system.t
 CONFIG      =	qt warn_on debug #release thread
 INCLUDEPATH =   
-HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp sample_listener.h sample_writer.h shm_mgr.h ecggraph.h ecggraphcontainer.h daq_ecggraphcontainer.h
-SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp sample_listener.cpp sample_writer.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp daq_ecggraphcontainer.cpp
+HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp sample_listener.h sample_writer.h shm_mgr.h ecggraph.h ecggraphcontainer.h daq_ecggraphcontainer.h log.h
+SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp sample_listener.cpp sample_writer.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp daq_ecggraphcontainer.cpp log.cpp
 TARGET      =	daq_system
 DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\" #DAQ_SYSTEM_PROFILE_SLEEPTIME_CODE #QT_THREAD_SUPPORT
 CFLAGS      =   

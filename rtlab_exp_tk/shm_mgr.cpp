@@ -116,7 +116,10 @@ ShmMgr::_check()
     setChannel(ComediSubDevice::AnalogInput, i, false);
   }
   
-
+  /* reset the scan index so that we start with a 'clean slate' for
+     this acquisition session.  To Do: revise this approach?  */
+  shm->scan_index = 0;
+  
 }
 
 void

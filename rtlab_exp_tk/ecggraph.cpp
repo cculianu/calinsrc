@@ -36,11 +36,13 @@ ECGGraph::ECGGraph (int sampleRateHz = 1000,
   _rangeMin(rangeMin),
   _rangeMax(rangeMax),
   samples(0),
-  _totalSampleCount(0),
+  _totalSampleCount(0),    
   _gridColor(black),
-  _backgroundColor ("#334535") 
+  _backgroundColor ("#334535"),
+  spikeTHoldEnabled(false),
+  spikeBlanking(100),
+  spikeStatus(0)
 {
-    
   samples = new double[numSamples];
   points  = new QPointArray (numSamples);
   graphPen.setWidth(1);
@@ -135,12 +137,11 @@ void ECGGraph::plot (double amplitude) {
   if (currentSampleIndex && !(currentSampleIndex % plotFactor) )
     plotLines (currentSampleIndex - plotFactor, currentSampleIndex);  
 
-  if (spikeTHoldEnabled && amplitude >= spikeTHold) {
-    emit spikeDetected(this, _totalSampleCount, amplitude);
-  }
-
   currentSampleIndex = ++currentSampleIndex % numSamples;
   _totalSampleCount++;  
+
+  detectSpike();
+
 }
 
 void ECGGraph::paintEvent (QPaintEvent *paintEvent) {
@@ -192,8 +193,8 @@ void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
   if (x >= 0 && x <= width() && y >=0 && y <= height() ) {
     
     pointToSampleVector (event->pos(), &amplitude, &sampleIndex);
-    long long cumI = cumulateSampleIndex(sampleIndex); /* grab the cumulative 
-							  sample index */
+    /* grab the cumulative sample index */
+    long long cumI = cumulateSampleIndex(sampleIndex); 
 #ifdef DEBUG  
     //    cout << name() << "::mouse is at (" << x << ", " << y << ") "
     //	 << "which is sample vector (" << amplitude << ", " << cumI << ") (a,si)"  << endl;
@@ -204,7 +205,9 @@ void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
   }
 }
 
-void ECGGraph::mousePressEvent(QMouseEvent *event) {
+void ECGGraph::mousePressEvent(QMouseEvent *event) 
+{
+
   if (event->button() == RightButton) {
     emit rightClicked();
   }
@@ -212,6 +215,24 @@ void ECGGraph::mousePressEvent(QMouseEvent *event) {
   if (event->button() == LeftButton) {
     emit leftClicked();
   }
+  emit eitherClicked();
+
+  QWidget::mousePressEvent(event); // probably a useless call ...
+}
+
+void ECGGraph::mouseReleaseEvent(QMouseEvent *event)
+{
+  if (event->button() == RightButton) {
+    emit rightReleased();
+  }
+
+  if (event->button() == LeftButton) {
+    emit leftReleased();
+  }
+
+  emit eitherReleased();
+
+  QWidget::mouseReleaseEvent(event); // probably a useless call ...
 }
 
 /*
@@ -280,7 +301,7 @@ void ECGGraph::initGrid (QPaintDevice & dev, int columns = 10, int rows = 4) {
     Usually called from resizeEvent() in order to scale the image to the
     new size before a repaint. */
 void ECGGraph::remakeAllPoints () {
-  uint i, maxIndex;
+  int i, maxIndex;
 
   computeSpikeTHoldPoints (); /* re-compute the spike threshold */
   initBuffer(); /* reset the background pixmap so that 
@@ -355,7 +376,9 @@ void ECGGraph::paintSpikeTHoldLine () {
   }
 }
 
-void ECGGraph::setSpikeThreshHold(double amplitude) {
+
+void ECGGraph::setSpikeThreshHold(double amplitude) 
+{
   if (spikeTHoldEnabled) {
     clearSpikeTHoldLine();
   }
@@ -363,12 +386,14 @@ void ECGGraph::setSpikeThreshHold(double amplitude) {
   spikeTHold = amplitude;
   computeSpikeTHoldPoints();
   paintSpikeTHoldLine();
+  emit spikeThreshHoldSet(amplitude);  
 }
 
 void ECGGraph::unsetSpikeThreshHold() {
   spikeTHoldEnabled = false;
   clearSpikeTHoldLine();
   spikeTHoldPoints[0] = spikeTHoldPoints[1] = QPoint (0,0);
+  emit spikeThreshHoldUnset();
 }
 
 void ECGGraph::setSecondsVisible(int seconds)
@@ -401,4 +426,43 @@ void ECGGraph::setSecondsVisible(int seconds)
   // now redraw the graph with the new grid and x-axis scale
   initBuffer();
   remakeAllPoints();
+}
+
+/* super internal helper for plot() ... should be called every
+   time plot() is called */
+void
+ECGGraph::detectSpike() {
+  /*
+  if (currentSampleIndex < 1) return;
+  */
+  // spike blanking? if so do nothing and return
+  if (_totalSampleCount - lastSpike.index < spikeBlanking) return;
+  /*
+  double curr = samples[currentSampleIndex], 
+         last = samples[currentSampleIndex-1];
+
+  if (spikeStatus == 0) {
+    / * no spike.. detect one * /
+    
+  } else if (spikeStatus > 0) {
+    / * we are currently in a positive polarity spike .. check to see
+       if we should come out of it * /
+
+
+
+  } else if (spikeStatus < 0) {
+    / * we are currently in a negative polarity spike * /
+
+  
+  }
+  */
+
+  register double amplitude = samples[currentSampleIndex];
+  if (spikeTHoldEnabled && spikeTHold <= amplitude) {
+    emit spikeDetected(_totalSampleCount, amplitude);
+    lastSpike.index = _totalSampleCount;
+    lastSpike.amplitude = amplitude;
+    emit spikeDetected(lastSpike);    
+  }
+  
 }

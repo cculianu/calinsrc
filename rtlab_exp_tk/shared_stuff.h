@@ -97,6 +97,13 @@ struct SharedMemStruct {
   unsigned int sampling_rate_hz; /* Use this to modify the period of the rt
 				    loop (dangerous!).  Initialized to 1000  */
 
+  scan_index_t scan_index; /*       index of current analog input scan --   
+				    notice how this property is writable..
+				    we can reset this at any time from the 
+				    user process so as to allow the ability
+				    to reset the scan index                  */
+				     
+
   /* read-only struct members for userland, read/write for kernel            */
   dconst int ai_minor;                   /* /dev/comediX                     */
   dconst int ao_minor;                   /* /dev/comediX (currently unused)  */
@@ -106,7 +113,6 @@ struct SharedMemStruct {
   dconst int ao_fifo_minor;              /* (currently unused)               */
   dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
   dconst unsigned int n_ao_chans;        /* ditto                            */
-  dconst scan_index_t scan_index; /* index of current analog input scan      */
 };
 typedef struct SharedMemStruct SharedMemStruct;
 

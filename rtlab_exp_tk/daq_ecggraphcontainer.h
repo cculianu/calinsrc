@@ -24,6 +24,8 @@
 #ifndef _DAQ_ECGGRAPHCONTAINER_H
 #define _DAQ_ECGGRAPHCONTAINER_H
 
+#include <qstatusbar.h>
+
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
 #include "sample_listener.h"
@@ -47,22 +49,45 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleListener
   void newSample(const SampleStruct *);
 
  signals:
+  /* So that we can tell inquiring minds that want to know we are gone */
   void closing(const DAQECGGraphContainer *self);
 
-  /* emitted whenever the range changes on the graph this container 
+  /* Emitted whenever the range changes on the graph this container 
      contains.  Range is the index of the range in this container's 
-     private combo box.  Channelid comed from the DAQECGGraph */
+     private combo box.  Channelid comed fros the DAQECGGraph */
   void rangeChanged (uint channelId, int range);
 
  protected slots:
   void _rangeChangedWrapper(int range); /* signal wrapper 
-					     handler for parent signal
-					     to augment it with rangeChaned()
-					     from this class */
+					   handler for parent signal
+					   to augment it with rangeChaned()
+					   from this class */
+
+
+ /* so that the status bar can let the user know what scan index
+    this channel is up to */
+  void setCurrentIndexStatus(long long index);
+
+  /* Slot for updating the 'Mouse pos' status bar line.
+     The 'index' we get here (from the ECGGraph class) is inaccurate
+     as dropped samples can lead to de-synchronization between
+     the graph and the actual sample's scan index.
+     In addition we may also have ab O.B.1 (Obi-Wan) error here -- I didn't 
+     check since I will re-write this mechanism soon.  --Calin */
+  void setMouseVectorStatus(double voltage, long long index);
+
+  void setSpikeThreshHoldStatus(double voltage);
+  void unsetSpikeThreshHoldStatus();
+  void setLastSpikeStatus(long long index, double voltage);
+
  protected:
 
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
-  
+
+  /* let's try this the Qt way (no automatic storage) */
+  QStatusBar *statusBar;
+  QLabel *currentIndex, *mouseOverVector, *spikeThreshHold, *lastSpike;
+     
 };
 
 #endif

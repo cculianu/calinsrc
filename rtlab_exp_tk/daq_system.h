@@ -131,6 +131,16 @@ class DAQSystem : public QMainWindow
 
   void setStatusBarScanIndex(scan_index_t index);
 
+ private slots:
+
+  /* focuses a window that has menu id 'id' in the windowMenu popup menu */
+  void windowMenuFocusWindow(int id); 
+  void windowMenuAddWindow(QWidget *w);
+  void windowMenuRemoveWindow(const QWidget *w);
+  /* stupid Qt needs exact type */
+  void windowMenuRemoveWindow(const DAQECGGraphContainer *w) 
+    {windowMenuRemoveWindow((const QWidget *)w); } 
+
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
@@ -146,13 +156,19 @@ class DAQSystem : public QMainWindow
   QWorkspace ws;
   QMenuBar _menuBar;
   QPopupMenu fileMenu, channelsMenu, windowMenu, helpMenu;
+
+  /* keeps track of windowMenu indexes -> MDI windows so that the 
+     Window menu works */
+  map <int, QWidget *> menuIdToWindowMap; 
+
   QToolBar mainToolBar;
   QToolButton addChannelB;
   QStatusBar statusBar;
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
 
-  /* keep track of the mdi windows we have */
+  /* keep track of the graph container windows we have 
+     association is channel_id -> DAQECGGraphContainer * */
   map <uint, DAQECGGraphContainer *> gcontainers;
   bool daqSystemIsClosingMode;
 };
