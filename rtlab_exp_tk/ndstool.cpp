@@ -239,14 +239,15 @@ int SplitOp::doIt()
     out.start();
 
     in.jumpToScanIndex(state()->start);
-    while(state()->count--) {
-      vector<SampleStruct> v;
-      vector<SampleStruct>::iterator it;
-      in.readNextScan(v);
-      for (it = v.begin(); it != v.end(); it++) {
-        out.writeSample(&(*it));
-      }
-    }
+
+    vector<SampleStruct> v;
+    vector<SampleStruct>::iterator it;
+
+    while(state()->count-- && in.readNextScan(v)) 
+      for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
+
+    cerr << "Done!" << endl;
+
   } catch (Exception & e) {
     e.showError();
     return EIO;
