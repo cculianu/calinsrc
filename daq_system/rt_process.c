@@ -70,7 +70,8 @@ static int
 #endif
   ret, 
   numGetFifos,   /* Represents the number of successfully opened fifos */
-  numPutFifos;
+  numPutFifos,
+  ai_subdev;
 
 static const unsigned int
        getFifos[NUM_GET_FIFOS] = GET_FIFOS, /* Our set of get fifos*/
@@ -101,13 +102,13 @@ static void *daq(void *arg) { /* this task reads and writes data to a DAQ board 
 
     /* doesn't work in new comedi.. at least not until i mess with it :( -cc  */
 #ifdef FANCYPANTS_READ_METHOD    
-    ioctl_check = comedi_trigger(AI_DEV,AI_SUBDEV,&ai_trig);
+    ioctl_check = comedi_trigger(AI_DEV,ai_subdev,&ai_trig);
 #else
     /* cheap hack to get this working with new comedi.. 
        this may be SLOW and may break timing! */
     for (i = 0; i < sh_mem->num_ai_chan_in_use; i++) {
       packed_param = sh_mem->ai_chan[i]; /* for shorter line length below... */
-      comedi_data_read(AI_DEV, AI_SUBDEV, CR_CHAN(packed_param), CR_RANGE(packed_param), CR_AREF(packed_param), ai_fifo_struct.data + i ); 
+      comedi_data_read(AI_DEV, ai_subdev, CR_CHAN(packed_param), CR_RANGE(packed_param), CR_AREF(packed_param), ai_fifo_struct.data + i ); 
     }
 #endif      
     /* Place the ai_fifo_struct data into each of the 'Get' fifos
@@ -145,7 +146,14 @@ int init_module(void) {
   struct sched_param sched_param;
   const char *errorMessage = "Success";
 
-  if ( (error = comedi_lock(AI_DEV,AI_SUBDEV)) < 0     /* lock subdevice  */
+  if ( (ai_subdev = 
+	comedi_find_subdevice_by_type(AI_DEV,COMEDI_SUBD_AI,0)) < 0 ) {
+    errorMessage = "Cannot find an analog input subdevice for the specified minor number";
+    error = ai_subdev;
+    goto init_error;
+  }
+
+  if ( (error = comedi_lock(AI_DEV,ai_subdev)) < 0     /* lock subdevice  */
        || (error = comedi_lock(AO_DEV,AO_SUBDEV)) < 0  /* lock subdevice  */
        ) {
     errorMessage = "Cannot lock comedi subdevice";
@@ -185,7 +193,7 @@ int init_module(void) {
   }
 #ifdef FANCYPANTS_READ_METHOD
   /* set up trigger structure for ai ... see comedi documentation for specifics */
-  ai_trig.subdev = AI_SUBDEV;
+  ai_trig.subdev = ai_subdev;
   ai_trig.mode = 0;
   ai_trig.flags = 0;  /* used to be TRIG_RT -cc */
   ai_trig.n_chan = sh_mem->num_ai_chan_in_use;  /* # chans to scan each ioctl() */
@@ -243,6 +251,7 @@ static int init_shared_mem(void) { /*  Initialize the rtlinux shared memory */
   }
 
   /* initialize shared memory variables ... see rt_process.h for definitions */
+  sh_mem->ai_subdev = ai_subdev;
   sh_mem->scan_index = 0;
   sh_mem->num_ai_chan_in_use = NUM_AD_CHANNELS_TO_USE; /* num AI channels in use */
 
@@ -335,10 +344,10 @@ static void cleanup_fifos (void) {
 
 static void cleanup_comedi_stuff (void) {
   /*  cancel any pending ai operation */
-  comedi_cancel(AI_DEV,AI_SUBDEV);
+  comedi_cancel(AI_DEV,ai_subdev);
 
   /* unlock subdevice so other comedi programs can use */
-  comedi_unlock(AI_DEV,AI_SUBDEV);
+  comedi_unlock(AI_DEV,ai_subdev);
 
   /* unlock subdevice so other comedi programs can use */
   comedi_unlock(AO_DEV,AO_SUBDEV);
