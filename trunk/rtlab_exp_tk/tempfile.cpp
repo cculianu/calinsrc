@@ -105,6 +105,9 @@ void TempFile::copyTo(int dest_fd)
 
 void TempFile::copyTo(const char *f)
 {
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
   int fd = ::open(f, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, 0666);
 
   copyTo(fd);
