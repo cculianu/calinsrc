@@ -320,11 +320,12 @@ int init_module(void)
     spike_info.period[i] = 0xffffffff;
     /* clear info for spike end */
     spike_info.last_spike_ended_time[i] = 0;
+    spike_info.saved_thold[i] = 0.0;
   }
-  memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
+  memset(spike_info.spikes_this_scan, 0x0, CHAN_MASK_SIZE);
   /* clear spike state info */
-  memset(spike_info.saved_polarity, 0, CHAN_MASK_SIZE);
-  memset(spike_info.in_spike, 0, CHAN_MASK_SIZE);
+  memset(spike_info.saved_polarity, 0x0, CHAN_MASK_SIZE);
+  memset(spike_info.in_spike, 0x0, CHAN_MASK_SIZE);
 
 
   /* initialize the function linked list */
@@ -926,14 +927,16 @@ static void detectSpikes (MultiSampleStruct *m)
     chan = m->samples[i].channel_id;
     this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
     elapsed = (uint)(this_chan_time - spike_info.last_spike_ended_time[chan]);
-    polarity = test_bit(chan, rtp_shm->spike_params.polarity_mask);
-    saved_polarity = test_bit(chan, spike_info.saved_polarity);
+    polarity = test_bit(chan, rtp_shm->spike_params.polarity_mask) 
+               ? Positive : Negative; /* necessary due to test_bit artifacts */
+    saved_polarity = test_bit(chan, spike_info.saved_polarity) 
+                     ? Positive : Negative; /* necessary ... */
     thold = rtp_shm->spike_params.threshold[chan];
     saved_thold = spike_info.saved_thold[chan];
 
-    /* things are a bit different if we are inside a spike */
     if (test_bit(chan, spike_info.in_spike)) {
-      /* IN SPIKE.. */
+      /* IN SPIKE..     
+         things are a bit different if we are inside a spike */
 
       if (/* polarity or threshold changed, so abort spike early.. */
           saved_thold != thold || polarity != saved_polarity 
@@ -948,8 +951,8 @@ static void detectSpikes (MultiSampleStruct *m)
         clear_bit(chan, spike_info.in_spike);
       }
       
-    } else if (test_bit(chan, rtp_shm->spike_params.enabled_mask) 
-               && elapsed >= rtp_shm->spike_params.blanking[chan] * MILLION ) {
+    } else if (test_bit(chan, rtp_shm->spike_params.enabled_mask)              
+               && elapsed >= rtp_shm->spike_params.blanking[chan] * MILLION) {
       /* if we get here it means that we were _not_ in a spike
          and that spike detection is turned on.. thus we need to
          actually test for the presence of a spike.. */         
@@ -973,8 +976,11 @@ static void detectSpikes (MultiSampleStruct *m)
 
         if (m->samples[i].spike) {
           /* we just had a spike this scan, so do some bookkeeping */
-          m->samples[i].spike_period =  /* calculate period.. */
-            spike_info.period[chan] = elapsed * ((double)0.000001);
+
+          /* calculate period.. */
+          m->samples[i].spike_period =  spike_info.period[chan] = 
+            (uint)(this_chan_time - spike_info.last_spike_time[chan]) 
+                  * ((double)0.000001 /*convert to ms*/);
           /* save spike time... */
           spike_info.last_spike_time[chan] = this_chan_time;
           /* set some flags... */
@@ -984,50 +990,6 @@ static void detectSpikes (MultiSampleStruct *m)
           spike_info.saved_thold[chan] = thold;
         }
     }
-  }
-}
-
-void detectSpikes_old (MultiSampleStruct *m)
-{
-  register uint chan, i, elapsed;
-  register const uint avg_chan_time =
-    ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
-  register hrtime_t this_chan_time;  
-  
-  for (i = 0; i < m->n_samples; i++) {
-    chan = m->samples[i].channel_id;
-    this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
-    elapsed = (uint)(this_chan_time - spike_info.last_spike_time[chan]);
-
-    if (test_bit(chan, rtp_shm->spike_params.enabled_mask) 
-        &&  elapsed  >= rtp_shm->spike_params.blanking[chan] * MILLION ) {
-      switch (_test_bit(chan, rtp_shm->spike_params.polarity_mask)) {
-      case Positive: /* from enum SpikePolarity */
-        m->samples[i].spike = 
-          rtp_shm->spike_params.threshold[chan] <= m->samples[i].data;
-        break;
-      case Negative: 
-        m->samples[i].spike = 
-          rtp_shm->spike_params.threshold[chan] >= m->samples[i].data;
-        break;
-      default:
-        /* this case is not reached, but defensive rtl_printf follows */
-        rtl_printf(MODULE_NAME ": Bug in rt_process.o, channel %u has an "
-                   "illegal spike polarity!\n", chan); 
-        break;
-      }
-
-      if (m->samples[i].spike) {
-        m->samples[i].spike_period = spike_info.period[chan] =
-          elapsed * ((double)0.000001);
-        spike_info.last_spike_time[chan] = this_chan_time;
-      }
-      
-    }
-    if (m->samples[i].spike)
-      set_bit(chan, spike_info.spikes_this_scan);
-    else
-      clear_bit(chan, spike_info.spikes_this_scan);
   }
 }
 
