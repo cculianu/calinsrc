@@ -76,6 +76,9 @@ MODULE_PARM(sampling_rate, "i");
 MODULE_PARM_DESC(sampling_rate, "The sampling rate to run the acquisition at, in Hz.  Defaults to " STR(INITIAL_SAMPLING_RATE_HZ) "Hz.");
 MODULE_PARM(settling_time, "i");
 MODULE_PARM_DESC(settling_time, "The time in nanoseconds it takes the board's AI multiplexer to settle.  See your board's specifications for an appropriate settling time.  The default value is " STR(DEFAULT_SETTLING_TIME_ns) " nanoseconds.");
+MODULE_PARM(fifo_secs, "i");
+MODULE_PARM_DESC(fifo_secs, "This parameter determines the amount of time (and thus size) that the AI and AO RT-FIFO can queue up.  This time parameter should be sufficient as to avoid buffer overflows which could lead to dropped samples in userland.  The time/size is specified in terms of 'seconds' which translates to the number of seconds of scans the RT-FIFO can queue up before you get dropped samples.  This means that userland can be suspended for this long, if all channels were turned on, and there would still not be a problem with dropped scans.  The default value is " STR(DEFAULT_FIFO_SECS) " seconds.");
+
 #undef STR
 #undef STR1
 
@@ -194,6 +197,7 @@ char *ai_device = DEFAULT_COMEDI_DEVICE,
      *ao_device = DEFAULT_COMEDI_DEVICE;
 int  sampling_rate = INITIAL_SAMPLING_RATE_HZ;
 int  settling_time = DEFAULT_SETTLING_TIME_ns;
+int  fifo_secs    = DEFAULT_FIFO_SECS;
 
 /* exported handles to be used with comedi functions.  This abstraction of
    comedi types is needed due to different treatments of the first parameter
@@ -411,12 +415,12 @@ int init_module(void)
     error = -ENOMEM;
   }
   
-  if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, SS_RT_QUEUE_SZ_BYTES))) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, rtp_shm->ai_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
   }
 
-  if ((error = rtp_find_free_rtf(&rtp_shm->ao_fifo_minor, SS_RT_QUEUE_SZ_BYTES))) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ao_fifo_minor, rtp_shm->ao_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES))) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
@@ -718,6 +722,12 @@ init_shared_mem(void)
   rtp_shm->sampling_rate_hz = normalizeSamplingRate(sampling_rate);
   rtp_shm->scan_index = 0;
   rtp_shm->attached_pid = 0;
+  /* normalize fifo_secs */
+  fifo_secs = ( fifo_secs ? fifo_secs : 1);
+  rtp_shm->ai_fifo_sz_blocks = 
+    fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ai_chans;
+  rtp_shm->ao_fifo_sz_blocks = 
+    fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ao_chans;
 
   /* initialize the spike_params member */
   init_spike_params(&rtp_shm->spike_params);
@@ -1357,6 +1367,8 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
+               "AI FIFO Size (bytes): %u    AO FIFO Size (bytes): %u\n"
+               "AI FIFO Size (secs) : %u    AO FIFO Size (secs) : %u\n"
                "Realtime Loop Jitter (in nanos): %u\n",
                pidbuf,
                "(unimplmented)",
@@ -1366,7 +1378,14 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
-               rtp_shm->jitter_ns);    
+               (uint) rtp_shm->ai_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES,
+               (uint) rtp_shm->ao_fifo_sz_blocks * SS_RT_QUEUE_BLOCK_SZ_BYTES,
+               (uint) rtp_shm->ai_fifo_sz_blocks / rtp_shm->n_ai_chans 
+                      / rtp_shm->sampling_rate_hz,
+               (uint) rtp_shm->ao_fifo_sz_blocks / rtp_shm->n_ao_chans 
+                      / rtp_shm->sampling_rate_hz,
+               rtp_shm->jitter_ns
+               );    
     break;
   default:
     PROC_PRINT_RETURN;

@@ -1110,14 +1110,27 @@ void DAQSystem::showWindowTemplateDialog()
 ReaderLoop::~ReaderLoop()
 {
   pleaseStop = true;
+  cerr << endl <<
+"-----------------------------------------------------------------------------"
+       << endl;
   cerr << (string("Read: ") + reader->numRead()) 
        << (string(" samples without errors, dropped ") + reader->numDropped())
-       << " samples." << endl 
-       << (reader->numDropped()
-           ? "(Dropped samples can occur when the GUI task is too slow"
-           " for the\nReal-Time task, or when channels are turned off"
-           " then back on, so\n that samples are skipped.)\n"
-           : "");
+       << " samples." << endl;
+  if  ( reader->numDropped() ) {
+    cerr << endl 
+         << "Dropped samples can occur when the GUI task is too slow for the "
+         << "Real-Time " << endl 
+         << "task, or when channels are turned off then back on, so that "
+         << "samples are " << endl 
+         << "skipped." << endl
+         << (daq_system->settings.getInputSource() == DAQSettings::RTProcess
+             ? "\n***  To avoid this condition, reload rtlab.o with a larger "
+               "'fifo_secs'\n     module parameter."
+             : "" ) << endl;
+  }
+  cerr <<
+"-----------------------------------------------------------------------------"
+       << endl;
   delete reader; reader = 0;
   delete source; source = 0;
   delete writer; writer = 0;

@@ -40,12 +40,10 @@
 extern "C" {
 #endif
 
-
-# define RT_QUEUE_SZ_BLOCKS (24000) /* size of queue in terms of \
-                                       number of sample blocks */
+  /* The size of one 'block' in the RTFs uses for sending samples to userland.
+     One block is equal to sizeof(SampleStruct) -- never read anything smaller
+     than this unit off the fifos! */
 # define SS_RT_QUEUE_BLOCK_SZ_BYTES (sizeof(SampleStruct))
-/* size of RT queue (RTF's) in bytes. */
-# define SS_RT_QUEUE_SZ_BYTES (RT_QUEUE_SZ_BLOCKS * SS_RT_QUEUE_BLOCK_SZ_BYTES) 
 
 /* The maximum number of channels per subdevice for our automatically
    allocated shared memory struct */
@@ -89,7 +87,7 @@ typedef struct SpikeParams SpikeParams;
   process to the real-time task.
 */
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 61      /* test this against the below 
+# define SHD_SHM_STRUCT_VERSION 62      /* test this against the below 
                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
@@ -146,6 +144,13 @@ struct SharedMemStruct {
   dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
   dconst unsigned int n_ao_chans;        /* ditto                            */
   volatile dconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
+  dconst unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
+                                            of SS_RT_QUEUE_BLOCK_SZ_BYTES 
+                                            units */
+  dconst unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
+                                            of SS_RT_QUEUE_BLOCK_SZ_BYTES 
+                                            units */
+
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;
