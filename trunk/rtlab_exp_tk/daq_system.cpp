@@ -762,21 +762,28 @@ ReaderLoop::turnOffPending()
 }
 
 /*
-   This static function is a very big hack to deal with the inconsistencies/privateness of QWorkspace
-   Basically, it was observed through empirical evidence and a little bit of sourcecode perusal that the only
-   way to reliably move a QWidget inside of a QWorkspace is either
-      a. to call QWidget::move() on the widget before it is first show()n inside the QWorkspace
-      b. emulate (a.) by reparenting the widget out of the QWorkspace then putting it back again.
-   As such, the below static function is ultra private, ultra hackish, and may break with future implementations
-   of QWorkspace.  It also has a devilishly hackish way of determining the framesize of a QWidget inside a QWorkspace
-   (basically because of the fact that QWidget::pos() returns the height of the title bar and the width of the left-side
-   frame), which may also break.  But this was the only way to write a window tiling algorithm without having to
-   re-implement QWorkspace.
+   This static function is a very big hack to deal with the 
+   inconsistencies/privateness of QWorkspace.  Basically, it was observed 
+   through empirical evidence and a little bit of sourcecode perusal that 
+   the only way to reliably move a QWidget inside of a QWorkspace is either
+
+      a. to call QWidget::move() on the widget before it is first show()n 
+         inside the QWorkspace
+      b. emulate (a.) by reparenting the widget out of the QWorkspace then 
+         putting it back again.
+
+   As such, the below static function is ultra private, ultra hackish, and 
+   may break with future implementations of QWorkspace.  It also has a 
+   devilishly hackish way of determining the framesize of a QWidget inside a 
+   QWorkspace (basically because of the fact that QWidget::pos() returns the 
+   height of the title bar and the width of the left-side frame), which may 
+   also break.  But this was the only way to write a window tiling algorithm 
+   without having to re-implement QWorkspace.
 */
 static void widget_in_workspace_resize_and_move (QWidget *w, QWorkspace *ws, uint width, uint height, uint & cum_height)
 {
     static Qt::WFlags allFlags = ~0;
-
+    
     /* CHEAP HACK ALERT!! */
     Qt::WFlags origFlags = w->testWFlags(allFlags);
     uint frameVOffset = w->pos().y() + w->pos().x()*2, // even more of a hack to determine frame height

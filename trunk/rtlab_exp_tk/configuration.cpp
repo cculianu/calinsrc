@@ -71,6 +71,9 @@ main(int argc, char *argv[], char *envp[])
 
 #endif
 
+const char * const ConfigurationWindow::NDS_ASCII_SUFFIX = ".nds-ascii.gz",
+           * const ConfigurationWindow::NDS_BIN_SUFFIX   = ".nds";
+
 ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
 					  DAQSettings &settings,
 					  QWidget *parent = 0, 
