@@ -24,7 +24,9 @@
 #ifndef _SHM_MGR_H
 #  define _SHM_MGR_H
 
+
 #include "common.h"
+#include "exception.h"
 #include "comedi_device.h"
 #include "shared_stuff.h"
 
@@ -33,12 +35,39 @@ namespace ShmMgr
   /* TODO: Implement more functionality? Perhaps see about using
            some abstractions to represent comedi channels/gain/range?*/
 
-  extern SharedMemStruct *shm;
+  extern SharedMemStruct *shm; /* the actual shared memory region */
+
+  extern const char *devFileName; /* the file name of the mbuff character 
+				     device we are using */
 
   void check(); /* attaches to shm, or throws exception if unable to */
   void detach(); 
   bool attach(); /* returns true iff we sucessfully attached to the shm 
-		      or were already attached */
+		    or were already attached */
+
+  enum FailureReason {
+    Unknown = 0,
+    RegionNotFound,
+    WrongStructVersion,
+    CharacterDevAccessError
+  };
+
+  extern FailureReason failureReason;
+
+  const char *failureMessage(); /* returns a string relating 
+				   to any errors encountered when
+				   trying to attach to the Shm */
+
+  const RTPException & failureException() ; /* Same as above method, but
+					       give you the exception
+					       instead */
+
+  bool shdMemExists(); /* true iff rt_process.o is loaded and 
+			  the mbuff is accessible */
+
+  bool devFileIsValid(); /* returns false if /dev/mbuff is invalid,
+			    not found, or unopenable */
+			    
   
   /* channel-specific stuff--basically wrappers to CR_PACK */
 

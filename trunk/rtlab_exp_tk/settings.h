@@ -28,6 +28,7 @@
 #include <qfile.h>
 #include <qstring.h>
 #include <qrect.h>
+#include <qregexp.h>
 #include "comedi_device.h"
 
 /* 

@@ -31,12 +31,12 @@
 Exception::Exception (const QString & briefMsg = "An Exception Ocurred",
 		      const QString & fullMsg = "There was an internal error",
 		      ErrorReportingMode m = GUI) 
-  : briefMsg(briefMsg), fullMsg(fullMsg), errorReportingMode(m) {}
+  : _briefMsg(briefMsg), _fullMsg(fullMsg), _errorReportingMode(m) {}
 
 void 
 Exception::showError() const
 {
-  if (qApp != NULL || errorReportingMode == Console) { 
+  if (qApp != NULL || errorReportingMode() == Console) { 
     __showError();
   } else {
     /* try once to create some Qt resources so __showError() can display
@@ -51,11 +51,11 @@ Exception::showError() const
 void 
 Exception::__showError() const
 {
-  if (qApp != NULL && errorReportingMode == GUI )
-    QMessageBox::critical ( 0, briefMsg, fullMsg );
+  if (qApp != NULL && errorReportingMode() == GUI )
+    QMessageBox::critical ( 0, briefMsg(), fullMsg() );
   else 
     /* fall back to console output */
-    cerr << briefMsg << ": " << fullMsg << endl;
+    cerr << briefMsg() << ": " << fullMsg() << endl;
 }
 
 UnimplementedException::UnimplementedException 
@@ -85,3 +85,17 @@ RTPException::RTPException
  ErrorReportingMode m = GUI
 ) 
   : Exception  (brief, full, m) {}
+
+
+MBuffException::MBuffException
+(
+ const QString & mbuff_file,
+ ErrorReportingMode m = GUI
+) 
+  : Exception  (QString ("Error occurred with %1").arg(mbuff_file), 
+		QString ("An operation upon/with the device file %1 failed! "
+			 "Common sources of such failures are permissions "
+			 "issues (make sure %2 is chmod 666), or a non-existant "
+			 "or invalid %3."
+			).arg(mbuff_file).arg(mbuff_file).arg(mbuff_file), 
+		m) {}
