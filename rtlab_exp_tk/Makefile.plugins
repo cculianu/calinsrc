@@ -10,7 +10,6 @@ avn_stim.so: avn_stim.cpp plugin.h daq_system.h exception.h simple_text_editor.h
 	@echo "                          Compiling AVN Stim Plugin"
 	@echo "***************************************************************************"
 	g++ -Wall -g -L${QTDIR}/lib -I${QTDIR}/include -lqt -fPIC -shared -export-dynamic -o avn_stim.so avn_stim.cpp moc_avn_stim.o 
-	#g++ -Wall -L${QTDIR}/lib -I${QTDIR}/include -fPIC -shared -export-dynamic -lqt -o avn_stim.so avn_stim.cpp moc_avn_stim.o 
 
 moc_apd_control.o: apd_control_private.h plugin.h 
 	${QTDIR}/bin/moc apd_control_private.h > moc_apd_control.cpp
@@ -21,6 +20,5 @@ apd_control.so: apd_control.cpp plugin.h daq_system.h exception.h simple_text_ed
 	@echo "                          Compiling APD Control Plugin"
 	@echo "***************************************************************************"
 	g++ -Wall -g -L${QTDIR}/lib -I${QTDIR}/include -lqt -fPIC -shared -export-dynamic -o apd_control.so apd_control.cpp moc_apd_control.o 
-	#g++ -L${QTDIR}/lib -I${QTDIR}/include -fPIC -shared -export-dynamic -lqt -o apd_control.so apd_control.cpp moc_apd_control.o 
 
 
