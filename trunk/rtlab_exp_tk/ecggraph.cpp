@@ -367,9 +367,13 @@ void ECGGraph::plotPoints (int firstIndex, int lastIndex,
 }
 
 void ECGGraph::deletePlotsBetween (int firstIndex, int secondIndex) {
-  QPoint p1 = sampleVectorToPoint(0, firstIndex), 
-         p2 = sampleVectorToPoint(0, secondIndex);
+  QPoint p1 = points->at(firstIndex),
+         p2 = points->at(secondIndex);
 
+
+  if (p1.isNull()) p1 = sampleVectorToPoint(0, firstIndex);
+  if (p2.isNull()) p2 = sampleVectorToPoint(0, secondIndex);
+  
   bitBlt(this, p1.x()+1, 0, &_background, p1.x()+1, 0, p2.x()-p1.x(), height(), CopyROP, TRUE);
   bitBlt(&_buffer, p1.x()+1, 0, &_background, p1.x()+1, 0, p2.x()-p1.x(), height(), CopyROP, TRUE);
 
