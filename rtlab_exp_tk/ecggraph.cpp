@@ -61,7 +61,8 @@ ECGGraph::ECGGraph (int sampleRateHz,
   _gridColor(black),
   _backgroundColor ("#334535"),
   outside_concept_of_a_sample_index(0),
-  spikeTHoldEnabled(false)
+  spikeTHoldEnabled(false),
+  pMode(Lines)
 {
   samples = new double[numSamples];
   points  = new QPointArray (numSamples);
@@ -174,7 +175,7 @@ void ECGGraph::push_back(double amplitude)
   if (update_to_screen_flg) {
 
     /* plot the lines */
-    plotLines (0, currentSampleIndex);  
+    plotPoints (0, currentSampleIndex);  
 
     /* now draw the little blip */
     drawLittleBlip(0);
@@ -205,7 +206,7 @@ void ECGGraph::plot (double amplitude) {
   if (currentSampleIndex && !(currentSampleIndex % plotFactor()) ) {
 
     /* plot the lines */
-    plotLines (currentSampleIndex - plotFactor(), currentSampleIndex);  
+    plotPoints (currentSampleIndex - plotFactor(), currentSampleIndex);  
 
     /* now draw the little blip */
     drawLittleBlip();
@@ -243,7 +244,7 @@ void ECGGraph::renderToPixmap(QPixmap & pm) const
                
   initGrid(pm, pm.width(), pm.height(), secsVisible);
   QPainter paint0r;
-  plotLines(0, n_points-1, pm, paint0r, color ? graphPen : QPen("Black"), parray);  
+  plotPoints(0, n_points-1, pm, paint0r, color ? graphPen : QPen("Black"), parray);  
 }
 
 /* 
@@ -258,10 +259,10 @@ void ECGGraph::makePoint (double amplitude, int sampleIndex = -1)
 }
 
 
-void ECGGraph::plotLines (int firstIndex, int lastIndex) {
+void ECGGraph::plotPoints (int firstIndex, int lastIndex) {
   // paint to both memory (_buffer) and to screen using private method
-  plotLines(firstIndex, lastIndex, _buffer, devicePainter, graphPen, *points);
-  plotLines(firstIndex, lastIndex, *this, devicePainter, graphPen, *points);
+  plotPoints(firstIndex, lastIndex, _buffer, devicePainter, graphPen, *points);
+  plotPoints(firstIndex, lastIndex, *this, devicePainter, graphPen, *points);
   
 }
 
@@ -325,15 +326,22 @@ void ECGGraph::mouseReleaseEvent(QMouseEvent *event)
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
       strange reason */
-void ECGGraph::plotLines (int firstIndex, int lastIndex, 
-                          QPaintDevice &device, 
-                          QPainter &painter, 
-                          const QPen & pen,
-                          const QPointArray & points) const
+void ECGGraph::plotPoints (int firstIndex, int lastIndex, 
+                           QPaintDevice &device, 
+                           QPainter &painter, 
+                           const QPen & pen,
+                           const QPointArray & points) const
 {
   painter.begin (&device);
   painter.setPen(pen);
-  painter.drawPolyline(points, firstIndex, lastIndex-firstIndex+1);
+  switch (pMode) {
+  case Points:
+    painter.drawPoints(points, firstIndex, lastIndex-firstIndex+1);
+    break;
+  default:
+    painter.drawPolyline(points, firstIndex, lastIndex-firstIndex+1);
+    break;
+  }
   painter.end();
 }
 
@@ -402,7 +410,7 @@ void ECGGraph::remakeAllPoints () {
   for (i = 0; i < maxIndex ; i++) 
     makePoint(samples[i], i); /* re-calculate points */
   
-  if (i) plotLines(0,i-1);
+  if (i) plotPoints(0,i-1);
   
 }
 
