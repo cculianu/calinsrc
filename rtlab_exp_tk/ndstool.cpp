@@ -254,7 +254,7 @@ int SplitOp::doIt()
          << "Output file is " << state()->outfile.latin1() << endl;
 
     while(state()->count-- && in.readNextScan(v)) {
-      if (i++ > state()->start)
+      if (i++ >= state()->start)
         for (it = v.begin(); it != v.end(); it++) out.writeSample(&(*it));
     } 
     
