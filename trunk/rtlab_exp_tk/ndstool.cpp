@@ -1,0 +1,375 @@
+#define _GNU_SOURCE 1
+#include <iostream>
+#include <map>
+#include <vector>
+#include <errno.h>
+#include <limits.h>
+#include <qstring.h>
+#include <qfile.h>
+#include "dsdstream.h"
+#include "common.h"
+#include "exception.h"
+
+using namespace std;
+
+struct OpState 
+{
+  virtual ~OpState() {};
+  virtual int  constraintsError() const = 0;
+  virtual bool checkConstraints() = 0;
+};
+
+struct Op 
+{
+  typedef void (Op::*ArgCallback_t)(const QString &argValue);
+  
+  virtual ~Op() { delete op_state; }
+  virtual int doIt() = 0;
+
+  QString name;
+  QString description;
+  
+  typedef pair<QString, ArgCallback_t> ArgsMapValue_t;
+  typedef map<QString, ArgsMapValue_t> ArgsMap_t;
+
+  /* A map of arg-name -> (arg-description, arg-action/callback) */
+  ArgsMap_t  allArgs;  
+
+  virtual OpState *state() { return op_state; }
+ protected:
+  OpState *op_state;
+};
+
+struct SplitOpState: public OpState
+{
+  SplitOpState() : infile(QString::null), outfile(QString::null), 
+                   start(0), count(ULONG_LONG_MAX) {};
+
+  int  constraintsError() const;
+  bool checkConstraints();
+
+
+  QString infile;
+  QString outfile;
+  scan_index_t start;
+  scan_index_t count;
+};
+
+struct SynopsisOpState: public OpState 
+{
+  bool checkConstraints() { return true; }
+  int  constraintsError() const;
+};
+
+struct InfoOpState: public OpState 
+{
+  bool checkConstraints();
+  int  constraintsError() const;
+  QString filename;
+};
+
+struct SplitOp: public Op 
+{
+  SplitOp();
+
+  int doIt();
+  void buildAllArgs();
+  void infileArg(const QString &infile);
+  void outfileArg(const QString &outfile);
+  void startArg(const QString &start);
+  void countArg(const QString &count);
+  SplitOpState *state() { return dynamic_cast<SplitOpState *>(op_state); }
+};
+
+
+struct SynopsisOp: public Op 
+{
+  SynopsisOp() { name = "synopsis"; description="Prints options help message";
+                 op_state = new SynopsisOpState; }
+
+  int doIt();
+};
+
+struct InfoOp : public Op
+{
+  InfoOp() { name = "info"; description = "Shows information on a .nds file";
+             op_state = new InfoOpState; buildAllArgs(); }
+  
+  int doIt();
+  void buildAllArgs();
+  void filenameArg(const QString &filename);  
+  InfoOpState *state() { return dynamic_cast<InfoOpState *>(op_state); }
+};
+
+static 
+//Op *ops[N_OPS] = {  new SynopsisOp(), new SplitOp(), new InfoOp() };
+Op *ops[] = { new SynopsisOp(), new SplitOp(), new InfoOp(), 0 };
+
+static 
+Op *DEFAULT_OP = ops[0];
+
+int main (int argc, char *argv[]) 
+{
+
+  Op *op = 0; 
+    
+  argv++; /* consume argv[0] */
+
+  QString arg = *argv; /* it's ok if *argv == 0 */
+
+  arg.simplifyWhiteSpace(); // strip leading and trailing spaces
+  
+  for (Op **curr = ops; !op && *curr; curr++) {
+    op = *curr;
+    if (op->name == arg) {
+      while (*(++argv)) {
+#define EXIT_LOOP op = 0; break
+        QString name = *argv, value;
+                
+        value = name.section('=', 1);
+        name = name.section('=', 0, 0);
+        const char *n = name.latin1(), *v = value.latin1(); // for debug
+
+        name.simplifyWhiteSpace();
+        value.simplifyWhiteSpace();        
+
+        if (name.isEmpty() || value.isEmpty())  {
+          cerr << "Invalid argument format encountered." << endl << endl;
+          EXIT_LOOP; 
+        }
+
+        Op::ArgsMap_t::iterator it = op->allArgs.find(name);
+        
+        if ( it != op->allArgs.end() ) {
+          Op::ArgCallback_t cb = it->second.second;
+          (op->*cb)(value);
+        } else {
+          cerr << "Unknown argument encountered." << endl << endl;
+          EXIT_LOOP;
+        }
+        
+#undef EXIT_LOOP
+      }
+    } else op = 0;
+  }
+
+  if (!op) op = DEFAULT_OP; // if arg parsing fails, this op will be used
+  
+  int retval = EINVAL;
+
+  if (op->state()->checkConstraints())   
+    retval = op->doIt();
+  else 
+    retval = op->state()->constraintsError();
+
+  return retval;
+  
+  /*
+    todo: 
+     1) pull off first arg
+     2) find it in Op *ops[] array
+     3) parse arguments according to that op
+     4) if Op::state->checkConstraints(), call Op::doIt()
+     5) otherwise call Op::constraintsError() and exit
+  */
+}
+
+SplitOp::SplitOp()
+{
+    name = "split"; 
+    description = 
+      "Extract a portion of an NDS file and save it to another file.";
+    op_state = new SplitOpState; 
+    buildAllArgs(); 
+}
+
+int SplitOp::doIt()
+{
+  cerr << "Reading " << state()->infile.latin1() << endl 
+       << "Splicing out "  << Convert(state()->count).sStr() << " scans" << endl
+       << "Starting at index " << Convert(state()->start).sStr() << endl
+       << "Output file is " << state()->outfile.latin1() << endl;
+
+  try {
+    DSDIStream in(state()->infile);
+    in.start();
+    DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
+    
+    out.start();
+
+    in.jumpToScanIndex(state()->start);
+    while(state()->count--) {
+      vector<SampleStruct> v;
+      vector<SampleStruct>::iterator it;
+      in.readNextScan(v);
+      for (it = v.begin(); it != v.end(); it++) {
+        out.writeSample(&(*it));
+      }
+    }
+  } catch (Exception & e) {
+    e.showError();
+    return EIO;
+  }
+  return 0;
+}
+
+void SplitOp::buildAllArgs()
+{
+
+  allArgs[QString("if")] =
+    ArgsMapValue_t(QString("Input file -- .nds file to read from (required)"),
+                   (ArgCallback_t)&SplitOp::infileArg);
+
+  allArgs[QString("of")] =
+    ArgsMapValue_t(QString("Output file -- .nds file to write to (required)"),
+                   (ArgCallback_t)&SplitOp::outfileArg);
+
+  allArgs[QString("start")] =
+    ArgsMapValue_t(QString("Start index -- scan index to start copying from "
+                           "(defaults to 0, or beginning of file)"),
+                   (ArgCallback_t)&SplitOp::startArg);  
+
+  allArgs[QString("count")] =
+    ArgsMapValue_t(QString("Scan count -- the number of scans to copy "
+                           "(defaults to all until end of file)"),
+                   (ArgCallback_t)&SplitOp::countArg);  
+  
+}
+
+
+void SplitOp::infileArg(const QString &infile) 
+{
+  state()->infile = infile;
+}
+void SplitOp::outfileArg(const QString &outfile)
+{
+  state()->outfile = outfile;
+}
+
+void SplitOp::startArg(const QString &start)
+{
+  bool ok;
+  uint64 n = cstr_to_uint64(start.latin1(), &ok);
+  if (ok) state()->start = n;
+}
+
+void SplitOp::countArg(const QString &count)
+{
+  bool ok;
+  uint64 n = cstr_to_uint64(count.latin1(), &ok);
+  if (ok) state()->count = n;
+}
+
+void InfoOp::buildAllArgs()
+{
+  allArgs["if"] = ArgsMapValue_t(QString("Input file to examine (required)"),
+                                 (ArgCallback_t)&InfoOp::filenameArg);
+}
+
+void InfoOp::filenameArg(const QString &filename)
+{
+  state()->filename = filename;
+}
+
+int InfoOp::doIt()
+{
+  DSDIStream in(state()->filename);
+
+  try {
+    in.start(); /* Potential exception here -- */
+    vector<SampleStruct> dummy;
+    in.readNextScan(dummy);
+  } catch (Exception & e) {
+    e.showConsoleError();   /* will generate its own error message */
+    return EINVAL;
+  }
+                 
+  std::string  
+    startIndex = Convert(in.scanIndex()).sStr(),
+    endIndex = Convert(in.endIndex()).sStr(),
+    scanCount = Convert(in.scanCount()).sStr(),
+    samplingRate = Convert((uint64)in.rateAt(in.startIndex())).sStr();
+  double fileTime = in.timeAt(in.endIndex()-1) - in.timeAt(in.scanIndex());
+
+  bool hasDroppedScans = in.scanCount() < in.endIndex() - in.scanIndex();
+
+  cout << "Information for file '" << state()->filename.latin1() << "':" 
+       << endl
+       << "File size:               " << QFile(state()->filename).size() 
+       << " bytes" <<  endl
+       << "Starting scan index:     " << startIndex.c_str() << endl
+       << "Ending scan index:       " << endIndex.c_str()   << endl
+       << "Number of Scans:         " << scanCount.c_str()  
+       << (hasDroppedScans ? " (file has holes/dropped scans)" : "") << endl
+       << "Sampling rate:           " << samplingRate.c_str() << " Hz" << endl
+       << "Time-length:             " << fileTime << " seconds" << endl;
+  
+  
+  return 0; /* success */
+}
+
+
+int SplitOpState::constraintsError() const
+{
+  cerr << "A required argument to 'split' is missing. " << endl
+       << "You need to specify valid input and output files." 
+       << endl;
+  return EINVAL;
+}
+
+
+bool SplitOpState::checkConstraints() 
+{
+  return  QFile::exists(infile) && !outfile.isEmpty();
+}
+
+bool InfoOpState::checkConstraints()
+{
+  return QFile::exists(filename);
+}
+
+int  InfoOpState::constraintsError() const
+{
+  cerr << "A required argument to 'info' is missing. " << endl
+       << "You need to specify a valid .nds file." 
+       << endl;
+  return EINVAL;  
+}
+
+int SynopsisOp::doIt()
+{
+  return state()->constraintsError();
+}
+
+int SynopsisOpState::constraintsError() const
+{
+  cerr << "Synopsis" << endl
+       << "--------" << endl
+       << "ndstool operation [arg=value ...]" << endl;
+
+  /* detailed synopsis below... */
+  /* build this dynamically based on descriptions */
+  cerr << endl 
+       << "Descriptions of available operations" << endl 
+       << "------------------------------------" << endl;
+
+  for (Op **curr = ops; *curr; curr++) {
+    Op *op = *curr;
+    /* print option name */
+    cerr << op->name.latin1() << endl
+         << "    Descrption: " <<  op->description.latin1() << endl
+         << "    Possible Arguments: " << endl;
+    
+    Op::ArgsMap_t::iterator it = op->allArgs.begin();
+
+    if (it == op->allArgs.end()) { cerr << "(No arguments.)" << endl; }
+
+    /* print arg descriptions.. */
+    for ( ; it != op->allArgs.end(); it++) {      
+      cerr << "        " << it->first.latin1() << "=(something)" << endl
+           << "            " << it->second.first.latin1() << endl;
+    }
+    cerr << endl;
+  }
+  return EINVAL;
+}

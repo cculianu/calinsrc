@@ -76,19 +76,36 @@ QString operator+(const QString & s, uint64 in);
 */
 class Convert 
 {
+ private:
+  QString qs;
+
   /* std::string ---> QString */
  public:
-  Convert(const std::string & s) : s(s)  { }
-  operator QString() { return QString(s.c_str()); }
- private:
-  std::string s;
+  explicit Convert(const std::string & s) : qs(s.c_str())  { }
+  operator QString() const { return qs; }
 
   /* QString    ---> std::string */
  public:
-  Convert(const QString & qs) : qs(qs) { }
-  operator std::string() { return std::string(qs.latin1()); }
- private:
-  QString qs;
+  explicit Convert(const QString & qs) : qs(qs) { }
+  operator std::string() const { return std::string(qs.latin1()); }
+
+  /* uint64     ---> const char * */
+ public:
+  explicit Convert(uint64 n) { qs = uint64_to_cstr(n); }
+  operator const char *() const { return qs.latin1(); }
+
+  /* const char * ---> uint64 */
+ public:
+  explicit Convert(const char *cstr) : qs(cstr) {}
+  operator uint64() const { return cstr_to_uint64(qs.latin1()); }
+
+  /* double    ---> const char * */
+ public:
+  explicit Convert(double d) { qs.setNum(d); };  
+
+  const char *cStr() const { return *this; }
+  QString qStr() const { return qs; }
+  std::string sStr() const { return cStr(); }
 };
 
 /* Checks whether file can be opened for reading ('r') or writing ('w'). 

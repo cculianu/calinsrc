@@ -51,7 +51,9 @@ class Exception
             ErrorReportingMode m = GUI); 
 
   void showError() const;
-  
+  void showConsoleError() const;
+  void showGUIError() const;
+
  protected:
   QString _briefMsg, _fullMsg;
   ErrorReportingMode _errorReportingMode;

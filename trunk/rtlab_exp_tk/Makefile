@@ -3,7 +3,7 @@
 #
 NON_RT_PROGRAM = daq_system
 
-all:	Makefile.${NON_RT_PROGRAM} NON_RT_PROGRAM rt_process plugins
+all:	Makefile.${NON_RT_PROGRAM} NON_RT_PROGRAM rt_process plugins ndstool
 
 .buildvars:
 	@./configure
@@ -30,6 +30,9 @@ clean:
 config:
 	@./configure
 
+ndstool: Makefile.${NON_RT_PROGRAM} NON_RT_PROGRAM .buildvars
+	make -f Makefile.ndstool 
+
 superclean:
-	-rm -f .buildvars
+	
 	make clean
