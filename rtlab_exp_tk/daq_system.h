@@ -367,6 +367,7 @@ class DAQSystem : public QMainWindow
   static const QString helpMenuDestinations[n_help_dests];
 
   uint last_secs_vis_they_picked;
+  uint last_range_they_picked;
 };
 
 #endif 

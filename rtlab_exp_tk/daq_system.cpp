@@ -134,7 +134,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu"),
   windowTemplateDlg(0),
-  last_secs_vis_they_picked(0)
+  last_secs_vis_they_picked(0),
+  last_range_they_picked(0)
 {
   setIcon(QPixmap(DAQImages::daq_system_img));
 
@@ -469,7 +470,9 @@ DAQSystem::queryOpen(uint & chan, uint & range,
 {
   static const uint n_seconds_options[] = { 5, 10, 15, 20, 25, 30 };
   /* this remembers the last dialog interaction */
-  static uint prevRange = 0, prevNSecs = 0;
+  uint & prevRange = last_range_they_picked, 
+       & prevNSecs = last_secs_vis_they_picked;
+
   bool retval;
   map<uint, uint> cbox2idMap,id2cboxMap;
 
@@ -522,8 +525,6 @@ DAQSystem::queryOpen(uint & chan, uint & range,
       if (i < sizeof(n_seconds_options) / sizeof(const int)) {
         /* build n_secs combo box here */
         nSecs.insertItem(QString().setNum(n_seconds_options[i]) +" seconds");
-        if (last_secs_vis_they_picked == n_seconds_options[i])
-          nSecs.setCurrentItem(i);
       }
     }
     
@@ -707,6 +708,7 @@ DAQSystem::
 graphChangedRange(uint channel, uint range)
 {
   shmCtl.setChannelRange(ComediSubDevice::AnalogInput, channel, range);
+  last_range_they_picked = range;
 }
 
 void
