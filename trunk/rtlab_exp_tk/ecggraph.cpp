@@ -52,7 +52,6 @@ ECGGraph::ECGGraph (int sampleRateHz,
   QWidget (parent, name, f | WRepaintNoErase | WResizeNoErase), 
   plotFactor(10),
   numSamples(sampleRateHz * secsVisible),
-  currentSampleIndex(0),
   _sampleRateHz(sampleRateHz), 
   secsVisible(secsVisible),
   _rangeMin(rangeMin),
@@ -78,6 +77,7 @@ ECGGraph::ECGGraph (int sampleRateHz,
 
   initBuffer(); // initialize the pixmap buffer
 
+  computeCurrentSampleIndex(true); /* resets the current sample index */
 }
 
 ECGGraph::~ECGGraph() {
@@ -212,9 +212,8 @@ void ECGGraph::plot (double amplitude) {
 
   }
   
-  currentSampleIndex = ++currentSampleIndex % numSamples;
   _totalSampleCount++;  
-
+  computeCurrentSampleIndex();
 }
 
 void ECGGraph::paintEvent (QPaintEvent *paintEvent) {
@@ -496,14 +495,15 @@ void ECGGraph::setSecondsVisible(int seconds)
     currentSampleIndex = numSamples - 1;
 
   // now redraw the graph with the new grid and x-axis scale
-  remakeAllPoints();
+  reset(); /* hack to keep our gridline labels correct */
+  //remakeAllPoints();
   emit secondsVisibleChanged(seconds);
 }
 
 void
 ECGGraph::reset() 
 {
-  currentSampleIndex = 0;
+  computeCurrentSampleIndex(true);
   _totalSampleCount = 0;
   remakeAllPoints();
 }
@@ -538,4 +538,22 @@ void ECGGraph::drawLittleBlip (int index) {
   lastBlip = here;
 }
 
+void ECGGraph::computeCurrentSampleIndex(bool reset = false)
+{
+  currentSampleIndex = ( reset ? 0 : ++currentSampleIndex % numSamples);
+
+  if (reset) {
+    sample_indices_at_gridlines.clear();
+    for (int i = 0; i < secsVisible; i++) 
+      sample_indices_at_gridlines.push_back(outside_concept_of_a_sample_index + i * (numSamples / secsVisible));
+  }
+
+  /* this is always true if reset is true */
+  if (!(currentSampleIndex % (numSamples / secsVisible)) 
+      && currentSampleIndex >= 0) {     
+      sample_indices_at_gridlines[static_cast<uint>((currentSampleIndex / (float)numSamples) * secsVisible)] 
+        = outside_concept_of_a_sample_index;
+      emit gridlineMeaningChanged(sample_indices_at_gridlines);
+  }
+}
 
