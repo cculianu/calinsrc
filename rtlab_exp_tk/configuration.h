@@ -146,8 +146,8 @@ class ConfigurationWindow : public QDialog
   QCheckBox showDialogOnStartupChk;
   QPushButton OK;
 
-  static const char * const NDS_ASCII_SUFFIX = ".nds-ascii.gz",
-                    * const NDS_BIN_SUFFIX   = ".nds";
+  static const char * const NDS_ASCII_SUFFIX,
+                    * const NDS_BIN_SUFFIX;
 #ifdef TEST_CW
   friend int main (int argc, char *argv[], char *envp[]);
 #endif
