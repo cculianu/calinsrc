@@ -83,8 +83,8 @@ static const float INITIAL_G_VAL          = 0.5;   /* "   "         "           
 static const int MS_AFTER_THRESH_TO_LOOK_FOR_PEAK = 25; // time (ms) to look for AP peak after threshold crossing
 static const int INIT_APD_XX=90;
 static const int INITIAL_PI=500;
-static const float RESET_V_BASELINE = 999.0;      //set v_baseline to very large value 
-static const float RESET_V_APA = -999.0;   //set v_apa to very small value
+#define RESET_V_BASELINE 999.0  //set v_baseline to very large value, must use define for StimState initializer
+#define RESET_V_APA -999.0      //set v_apa to very small value, must use define for StimState initializer
 /*-------------------------------------------------------------------*/
 
 /* NB: This module needs at least a 1000 hz sampling rate!
@@ -130,10 +130,10 @@ struct StimState state = {scan_index:0,
 			  pi:0, 
 			  delta_pi:0, 
 			  find_peak:0, 
-			  v_baseline_since_last_detected_thresh_crossing:999.0, //RESET_V_BASELINE,
-			  v_baseline_n_minus_1:999.0, 
-			  v_baseline_n_minus_2:999.0,
-			  v_apa:-999.0, //should use RESET_V_APA,
+			  v_baseline_since_last_detected_thresh_crossing:RESET_V_BASELINE,
+			  v_baseline_n_minus_1:RESET_V_BASELINE,
+			  v_baseline_n_minus_2:RESET_V_BASELINE,
+			  v_apa:RESET_V_APA,
 			  v90:0, 
 			  ap_ti:0, 
 			  ap_tf:0, 
