@@ -43,6 +43,10 @@ class QScrollBar;
 class QCheckBox;
 template<class T> class TempSpooler;
 
+#define NumAPDGraphs 8
+
+class APDMonitor;
+
 #include <map>
 #include <qcolor.h>
 class APDInterleaver: public QObject
@@ -56,8 +60,7 @@ class APDInterleaver: public QObject
  public:
   APDInterleaver(QObject *parent,
                  ECGGraph *graph, 
-                 const QColor & color1 = "#ff0000", 
-                 const QColor & color2 = "white",
+                 const APDMonitor *monitor,
                  DAQSystem *ds = 0);
   
  public slots:
@@ -68,7 +71,7 @@ class APDInterleaver: public QObject
  private:
   DAQSystem *ds;
   ECGGraph *graph;
-  QColor color1, color2;
+  const APDMonitor *monitor;
 
   struct APDPair {
     APDPair() : ct(0) {};
@@ -83,12 +86,56 @@ class APDInterleaver: public QObject
   void graphAPDs(); /* draws them all to graph */
 };
 
+#include <vector>
+class APDMonitor : public QObject
+{
+  Q_OBJECT
+
+ public:
+  APDMonitor(const QColor & c1, const QColor & c2, QObject *parent = 0,
+             DAQSystem *ds = 0); 
+
+  uint beatNumber() const { return beat_num; }
+  void setBeatNumber(uint b) { beat_num = b; }
+  const QColor & currentColor() const { return colorState; }
+  const QColor & evenColor() const { return color1; }
+  const QColor & oddColor() const { return color2; }
+
+  uint orderOf(uint chan, bool *found = 0) const;
+  int orderFirst() const { return first; }
+  int orderLast() const { return last; }
+  vector<uint> orderVector() const;
+
+  QString masterOrder() const;
+
+ public slots:
+  void gotAPD(MCSnapShot *m);
+  void spikeSet(uint, double);
+  void spikeOff(uint);
+  /* Warning! Pass a valid, comma-delimited string */
+  void setMasterOrder(const QString & order);
+
+ signals:
+  void beatNumberChanged(uint beat);
+  void masterOrderChanged(const QString &);
+
+ private: 
+  void rebuildOrder();
+
+  DAQSystem *ds;
+ /* maps channel-id -> electrode number/order */
+  typedef map<uint, uint> Order;
+  Order order, master_order;
+
+  uint beat_num;
+  int first, last; // first and last chanids
+  const QColor &color1, &color2;
+  QColor colorState;
+};
 
 class APDcontrol: public QObject, public Plugin
 {
   Q_OBJECT
-
-#define NumAPDGraphs 8
 
 public:
   APDcontrol(DAQSystem *daqSystem);
@@ -112,8 +159,10 @@ public:
   QSignalMapper *g_adj_manual_only_mapper;
 
   APDInterleaver *apd_interleaver;
+  APDMonitor     *apd_monitor;
 
 private slots:
+  void ffwdGraph(uint); // fast forwards a particular channel graph
   void periodic(); /* does stuff periodically.. called by the timer */
   void changeAIChan(int); /* applies combo box change to 
                                          rt process avn_stim.o */

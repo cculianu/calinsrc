@@ -338,7 +338,8 @@ class DAQSystem : public QMainWindow
   void print(vector<const ECGGraphContainer *> &);
 
   void allChannelsOffSaveState(vector<uint> & vector_to_save_ON_channels_to);
-  void channelsOn (const vector<uint> & chanspec);
+  vector<uint> channelsOn () const;
+  void setChannelsOn (const vector<uint> & chanspec);
 
   QPrinter printer;  /* the printer used for printing */
 

@@ -61,8 +61,10 @@ class ECGGraph : public QWidget {
   virtual ~ECGGraph();
 
   enum PlotMode {
-    Lines, /* Plots points as connected line segments */
-    Points /* plots points as little points */
+    Lines,  /* Plots points as connected line segments */
+    Points, /* plots points as little points */
+    Circles, /* plots points as little circles (slow) */
+    Rectangles /* plots points as little rectangles (slow) */
   };
 
   /*
@@ -71,6 +73,14 @@ class ECGGraph : public QWidget {
 
   virtual PlotMode plotMode() const { return pMode; }
   virtual void setPlotMode(PlotMode m) { pMode = m; }
+
+  /* The width of circles, rects, and points... */
+  virtual uint pointSize() const { return _pointSize; }
+  virtual void setPointSize(uint s) { _pointSize = s; }
+  /* The width of the little blip */
+  virtual uint blipSize() const { return _blipSize; }
+  virtual void setBlipSize(uint s) { _blipSize = s; }
+  
 
   /** Use this to change the way the pen looks.  Default is a yellowish
       width=1 pen */
@@ -135,8 +145,8 @@ class ECGGraph : public QWidget {
    can be easily printed afterwards. */    
   virtual void renderToPixmap(QPixmap &) const;
 
-  uint plotFactor() const { return plot_factor; }
-  uint setPlotFactor(uint p) { return plot_factor = p; }
+  uint blockFactor() const { return block_factor; }
+  uint setBlockFactor(uint p) { return block_factor = p; }
 
 signals:
   // to do: move these out of here in favor of
@@ -213,8 +223,10 @@ signals:
 
   virtual void mouseReleaseEvent (QMouseEvent *event);
 
-  unsigned int plot_factor; /* actually draw to screen every  plotFactor-th 
-                              sample -- defaults to 10 */
+  unsigned int block_factor; /* actually commit to screen every 
+                                block_factor-th sample -- defaults to 10 */
+  
+  unsigned int _pointSize, _blipSize;
 
   int     numSamples,          // the number of samples this graph supports
           currentSampleIndex,
