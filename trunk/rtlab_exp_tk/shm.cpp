@@ -70,9 +70,16 @@ const QString ShmController::failureReasons[] = {
 };
 
 
-ShmController::ShmController() throw(ShmException, IllegalStateException)
-  : shm(0)
+ShmController::ShmController(SharedMemStruct *s) 
+  throw(ShmException, IllegalStateException)
+  : shm(s)
 {
+  if (s) {
+    /* it's already attached so do very little.. */
+    shmType = NotSharedOrUnknown;
+    return;
+  }
+
   static const int types2try_sz = 3;
   ShmType types2try[types2try_sz] = {MBuff, RTAI_Shm, IPC};
   ShmException exception;
@@ -92,14 +99,6 @@ ShmController::ShmController() throw(ShmException, IllegalStateException)
   if (!shm) throw exception;
 }
 
-ShmController::ShmController(ShmType t) 
-  throw(ShmException, /* if cannot attach to type */
-        IllegalStateException /* if t is Unknown */
-        )
-{
-  shm = attach(t);
-  shmType = t;
-}
 
 /* static */
 SharedMemStruct * 
@@ -121,7 +120,7 @@ ShmController::attach(ShmType t)
       + QObject::tr("\" via the RTL 'mbuff.o' driver (accessed through "
                     MBUFF_DEV_NAME ")");
 
-    if (!haveRTProcess()) {
+    if (!haveRTLabDotO()) {
       failureReason = RegionNotFound;
       shm = NULL;
       break;
@@ -147,7 +146,7 @@ ShmController::attach(ShmType t)
       + QObject::tr("\" via the RTAI 'rtai_shm.o' driver (accessed through "
                     RTAI_SHM_DEV ")");
 
-    if (!haveRTProcess()) {
+    if (!haveRTLabDotO()) {
       failureReason = RegionNotFound;
       shm = NULL;
       break;
@@ -212,12 +211,6 @@ ShmController::attach(ShmType t)
   return shm;                                
 }
 
-ShmController::ShmController(SharedMemStruct *shm) 
-  : shm(shm), 
-    shmType(NotSharedOrUnknown) 
-{
-  /* nothing.. */
-}
 
 ShmController::~ShmController() 
 {
@@ -283,31 +276,6 @@ ShmController::rtaiShmDevFileIsValid()
   return true;
 }
 
-void ShmController::clearSpikeSettings()
-{
-  init_spike_params(&shm->spike_params);
-}
-
-void ShmController::setSpikePolarity(uint chan, SpikePolarity p) 
-{
-  _set_bit(chan, shm->spike_params.polarity_mask, p);
-}
-
-void ShmController::setSpikeEnabled(uint chan, bool onoroff)
-{
-  _set_bit(chan, shm->spike_params.enabled_mask, onoroff);
-}
-
-void ShmController::setSpikeThreshold(uint chan, double d)
-{
-  shm->spike_params.threshold[chan] = d;
-}
-
-void ShmController::setSpikeBlanking(uint chan, uint msec)
-{
-  shm->spike_params.blanking[chan] = msec;
-}
-
 SpikePolarity ShmController::spikePolarity(uint chan)  const 
 {
   return (SpikePolarity)_test_bit(chan, shm->spike_params.polarity_mask);
@@ -328,7 +296,35 @@ uint ShmController::spikeBlanking(uint chan) const
   return shm->spike_params.blanking[chan];
 }
 
-bool ShmController::haveRTProcess()
+bool ShmController::haveRTLabDotO()
 {
   return QFile::exists("/proc/" RTLAB_MODULE_NAME );
 }
+
+
+
+void ShmControllerNoFifo::clearSpikeSettings()
+{
+  init_spike_params(&shm->spike_params);
+}
+
+void ShmControllerNoFifo::setSpikePolarity(uint chan, SpikePolarity p) 
+{
+  _set_bit(chan, shm->spike_params.polarity_mask, p);
+}
+
+void ShmControllerNoFifo::setSpikeEnabled(uint chan, bool onoroff)
+{
+  _set_bit(chan, shm->spike_params.enabled_mask, onoroff);
+}
+
+void ShmControllerNoFifo::setSpikeThreshold(uint chan, double d)
+{
+  shm->spike_params.threshold[chan] = d;
+}
+
+void ShmControllerNoFifo::setSpikeBlanking(uint chan, uint msec)
+{
+  shm->spike_params.blanking[chan] = msec;
+}
+

@@ -716,6 +716,7 @@ init_shared_mem(void)
   rtp_shm->ao_subdev = ao_subdev;
   rtp_shm->ai_fifo_minor = -1;
   rtp_shm->ao_fifo_minor = -1;
+  rtp_shm->control_fifo  = -1;
   /* num AI channels in use */
   rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_comedi_ai_dev_handle, ai_subdev); 
   rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_comedi_ao_dev_handle, ao_subdev);
