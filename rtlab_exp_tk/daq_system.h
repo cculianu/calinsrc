@@ -72,6 +72,12 @@ class ReaderLoop: public QObject
  protected slots:
   /* this should be the target of a singleshot timer */
   void loop();
+  void turnOffChannel(uint chan_id);
+
+ private slots:
+  void turnOffPending();
+ private:
+  vector<uint> pending_off;
 
  signals:
   void scanIndexChanged(scan_index_t index); /* emitted once per second,
@@ -86,7 +92,7 @@ class ReaderLoop: public QObject
 
   SampleStructSource *source;
   SampleStructReader *reader;
-  SampleGZWriter *writer;
+  SampleWriter *writer;
   
   bool pleaseStop;
 
@@ -141,7 +147,9 @@ class DAQSystem : public QMainWindow
   void windowMenuRemoveWindow(const QWidget *w);
   /* stupid Qt needs exact type */
   void windowMenuRemoveWindow(const DAQECGGraphContainer *w) 
-    {windowMenuRemoveWindow((const QWidget *)w); } 
+    {windowMenuRemoveWindow((const QWidget *)w); }
+  /* yet another really redundant slot */
+  void graphOff(const DAQECGGraphContainer *w) { readerLoop.turnOffChannel(w->channelId); };
 
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */

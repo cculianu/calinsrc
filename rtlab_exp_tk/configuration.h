@@ -89,6 +89,8 @@ class ConfigurationWindow : public QDialog
 
  protected slots:
   void accept();
+  /* internal helper, adds/replaces the appropriate suffix for output filename */
+  void resuffixIze();
 
  private: 
 
@@ -115,7 +117,8 @@ class ConfigurationWindow : public QDialog
   };
 
   /* validates this form and returns false if form failed */
-  bool validate(); 
+  bool validate();
+
 
   const Probe & deviceProbe;
   DAQSettings & settings;
@@ -143,6 +146,8 @@ class ConfigurationWindow : public QDialog
   QCheckBox showDialogOnStartupChk;
   QPushButton OK;
 
+  static const char * const NDS_ASCII_SUFFIX = ".nds-ascii.gz",
+                    * const NDS_BIN_SUFFIX   = ".nds";
 #ifdef TEST_CW
   friend int main (int argc, char *argv[], char *envp[]);
 #endif

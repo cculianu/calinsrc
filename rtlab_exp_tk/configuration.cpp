@@ -154,9 +154,12 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   asciiRadio.setText("Output Ascii");
   binaryRadio.setText("Output Binary");
   connect(&browseOutputFiles, SIGNAL(clicked(void)),
-	  this, SLOT(askUserForOutputFilename(void)));
-	  
-  
+          this, SLOT(askUserForOutputFilename(void)));
+  connect(&asciiRadio, SIGNAL(clicked()),
+          this, SLOT(resuffixIze()));
+  connect(&binaryRadio, SIGNAL(clicked()),
+          this, SLOT(resuffixIze()));
+
   templateSelectionGroup.setTitle("Log Template Selection");
 
   masterGrid.addWidget(&templateSelectionGroup, 2, 0);
@@ -241,20 +244,30 @@ ConfigurationWindow::askUserForInputFilename()
   }
 }
 
+void ConfigurationWindow::resuffixIze()
+{
+    QString s(outputFile.text()), desired_suffix( ( asciiRadio.isOn() ? NDS_ASCII_SUFFIX : NDS_BIN_SUFFIX ) );
+    if (s.endsWith(NDS_ASCII_SUFFIX)) s.remove(s.length() - QString(NDS_ASCII_SUFFIX).length(), s.length());
+    else if (s.endsWith(NDS_BIN_SUFFIX)) s.remove(s.length() - QString(NDS_BIN_SUFFIX).length(), s.length());
+    s += desired_suffix;
+    outputFile.setText(s);
+}
+
 void
 ConfigurationWindow::askUserForOutputFilename()
 {
-  static const char *filters[2] = {"All files (*)", 0};
+  QString filter = QString ("DAQ System Data Files (*%1 *%2)").arg(NDS_BIN_SUFFIX).arg(NDS_ASCII_SUFFIX);
   QFileDialog fileDialog(this, 0, true);
 
   fileDialog.setMode(QFileDialog::AnyFile);
   fileDialog.setViewMode(QFileDialog::Detail);
-  fileDialog.setFilters(filters);
+  fileDialog.setFilter(filter);
 
   fileDialog.setSelection(outputFile.text());
 
   if (fileDialog.exec()) {
     outputFile.setText(fileDialog.selectedFile());
+    resuffixIze();
   }
 }
 

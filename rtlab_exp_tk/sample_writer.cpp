@@ -29,12 +29,21 @@
 #include "shm_mgr.h"
 
 
-SampleGZWriter::SampleGZWriter()
+void SampleWriter::schedulePeriodicFlush()
+{
+  if (_periodicFlush && !flushPending) {
+    /* wait an arbitrary 100 milliseconds before invoking the buffer flusher */
+    QTimer::singleShot( 100, this, SLOT(flushBuffer()) );
+    flushPending = true;
+  }
+}
+
+SampleGZWriter::SampleGZWriter() : SampleWriter()
 {
   init();
 }
 
-SampleGZWriter::SampleGZWriter(const char *filename)
+SampleGZWriter::SampleGZWriter(const char *filename) : SampleWriter()
 {
   init();
   setFile(filename);
@@ -54,7 +63,6 @@ SampleGZWriter::init()
   bufEnd = 0;
   buffer[0] = 0;
   channel_ids_that_have_a_committed_state.clear();
-  _periodicFlush = flushPending = false;
 }
 
 void
@@ -108,17 +116,14 @@ SampleGZWriter::consume(const SampleStruct *s)
   
   bufEnd += n;
 
-  if (_periodicFlush && !flushPending) {
-    /* wait an arbitrary 100 milliseconds before invoking the buffer flusher */
-    QTimer::singleShot( 100, this, SLOT(flushBuffer()) );
-    flushPending = true;
-  }
+  schedulePeriodicFlush();
 }
 
 void
-SampleGZWriter::channelStateChanged(uint channel_id)
+SampleGZWriter::channelStateChanged(uint channel_id, bool on_or_off)
 {
-  channel_ids_that_have_a_committed_state.erase(channel_id);
+  if (on_or_off)
+    channel_ids_that_have_a_committed_state.erase(channel_id);
 }
 
 void 
@@ -164,3 +169,31 @@ SampleGZWriter::putStateChangeInfo(const SampleStruct *s)
   channel_ids_that_have_a_committed_state.insert
     (channel_ids_that_have_a_committed_state.end(), s->channel_id);
 }
+
+
+
+SampleBinWriter::SampleBinWriter () : SampleWriter()
+{}
+
+SampleBinWriter::SampleBinWriter (const char * file) : SampleWriter()
+{
+  setFile(file);
+}
+
+SampleBinWriter::~SampleBinWriter () { /* not necessary ... dsdostream.end(); */ };
+
+void SampleBinWriter::setFile(const char *filename)
+{
+  dsdostream.setOutFile(filename, ShmMgr::samplingRateHz());
+}
+
+void SampleBinWriter::consume(const SampleStruct *s)
+{
+  dsdostream.writeSample(s);
+}
+
+void SampleBinWriter::channelStateChanged(uint channel_id, bool on_or_off = true)
+{
+  if (!on_or_off) dsdostream.removeChannelAfter(channel_id, ShmMgr::scanIndex()+1);
+}
+

@@ -96,8 +96,8 @@ void
 DAQECGGraphContainer::
 closeEvent (QCloseEvent *e) 
 {
-  emit closing(this); /* This tells daqsystem to remove us from 
-			 the channel list */
+  emit closing(this); /* This tells daqsystem to remove us from
+                         the channel list */
   ECGGraphContainer::closeEvent(e);
 }  
 
