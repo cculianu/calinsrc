@@ -64,6 +64,31 @@ string operator+(const string & s, uint64 in);
 /* this function is non-reentrant! */
 QString operator+(const QString & s, uint64 in);
 
+
+/* This is a syntactic-sugar class to support conversions to and from various 
+   types  -- to use it just do:
+       var_of_type2 = (Convert)var_of_incompatible_type1;
+
+    Ideally we wanted operator=, but since C++ requires that be a member
+    of the class in question, we can't use it.
+*/
+class Convert 
+{
+  /* std::string ---> QString */
+ public:
+  Convert(const std::string & s) : s(s)  { }
+  operator QString() { return QString(s.c_str()); }
+ private:
+  std::string s;
+
+  /* QString    ---> std::string */
+ public:
+  Convert(const QString & qs) : qs(qs) { }
+  operator std::string() { return std::string(qs.latin1()); }
+ private:
+  QString qs;
+};
+
 /* Checks whether file can be opened for reading ('r') or writing ('w'). Returns an empty sting if opened successfully, an error message otherwise. */
 string fileErrorMsg( const char *file_name, char mode ); 
 #endif
