@@ -2,8 +2,10 @@
 
 if [ ! -e "$LINUXDIR/.config" ]; then
 	cat <<EOF
-  *** You need to configure the kernel in ${LINUXDIR}
-  *** (${LINUXDIR}/.config not found!)
+ *****    ERROR!!!
+ *****
+ *****    You need to run make config and make dep on the kernel in
+ *****    ${LINUXDIR} (.config in kernel directory not found!)
 EOF
 	exit 1
 fi
@@ -16,8 +18,10 @@ elif grep -q "CONFIG_RTHAL=" ${LINUXDIR}/.config; then
 else
 	RTOS=""
 	cat <<EOF
-  *** Your kernel needs to be compiled and patched with either RTAI or
-  *** RTLinux 3.1+ support!
+ *****    ERROR!!!
+ *****
+ *****    Your kernel needs to be compiled and patched with either
+ *****    RTAI or RTLinux 3.1+ support!
 EOF
 	exit 1
 fi
