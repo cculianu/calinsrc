@@ -219,6 +219,14 @@ public:
                           const QString & m2 = "A needed system resource is unavailable or non-existant.") : Exception (m1, m2) {}
 };
 
+class UniqueResourceException : public SystemResourceException
+{
+public:
+  UniqueResourceException(const QString & m1 = "System resource unavailable",
+                          const QString & m2 = "A unique system resource unavailable or non-existant.") : SystemResourceException (m1, m2) {}
+};
+
+
 template<class X, class A>                   inline void Assert(A assertion)           { if (!assertion) throw X(); };
 template<class X, class A, class B>          inline void Assert(A assertion, B b)      { if (!assertion) throw X(b); };
 template<class X, class A, class B, class C> inline void Assert(A assertion, B b, C c) { if (!assertion) throw X(b,c); };

@@ -17,9 +17,9 @@ include ./.buildvars
 # subdirectory.
 COMEDI_MODBUILD_DIR  = ${COMEDI_DEVEL_INCLUDE}/modbuild
 
-all: rt_process.o rtos_middleman.o rtlab.o avn_stim.o apd_control.o
+all: rtlab.o avn_stim.o apd_control.o
 
-rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h proc_macros.h .buildvars
+rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h proc_macros.h rtlab_cmd.h stimulator.h .buildvars
 # Some checks are on the next line
 	@( [ -d "${COMEDI_DEVEL_INCLUDE}" ] && [ -r "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" ] || ( \
 	echo "***************************************************************************"; \
@@ -37,8 +37,17 @@ rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h proc_mac
 rtos_middleman.o: rtos_middleman.c shared_stuff.h rtos_middleman.h .buildvars
 	$(CC) ${MODULE_COMPILE_FLAGS} -c -o rtos_middleman.o rtos_middleman.c
 
-rtlab.o: rt_process.o rtos_middleman.o
-	$(LD) ${LDFLAGS} -r -o rtlab.o rt_process.o rtos_middleman.o
+rtlab_cmd.o: rtlab_cmd.c rtlab_cmd.h bheap.h heap_info.h rt_process.h shared_stuff.h .buildvars
+	$(CC) ${MODULE_COMPILE_FLAGS} -c -o rtlab_cmd.o rtlab_cmd.c
+
+bheap.o: bheap.c bheap.h heap_info.h user_compat.h .buildvars
+	$(CC) ${MODULE_COMPILE_FLAGS} -c -o bheap.o bheap.c
+
+stimulator.o: stimulator.c stimulator.h rtlab_cmd.h rt_process.h shared_stuff.h .buildvars
+	$(CC) ${MODULE_COMPILE_FLAGS} -c -o stimulator.o stimulator.c
+
+rtlab.o: rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o
+	$(LD) ${LDFLAGS} -r -o rtlab.o rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o
 
 avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h rtos_middleman.h proc_macros.h .buildvars
 	@( [ -d "${COMEDI_DEVEL_INCLUDE}" ] && [ -r "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" ] || ( \

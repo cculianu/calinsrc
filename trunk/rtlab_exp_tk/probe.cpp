@@ -21,7 +21,6 @@
  */
 #include <comedi.h>
 #include <comedilib.h>
-#include <qstring.h>
 #include <vector>
 #include <iostream>
 using namespace std;
@@ -29,9 +28,14 @@ using namespace std;
 #include <sys/stat.h>
 #include <unistd.h>
 #include "probe.h"
+#include "scanproc.h"
 #include "exception.h"
 #include "comedi_device.h"
 #include "shm.h"
+
+#include <qstring.h>
+#include <qregexp.h>
+#include <qfile.h>
 
 #ifdef TEST_PROBE
 QString
@@ -222,6 +226,31 @@ Probe::validate() const
                                 "other assored setup issues.");
 }
 
+static pid_t get_attached_to_rtlab(void)
+{
+  pid_t ret = 0;
+  QFile f("/proc/rtlab/rtlab");
+  QString subst = "attached to PID:";
+
+  if ( f.open( IO_ReadOnly ) ) {
+    QTextStream t(&f);
+
+    QString line;
+    int i;
+
+    while (!ret && !(line = t.readLine()).isNull()) {
+      if( line.contains(subst, false) 
+          && ((i = line.find(QRegExp("[0-9]"))) > -1) )  {
+        // got it!
+        bool ok;
+        ret = line.mid(i).toInt(&ok);
+        if (!ok) ret = 0;
+      }
+    }
+  }
+  return ret;
+}
+
 void
 Probe::attach_to_shm_and_stuff()
 {
@@ -229,6 +258,33 @@ Probe::attach_to_shm_and_stuff()
   struct stat statbuf;
 
   have_rt_process = !stat("/proc/rtlab", &statbuf);
+
+  { 
+    // this part figures out if we're already running.. 
+    char *myname, *attachedname;
+    int pid = 0;
+
+    myname = grab_my_stripped_cmd_name(0);
+    attachedname = 
+      grab_stripped_cmd_name_of_pid(pid = get_attached_to_rtlab(), 0);
+
+    QString myName(myname), attachedName(attachedname);
+
+    if (myname) free(myname); 
+    if (attachedname) free(attachedname);
+
+  
+    if (num_procs_of_my_exe() > 1 || 
+        have_rt_process && pid && attachedName == myName )  {
+      const char *msg =
+        "It appears that another instance of this program may already be "
+        "running!\n\n"
+        "Please quit the other instance and try again.\n";
+
+      /* there _is_ another DAQSystem running! */
+      throw UniqueResourceException("DAQ System already running!",  msg);
+    }
+  }
 
   try {
     shm = ShmController::attach(ShmController::MBuff);
