@@ -290,6 +290,13 @@ void
 ECGGraphContainer::
 consume(const SampleStruct *sample)
 {
+  /* bump it forward to maintain even second boundaries */
+  if (graph->currentPosition() == 0  // it was reset/new graph
+      && sample->scan_index % graph->sampleRateHz()) // needs normalization
+  {
+    /* bump it forward to maintain even second boundaries */
+    graph->ffwd(sample->scan_index % graph->sampleRateHz());
+  }
   graph->plot(sample->data, sample->scan_index);
   detectSpike(sample);
   setCurrentIndexStatus(sample->scan_index);  

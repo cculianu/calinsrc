@@ -885,7 +885,8 @@ DAQSystem::resynch()
 
   for (it = menuIdToWindowMap.begin(); it != menuIdToWindowMap.end(); it++) 
     if ( (g = dynamic_cast<ECGGraphContainer *>(it->second)) ) 
-      g->graph->reset();
+      g->graph->reset(readerLoop.saved_curr_index
+                      - readerLoop.saved_curr_index % shmCtl.samplingRateHz());
     
  
 }

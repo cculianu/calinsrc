@@ -218,31 +218,43 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
 
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
-    if (which_apd_graph < NumAPDGraphs)
-      //graphlayout->addWidget(new QLabel(QString("Electrode %1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
+
+
+    if (which_apd_graph < NumAPDGraphs) {
       graphlayout->addWidget(new QLabel(QString("%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
-    else {
+      apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
+      buildRangeComboBoxesAndConnectSignals(which_apd_graph);
+      graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
+    
+    } else {
       // the 'All APD's' graph..
-      //graphlayout->addWidget(new QLabel(QString("All Used Electrodes"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
       // create the interleaver class that talks to this graph
       apd_interleaver = new APDInterleaver(this, apd_graph[which_apd_graph],
                                            apd_monitor);
-      apd_grapher = new APDGrapher(this, apd_graph, apd_monitor);
 
       apd_graph[which_apd_graph]->setPlotMode(ECGGraph::Circles);
       apd_graph[which_apd_graph]->plotPen().setWidth(apdGraphPointWidth);
+
     }
-    apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
-    graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
 
     //addAxisLabels(which_apd_graph,which_graph_row,which_graph_column);
-    buildRangeComboBoxesAndConnectSignals(which_apd_graph);
   }
+
+  apd_grapher = new APDGrapher(this, apd_graph, apd_monitor);
 
   QVBox *vb = new QVBox(graphs);
   determineGraphRowColumn(which_apd_graph,which_graph_row,which_graph_column);
   graphlayout->addWidget(vb, which_graph_row, which_graph_column);
+
+  QHBox *rb = new QHBox(vb);
+  (void)new QLabel("'All APDs' Graph Range:", rb);
+
+  // the "All APD Graphs" perkinje-fiber-like graph...
+  apd_range_ctl[NumAPDGraphs]=new QComboBox(false, rb, "APD Range Combo box");
+
+  buildRangeComboBoxesAndConnectSignals(NumAPDGraphs);
+
   QHBox *eoBox = new QHBox(vb);
   (void)new QLabel("AI Channel Spatial Order: ", eoBox);
   QLineEdit *eo = new QLineEdit(apd_monitor->masterOrder(), eoBox);

@@ -194,10 +194,15 @@ signals:
   virtual void setSecondsVisible(int seconds);
   
   /* resets this graph to start plotting at the leftmost position */
-  virtual void reset(); 
+  virtual void reset(uint64 new_outside_ref_sample_index = 0); 
 
   /* Fast forward the graph's plotting by amt sample indices */
   virtual void ffwd(unsigned int amt); 
+
+  /* returns the current sample position from start.  The minimum
+     is 0 (after a reset() or on a new graph) and the max is
+     samplingRateHz() * secondsVisible() - 1 */
+  virtual uint currentPosition() const;
 
  protected:
 
