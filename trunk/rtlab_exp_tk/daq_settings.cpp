@@ -325,6 +325,48 @@ void DAQSettings::setWindowSettingProfile(const WindowSettingProfile &p)
   dirtySettings[section].insert(QString(KEY_WP_CHAN_WIN_SETTINGS));
 }
 
+void DAQSettings::renameWindowSettingProfile(QString newname, QString oldname)
+{
+  map<QString, WindowSettingProfile>::iterator it 
+    = _windowSettingProfiles.find(oldname);
+
+  if (it != _windowSettingProfiles.end()) {
+    WindowSettingProfile p = it->second;
+
+    p.setNull(true);
+    setWindowSettingProfile(p);
+    p.setNull(false);
+    p.name = newname;
+    setWindowSettingProfile(p);    
+  }
+
+}
+
+void DAQSettings::deleteWindowSettingProfile(QString name)
+{
+  map<QString, WindowSettingProfile>::iterator it 
+    = _windowSettingProfiles.find(name);
+
+  if (it != _windowSettingProfiles.end()) {
+    WindowSettingProfile p = it->second;
+
+    p.setNull(true);
+
+    setWindowSettingProfile(p);
+  }
+}
+
+void DAQSettings::currentToProfile(QString name)
+{
+  WindowSettingProfile p;
+
+  p.setNull(false);
+  p.name = name;
+  p.channelParams = channelParams;
+  p.windowSettings = windowSettings;
+
+  setWindowSettingProfile(p);
+}
 
 void
 DAQSettings::parseWindowSettings()
@@ -399,7 +441,7 @@ DAQSettings::parseChannelParameters(QString cp)
 {
   map<uint, ChannelParams> ret;
 
-  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+.?\\d*,\\d+,\\d+;");
+  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+[.0-9e-]*,\\d+,\\d+;");
   int curr_match = 0, len = 0;
   while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
     ChannelParams c; 

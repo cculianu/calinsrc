@@ -151,6 +151,12 @@ class DAQSettings: public Settings
   WindowSettingProfile getWindowSettingProfile(QString name) const;
   /* Pass in a null profile with a valid .name to erase an entry */
   void setWindowSettingProfile(const WindowSettingProfile &);
+  void renameWindowSettingProfile(QString newname, QString oldname);
+  void deleteWindowSettingProfile(QString name);
+
+  void currentToProfile(QString); /* takes the current window settings and 
+                                     puts them in a named profile -- 
+                                     overwrites if profile name exists... */
 
  private:
 
