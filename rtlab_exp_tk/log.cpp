@@ -22,9 +22,19 @@
  */
 
 #include <qfiledialog.h>
+#include <qcstring.h>
+#include <qdatastream.h>
 
 #include "log.h"
 #include "exception.h"
+
+
+ExperimentLog::
+ExperimentLog(QWidget * p = 0, const char * n = 0)
+  : QMultiLineEdit (p, n)
+{
+  init();
+}
 
 ExperimentLog::
 ExperimentLog (const QString & f, const QString & t = QString::null, 
@@ -32,38 +42,89 @@ ExperimentLog (const QString & f, const QString & t = QString::null,
   : QMultiLineEdit(p, n)
 
 {
+  init();
+  useTemplate(t);
+  setOutFile(f);
+}
 
+void
+ExperimentLog::
+init() /* initialization routine shared by constructors */
+{
   setWordWrap(WidgetWidth);
   setWrapPolicy (AtWordBoundary);
   setTextFormat(Qt::PlainText);
-  setText(readFile(t));
-  setOutFile(f);
-
 }
 
 ExperimentLog::
 ~ExperimentLog()
 {
-  if (outFile.isOpen()) outFile.close();
+  if (_outFile.isOpen()) { saveOutFile(); _outFile.close(); }
 }
 
 
+const QString
+ExperimentLog::
+outFile() const 
+{
+  return _outFile.name();
+}
+
+/* closes current output file and attempts to open a new one.  If it doesn't
+   exist this prompts the user to specify another file */
 void
 ExperimentLog::
 setOutFile(const QString & f)
 {
   bool ok = false;
 
-  if (outFile.isOpen()) outFile.close();
+  if (_outFile.isOpen()) _outFile.close();
   while (!ok) {
-    outFile.setName(f);
+    _outFile.setName(f);
     try {
       openOutFile();
       ok = true;
     } catch (FileException & e) {
       e.showError();
-      outFile.setName(queryUserForFile(f));      
+      _outFile.setName(queryUserForFile(f));      
     }
+  }
+}
+
+/* attempts to save the text() buffer to the output file -- may throw
+   an application exception on error!! 
+   ^^-- currently no error handling is implemented -Calin */
+void
+ExperimentLog::
+saveOutFile()
+{
+  _outFile.reset(); /* just to make sure we are not appending but re-saving
+		       everything */
+
+  QDataStream s(&_outFile);
+  s << text();
+}
+
+/* attempts to use log_template as the current template.  This implicitly
+   replaces the text buffer with the contents of the file log_template.
+   If log_template isn't valid, it just blanks out the buffer. */     
+void
+ExperimentLog::
+useTemplate(const QString & log_template)
+{
+  setText(readFile(log_template));  
+}
+
+
+void
+ExperimentLog::
+openOutFile()
+{
+  if (! _outFile.open(IO_WriteOnly | IO_Truncate | IO_Translate)) {    
+    QString msg(getQFileMessage(_outFile.status())), f(_outFile.name());
+    throw FileException (QString("Error opening ") + f + " for writing.",
+			 QString("Log output file ") + f + " could not be "
+			 "opened for writing. " + msg);
   }
 }
 
@@ -73,24 +134,20 @@ setOutFile(const QString & f)
    it was empty */
 QString
 ExperimentLog::
-readFile(const QString & fileName) const
+readFile(const QString & fileName) 
 {
   QFile f(fileName);
   QString ret = QString::null;
 
   if (f.exists() && f.open(IO_ReadOnly | IO_Translate)) {
-    QIODevice::Offset buflen = f.size();
-    if (buflen > 0) {
-      char *buf = new char[buflen+1]; // ok, we used the heap here to be safe..
-      Q_LONG n_bytes = f.readBlock(buf, sizeof(buf));
-      if (n_bytes > 0) {
-	/* turn nulls to spaces just in case the file was like some strange 
-	   binary/text mix */
-	for (Q_LONG i = 0; i < n_bytes; i++) if (buf[i] == 0) buf[i] = 32;
-	buf[n_bytes] = 0; /* add trailing null as readBlock() doesn't */
-	ret = QString(buf);
-      }
-      delete buf;
+    /* THIS IS BROKEN.  FOR SOME REASON YOU CAN'T RESIZE THE QBYTEARRAY! */
+    QByteArray data(f.readAll());
+    uint length; 
+    if (!data.isNull() && (length = data.size()) > 0) {
+      /* turn nulls to spaces just in case the file was like some strange 
+	 binary/text mix */
+      for (uint i = 0; i < length; i++) if (data[i] == 0) data[i] = 32;
+      ret = QString(data);
     }
   }
   return ret;
@@ -102,7 +159,7 @@ readFile(const QString & fileName) const
 QString
 ExperimentLog::
 queryUserForFile(const QString & selected, 
-		 bool forceUserToPickSomething = true) const
+		 bool forceUserToPickSomething = true)
 {
   static const char *filters[2] = {"All files (*)", 0};
   QFileDialog fileDialog(0, 0, true);
@@ -121,13 +178,12 @@ queryUserForFile(const QString & selected,
   return (QDialog::Accepted ? fileDialog.selectedFile() : QString::null);    
 }
 
-void
+const QString
 ExperimentLog::
-openOutFile()
+getQFileMessage(int status) 
 {
-  if (! outFile.open(IO_WriteOnly | IO_Truncate | IO_Translate)) {    
-    QString msg, f(outFile.name());
-    switch (outFile.status()) {
+  QString msg;
+    switch (status) {
     case IO_ReadError:
       msg = "Could not read from the device.";
       break;
@@ -153,9 +209,6 @@ openOutFile()
     default:
       msg = "The operation was successful.";
       break;
-    }
-    throw FileException (QString("Error opening ") + f + " for writing.",
-			 QString("Log output file ") + f + " could not be "
-			 "opened for writing. " + msg);
-  }
+    }    
+    return msg;
 }

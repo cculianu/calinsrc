@@ -34,6 +34,14 @@
 class ExperimentLog: public QMultiLineEdit
 {
  public:
+  /* constructs an ExperimentLog with no open outfiles.. use
+     the property methods to set a template and outfile */
+  ExperimentLog (QWidget * parent = 0, const char * name = 0);
+
+  /* constructs an ExperimentLog with file as the output file and log_template
+     as the log template file.  Attempts to open and/or read both files, and 
+     may prompt the user to specify another file if it can't access
+     one of the files passed in.  */
   ExperimentLog (const QString & file, 
 		 const QString & log_template = QString::null, 
 		 QWidget * parent = 0, 
@@ -41,16 +49,31 @@ class ExperimentLog: public QMultiLineEdit
 
   ~ExperimentLog();
 
+  const QString outFile() const; /* returns the outfile name */
+
+  /* closes current output file and attempts to open a new one.  If it doesn't
+     exist this prompts the user to specify another file */
   void setOutFile (const QString &f);
+
+  /* attempts to save the text() buffer to the output file -- may throw
+     an application exception on error!! */
+  void saveOutFile ();
+
+  /* attempts to use log_template as the current template.  This implicitly
+     replaces the text buffer with the contents of the file log_template.
+     If log_template isn't valid, it just blanks out the buffer. */     
+  void useTemplate (const QString & log_template);
   
  private:
-  QString readFile(const QString & fileName) const ;
-  QString queryUserForFile(const QString & selected = QString(""),
-			   bool forceUserToPickSomething = true) const;
+  void init();
   void openOutFile();
 
+  static QString readFile(const QString & fileName);
+  static QString queryUserForFile(const QString & selected = QString(""),
+				  bool forceUserToPickSomething = true);
+  static const QString getQFileMessage(int status);
 
-  QFile outFile; 
+  QFile _outFile; 
 };
 
 #endif

@@ -42,6 +42,7 @@
 #include "sample_writer.h"
 #include "ecggraph.h"
 #include "daq_ecggraphcontainer.h"
+#include "log.h"
 #ifdef __RTLINUX__
 #endif
 
@@ -171,6 +172,9 @@ class DAQSystem : public QMainWindow
      association is channel_id -> DAQECGGraphContainer * */
   map <uint, DAQECGGraphContainer *> gcontainers;
   bool daqSystemIsClosingMode;
+
+  ExperimentLog log; /* the experiment log window */
+
 };
 
 
