@@ -45,7 +45,7 @@
 #define CODA_SUPER_MAGIC                0x73757245
 
 const char *TempFile::env_vars_to_try[] = {"TMP", "TMPDIR", 0};
-const char *TempFile::default_tmp_dir  = "/tmp";
+const char *TempFile::default_tmp_dir   = P_tmpdir; // P_tmpdir is from stdio.h
 
 TempFile::TempFile(const char * prefix, bool requireLocal) 
   : _fd(-1)
