@@ -33,9 +33,15 @@
 #include <qaccel.h>
 #include <qtable.h>
 #include <qheader.h>
+#include <qmessagebox.h> 
+#include <qfile.h>
 #include <iostream>
 #include <vector>
 #include <comedi.h>
+
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "configuration.h"
 #include "settings.h"
 #include "probe.h"
@@ -76,6 +82,7 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
 					  WFlags f = 0) : 
   QDialog(parent, name, f), 
 
+  startupScreenSemantics(false),
   deviceProbe(deviceProbe), 
   settings(settings),
   masterGrid(this, 5, 1), 
@@ -292,35 +299,84 @@ ConfigurationWindow::toSettings()
     DAQSettings::InputSource is = DAQSettings::File;
     if (deviceRadio.isChecked()) {
       is = ( selectedDevice().find(ComediSubDevice::AnalogInput)
-	     .used_by_rt_process /* <-- we assume that find() didn't return 
-				    a null comedi subdevice here! */
-	     ? DAQSettings::RTProcess
-	     : DAQSettings::Comedi );
+             .used_by_rt_process /* <-- we assume that find() didn't return 
+                                    a null comedi subdevice here! */
+             ? DAQSettings::RTProcess
+             : DAQSettings::Comedi );
     }	
     settings.setInputSource( is ); 
   }
-
+  
   settings.setDataFile(outputFile.text());
   settings.setDataFileFormat( (binaryRadio.isChecked()
-				? DAQSettings::Binary
-				: DAQSettings::Ascii)
-			    );
+                               ? DAQSettings::Binary
+                               : DAQSettings::Ascii)
+                              );
   settings.setShowConfigOnStartup(showDialogOnStartupChk.isChecked()); 
 }
 
 void
 ConfigurationWindow::accept()
 {
+  if (!validate()) return;
   toSettings();
   settings.saveSettings();
   QDialog::accept();
 }
 
-ConfigurationWindow::DeviceListView::DeviceListView 
-                                      (const vector<ComediDevice> & v, 
-				       QWidget * parent = 0, 
-				       const char * name = 0 ) 
-  : QListView (parent, name),  devs(v)
+bool
+ConfigurationWindow::validate()
+{
+  QFile of (outputFile.text());
+
+  
+
+  if (of.exists() && startupScreenSemantics ) {
+    struct stat buf;
+
+    stat(of.name(), &buf);
+
+    if (S_ISDIR(buf.st_mode) ) {
+
+      /* if it's a directory, complain and reject */
+      QMessageBox::critical(this,
+                            QString("%1 is a directory.").arg(of.name()),
+                            QString("%1 is a directory. Specify a "
+                                    "non-directory file for "
+                                    "output.").arg(of.name()),
+                            QMessageBox::Ok, QMessageBox::NoButton);
+      return false;
+
+    } else if (S_ISREG(buf.st_mode)) {
+
+      /* don't allow pre-existing regular files */
+      return 
+        ( 0 ==
+          
+          QMessageBox::warning 
+          (
+           this, 
+           QString("File %1 exists").arg(of.name()),
+           QString("The output filename you have chosen: %1 already exists.\n"
+                   "If you choose to continue, this file will be overwritten "
+                   "and your data will be lost!").arg(of.name()),
+           "Overwrite", 
+           "Cancel", 
+           QString::null,
+           1, 
+           1
+          )
+          
+       );
+    }
+  }
+  return true;
+}
+
+ConfigurationWindow::DeviceListView::
+DeviceListView (const vector<ComediDevice> & v, 
+                QWidget * parent = 0, 
+                const char * name = 0 )  : QListView (parent, name),  devs(v)
 { 
   setSelectionMode(Single);
   addColumn("Device");      
@@ -332,16 +388,16 @@ ConfigurationWindow::DeviceListView::DeviceListView
     const ComediDevice & d = devs[i];
     const ComediSubDevice & ai = d.find(ComediSubDevice::AnalogInput);
     QString driverTxt ( (!ai.isNull() && ai.used_by_rt_process  
-			 ? QString("rt-process.o")
-			 : d.drivername) );
+                         ? QString("rt-process.o")
+                         : d.drivername) );
     QString no_ai_chan ( (ai.isNull() 
-			  ? QString("No Output Device Detected") 
-			  : QString().setNum(ai.n_channels)));
-
+                          ? QString("No Output Device Detected") 
+                          : QString().setNum(ai.n_channels)));
+    
     insertItem(new QListViewItem(this, d.filename, d.devicename, driverTxt, 
-				 no_ai_chan));
+                                 no_ai_chan));
   }
-
+  
   /* setup the table header ... */
   QHeader *h = header();
   h->setClickEnabled( false );
@@ -356,10 +412,8 @@ ConfigurationWindow::DeviceListView::selectedDevice() const
   return devs[selectedItem()->itemPos()];
 }
 
-ConfigurationWindow::TextContentsPreviewer::TextContentsPreviewer
-                                                ( QWidget *w = 0,
-						  const char *n = 0 )
-  : QTextView(w, n)
+ConfigurationWindow::TextContentsPreviewer::
+TextContentsPreviewer ( QWidget *w = 0,  const char *n = 0 ) : QTextView(w, n)
 {
   /* nothing */
 }

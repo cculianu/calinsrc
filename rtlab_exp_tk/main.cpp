@@ -63,19 +63,19 @@ main(int argc, char *argv[])
     init(); /* this may throw an exception on error */
   
     /* display configuration window, if we're supposed to */
-    if ( (settings->getShowConfigOnStartup() || gotUnimplementedException) 
-	 && !conf->exec() ) {
+    if ( (settings->getShowConfigOnStartup() || gotUnimplementedException )    
+         && (conf->startupScreenSemantics=true) && !conf->exec() ) {
       uninit();
       return (1);
     }
 
     daqSystem = new DAQSystem(*conf, 0,0, 
-			      Qt::WType_TopLevel | Qt::WDestructiveClose );
+                              Qt::WType_TopLevel | Qt::WDestructiveClose );
     a.setMainWidget(daqSystem);     
-   
+    
     daqSystem->show();
     retval = a.exec();
-  
+    
   } catch (const UnimplementedException & e) {
     e.showError();
     gotUnimplementedException = true;
@@ -83,10 +83,12 @@ main(int argc, char *argv[])
     goto try_again;
   } catch (const Exception & e) {
     e.showError();
+    settings->setShowConfigOnStartup(true); // force this for next time 
+    settings->saveSettings();
     retval = 1;
   }
   uninit();
-
+  
   return retval;
 }
 
@@ -99,7 +101,7 @@ init(void)
     settings = new DAQSettings;
     conf = 
       new ConfigurationWindow (*probe, *settings, 0, "Configuration Window", 
-			       Qt::WType_TopLevel | Qt::WType_Modal);
+                               Qt::WType_TopLevel | Qt::WType_Modal);
 }
 
 static
@@ -109,8 +111,8 @@ uninit(void)
   if (conf) delete conf; conf = 0;
   if (settings) delete settings; settings = 0;
   if (probe) delete probe; probe = 0;
-  /* do not delete because of WDestructiveClose 
-     if (daqSystem) delete daqSystem; daqSystem = 0;   */
+  /* do not delete because of WDestructiveClose ? 
+     if (daqSystem) delete daqSystem; daqSystem = 0; */  
 }
 
 static
