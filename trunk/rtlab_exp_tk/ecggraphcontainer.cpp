@@ -95,7 +95,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setMargin(1);
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
-  QCheckBox *pauseBox = new QCheckBox("Pause", controlsBox);
+  pauseBox = new QCheckBox("Pause", controlsBox);
   pauseBox->setChecked(false);
   pauseBox->setMaximumSize(pauseBox->sizeHint());
   connect(pauseBox, SIGNAL(toggled(bool)), this, SLOT(pause(bool)));    
@@ -614,6 +614,7 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
 void ECGGraphContainer::pause(bool pause_on)
 {
   if (pause_on) currentIndex->setText("Graph Display PAUSED");
+  if (pause_on != pauseBox->isChecked()) pauseBox->setChecked(pause_on);
   hungry = !pause_on;
 }
 
