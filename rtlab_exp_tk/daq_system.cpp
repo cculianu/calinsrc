@@ -69,7 +69,6 @@
 #include "plugin.h"
 
 
-
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
 		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
 		      WFlags f = WType_TopLevel)
@@ -834,14 +833,7 @@ ReaderLoop(DAQSystem *d) :
       throw UnimplementedException("INTERNAL ERROR", "Unknown data file format specified in settings");
       break;
     }
-    { /* setup the writer to listen */
-      uint *tmp = new uint [n_channels];
-      for (uint i = 0; i < n_channels; i++) {
-	tmp[i] = i;
-      }
-      delete tmp;
 
-    }
     // add the writer as a consumer for all channels
     for (uint i = 0; i < n_channels; i++) producers[i].add(writer);
 

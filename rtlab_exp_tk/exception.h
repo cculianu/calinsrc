@@ -145,6 +145,15 @@ class FileFormatException : public FileException
     : FileException(brief, full) {};
 };
 
+class DiskFullException : public FileException
+{
+ public:
+  DiskFullException (const QString & brief = "The disk is full.",
+                     const QString & full = "Could not write to a file as the disk is full.")
+    : FileException(brief, full) {};
+
+};
+
 class SampleOutputFileException : public FileException
 {
  public:

@@ -42,6 +42,7 @@
 #include "daq_settings.h"
 #include "probe.h"
 #include "comedi_device.h"
+#include "output_file_w.h"
 
 
 #ifdef TEST_CW
@@ -71,9 +72,6 @@ main(int argc, char *argv[], char *envp[])
 
 #endif
 
-const char * const ConfigurationWindow::NDS_ASCII_SUFFIX = ".nds-ascii.gz",
-           * const ConfigurationWindow::NDS_BIN_SUFFIX   = ".nds";
-
 ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
 					  DAQSettings &settings,
 					  QWidget *parent = 0, 
@@ -90,23 +88,16 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   outputFileSelectionGroup(1, Horizontal, this),
   deviceGroupContainer(&deviceSelectionGroup),
   templateGroupContainer(&templateSelectionGroup),
-  outputFileGroupContainer(&outputFileSelectionGroup),
+  outputFileGroupContainer(&settings, &outputFileSelectionGroup),
   deviceSelectionGrid(&deviceGroupContainer, 4, 3),
   templateSelectionGrid(&templateGroupContainer, 3, 2),
-  outputFileSelectionGrid(&outputFileGroupContainer, 3, 2),
   deviceRadio(&deviceGroupContainer),
   fileRadio(&deviceGroupContainer),
-  outputFileRadioLabel("Output file format:", &outputFileGroupContainer),
   deviceTable(deviceProbe.probed_devices, &deviceGroupContainer),
-  asciiOrBinaryBox(&outputFileGroupContainer),
-  asciiRadio(&asciiOrBinaryBox),
-  binaryRadio(&asciiOrBinaryBox),
   inputFile(&deviceGroupContainer),
   templateFile(&templateGroupContainer),
-  outputFile(&outputFileGroupContainer),
   browseInputFiles("Browse...", &deviceGroupContainer),
   browseLogTemplates("Browse...", &templateGroupContainer),
-  browseOutputFiles("Browse...", &outputFileGroupContainer),
   logPreviewerLabel("Log Template Preview:", &templateGroupContainer),
   logPreviewer(&templateGroupContainer),
   showDialogOnStartupChk(this),
@@ -125,15 +116,15 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   deviceRadio.setText("Input data comes from a comedi device:");
   fileRadio.setText("Input data comes from a binary file:");
   connect(&fileRadio, SIGNAL(toggled( bool )), 
-	  &browseInputFiles, SLOT(setEnabled( bool )));
+          &browseInputFiles, SLOT(setEnabled( bool )));
   connect(&fileRadio, SIGNAL(toggled( bool )), 
-	  &inputFile, SLOT(setEnabled( bool ))); 
+          &inputFile, SLOT(setEnabled( bool ))); 
   connect(&deviceRadio, SIGNAL(toggled( bool )),
-	  &deviceTable, SLOT(setEnabled( bool )));
+          &deviceTable, SLOT(setEnabled( bool )));
   connect(&browseInputFiles, SIGNAL(clicked(void)),
-	  this, SLOT(askUserForInputFilename(void)));
+          this, SLOT(askUserForInputFilename(void)));
   connect(&deviceRadio, SIGNAL(toggled(bool)),
-	  &outputFileGroupContainer, SLOT(setEnabled(bool)));
+          &outputFileGroupContainer, SLOT(setEnabled(bool)));
   deviceRadio.setChecked(true);
   deviceSelectionRadioGroup.hide();
   deviceSelectionGrid.addMultiCellWidget(&deviceTable, 1, 1, 1, 2);
@@ -148,20 +139,6 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   outputFileGroupContainer.setEnabled(deviceRadio.isOn());
   outputFileSelectionGroup.setTitle("Output File Selection");
   masterGrid.addWidget(&outputFileSelectionGroup, 1, 0);
-  outputFileSelectionGrid.addWidget(&outputFile, 0, 0);
-  outputFileSelectionGrid.addWidget(&browseOutputFiles, 0, 1);
-  outputFileSelectionGrid.addWidget(&outputFileRadioLabel, 1, 0);
-  outputFileSelectionGrid.addMultiCellWidget(&asciiOrBinaryBox, 2, 2, 0, 1); 
-  outputFileRadioGroup.insert(&asciiRadio, 0);
-  outputFileRadioGroup.insert(&binaryRadio, 1);
-  asciiRadio.setText("Output Ascii");
-  binaryRadio.setText("Output Binary");
-  connect(&browseOutputFiles, SIGNAL(clicked(void)),
-          this, SLOT(askUserForOutputFilename(void)));
-  connect(&asciiRadio, SIGNAL(clicked()),
-          this, SLOT(resuffixIze()));
-  connect(&binaryRadio, SIGNAL(clicked()),
-          this, SLOT(resuffixIze()));
 
   templateSelectionGroup.setTitle("Log Template Selection");
 
@@ -210,12 +187,7 @@ ConfigurationWindow::fromSettings()
     deviceRadio.setChecked(true);
   }
 
-  outputFile.setText(settings.getDataFile());
-  if (settings.getDataFileFormat() == DAQSettings::Binary) {
-    binaryRadio.setChecked(true);
-  } else {
-    asciiRadio.setChecked(true);
-  }
+  outputFileGroupContainer.fromSettings();
 
   const QString & settingsDevF = settings.getDevice();
   QListViewItem *item = deviceTable.firstChild();
@@ -244,33 +216,6 @@ ConfigurationWindow::askUserForInputFilename()
 
   if (fileDialog.exec()) {
     inputFile.setText(fileDialog.selectedFile());
-  }
-}
-
-void ConfigurationWindow::resuffixIze()
-{
-    QString s(outputFile.text()), desired_suffix( ( asciiRadio.isOn() ? NDS_ASCII_SUFFIX : NDS_BIN_SUFFIX ) );
-    if (s.endsWith(NDS_ASCII_SUFFIX)) s.remove(s.length() - QString(NDS_ASCII_SUFFIX).length(), s.length());
-    else if (s.endsWith(NDS_BIN_SUFFIX)) s.remove(s.length() - QString(NDS_BIN_SUFFIX).length(), s.length());
-    s += desired_suffix;
-    outputFile.setText(s);
-}
-
-void
-ConfigurationWindow::askUserForOutputFilename()
-{
-  QString filter = QString ("DAQ System Data Files (*%1 *%2)").arg(NDS_BIN_SUFFIX).arg(NDS_ASCII_SUFFIX);
-  QFileDialog fileDialog(this, 0, true);
-
-  fileDialog.setMode(QFileDialog::AnyFile);
-  fileDialog.setViewMode(QFileDialog::Detail);
-  fileDialog.setFilter(filter);
-
-  fileDialog.setSelection(outputFile.text());
-
-  if (fileDialog.exec()) {
-    outputFile.setText(fileDialog.selectedFile());
-    resuffixIze();
   }
 }
 
@@ -320,11 +265,8 @@ ConfigurationWindow::toSettings()
     settings.setInputSource( is ); 
   }
   
-  settings.setDataFile(outputFile.text());
-  settings.setDataFileFormat( (binaryRadio.isChecked()
-                               ? DAQSettings::Binary
-                               : DAQSettings::Ascii)
-                              );
+  outputFileGroupContainer.toSettings();
+
   settings.setShowConfigOnStartup(showDialogOnStartupChk.isChecked()); 
 }
 
