@@ -21,111 +21,207 @@
  * http://www.gnu.org.
  */
 
+#include <qfile.h>
 #include <qfiledialog.h>
+#include <qmessagebox.h>
 #include <qcstring.h>
-#include <qdatastream.h>
+#include <qtextstream.h>
 
 #include "log.h"
 #include "exception.h"
 
+#define LOG_CLASS_CONSTRUCTOR_INIT_LIST \
+  QWidget(p, n), layout (this, 2, 2), mle(this), \
+  fileNameLabel("(untitled)", this), changedLabel("MOD", this)
+
 
 ExperimentLog::
-ExperimentLog(QWidget * p = 0, const char * n = 0)
-  : QMultiLineEdit (p, n)
+ExperimentLog(QWidget * p = 0, const char * n = 0) 
+  : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
   init();
 }
 
 ExperimentLog::
 ExperimentLog (const QString & f, const QString & t = QString::null, 
-	       QWidget * p = 0, const char * n = 0)
-  : QMultiLineEdit(p, n)
-
+               QWidget * p = 0, const char * n = 0)
+  : LOG_CLASS_CONSTRUCTOR_INIT_LIST
 {
   init();
-  useTemplate(t);
+  loadTemplate(t);
   setOutFile(f);
 }
+
+#undef LOG_CLASS_CONSTRUCTOR_INIT_LIST
 
 void
 ExperimentLog::
 init() /* initialization routine shared by constructors */
 {
-  setWordWrap(WidgetWidth);
-  setWrapPolicy (AtWordBoundary);
-  setTextFormat(Qt::PlainText);
+  setUnsavedStatus(false);
+  mle.setUndoRedoEnabled(true);
+  mle.setUndoDepth(100);
+  mle.setWordWrap(QMultiLineEdit::WidgetWidth);
+  mle.setWrapPolicy (QMultiLineEdit::AtWordBoundary);
+  mle.setTextFormat(Qt::PlainText);
+  mle.setVScrollBarMode(QScrollView::Auto);
+  mle.setHScrollBarMode(QScrollView::Auto);
+  connect (&mle, SIGNAL(textChanged()), this, SLOT(changed()));
+
+  fileNameLabel.setFont(QFont("Helvetica", 8));
+  changedLabel.setFont(QFont("Helvetica", 8));
+
+  layout.setRowStretch(0,1);
+  layout.setColStretch(0,1);
+  layout.addMultiCellWidget(&mle, 0, 0, 0, 1);
+  layout.addWidget(&fileNameLabel, 1, 0);
+  layout.addWidget(&changedLabel, 1, 1);
+
 }
 
 ExperimentLog::
 ~ExperimentLog()
 {
-  if (_outFile.isOpen()) { saveOutFile(); _outFile.close(); }
+  /* nothing */
 }
 
-
-const QString
+/* Sets the save file.   */
+void 
 ExperimentLog::
-outFile() const 
-{
-  return _outFile.name();
+setOutFile (const QString &f)
+{ 
+  _outFile = f; 
+  fileNameLabel.setText(_outFile.section('/',-1));
 }
 
-/* closes current output file and attempts to open a new one.  If it doesn't
-   exist this prompts the user to specify another file */
+/* attempts to use contents of file as the current text.  This implicitly
+   replaces the text buffer with the contents of the file.
+   If file isn't valid, it just blanks out the buffer. */     
 void
 ExperimentLog::
-setOutFile(const QString & f)
+loadTemplate(const QString & file)
 {
-  bool ok = false;
+  if (!checkUnsaved()) /* user cancelled */ return;
+  mle.setText(readFile(file));  
+  setUnsavedStatus(false);
+}
 
-  if (_outFile.isOpen()) _outFile.close();
-  while (!ok) {
-    _outFile.setName(f);
-    try {
-      openOutFile();
-      ok = true;
-    } catch (FileException & e) {
-      e.showError();
-      _outFile.setName(queryUserForFile(f));      
-    }
+
+void
+ExperimentLog::
+load()
+{ 
+  if (!checkUnsaved()) /* user cancelled */ return;
+
+  QString f( QFileDialog::getOpenFileName( outFile(),
+                                           "Logs (*.log *.txt)", this ) );
+  if ( f.isEmpty() )
+    return;
+
+  setUnsavedStatus(false); /* hack, but it works -- needed to prevent the
+                              other checkUnsaved() call in loadTemplate() */
+
+  loadTemplate( f ); 
+  setOutFile(f);
+}
+
+void
+ExperimentLog::
+save()
+{
+
+  if (outFile().isNull()) {
+    saveAs();
+    return;
+  } 
+  try {    
+    saveOutFile();
+  } catch (FileException & e) {
+    e.showError();
+    saveAs();
   }
 }
 
+void 
+ExperimentLog::
+saveAs()
+{
+  QString f( QFileDialog::getSaveFileName( outFile(), 
+                                           "Logs (*.log *.txt)", this ));
+  if (f.isNull()) return;
+
+  setOutFile(f);
+  save();
+}
+
+void
+ExperimentLog::
+revert()
+{
+  if (!outFile().isNull()) {
+    loadTemplate(outFile());
+  }
+}
+
+void
+ExperimentLog::insertAtCursor (const QString & text) 
+{
+  int row, col;
+  mle.getCursorPosition(&row, &col);
+  mle.insertAt(text, row, col);
+}
+
+bool
+ExperimentLog::
+checkUnsaved() 
+{  
+  if (unsavedStatus()) {
+    int userSaid =
+    QMessageBox::
+      warning(this, 
+              "The log is unsaved.", 
+              "The log is unsaved.  Do you wish to save changes, discard "
+              "changes, or cancel?",
+              "Save Changes", "Discard", "Cancel", 0, 2);
+    switch (userSaid) {
+    case 0: /* save changes */
+      save();
+      QMessageBox::information(this, "Changes saved.", 
+                               QString("Changes saved to '%1'.").arg(outFile()), 
+                               QMessageBox::Ok);
+      break;
+    case 1: /* discard changes */
+      break;
+    case 2: /* cancel */
+      return false;
+      break;
+    }
+  }
+  return true;
+
+}
+
 /* attempts to save the text() buffer to the output file -- may throw
-   an application exception on error!! 
-   ^^-- currently no error handling is implemented -Calin */
+   an application exception on error!! */
 void
 ExperimentLog::
 saveOutFile()
 {
-  _outFile.reset(); /* just to make sure we are not appending but re-saving
-		       everything */
+  QFile out(outFile());
 
-  QDataStream s(&_outFile);
-  s << text();
-}
-
-/* attempts to use log_template as the current template.  This implicitly
-   replaces the text buffer with the contents of the file log_template.
-   If log_template isn't valid, it just blanks out the buffer. */     
-void
-ExperimentLog::
-useTemplate(const QString & log_template)
-{
-  setText(readFile(log_template));  
-}
-
-
-void
-ExperimentLog::
-openOutFile()
-{
-  if (! _outFile.open(IO_WriteOnly | IO_Truncate | IO_Translate)) {    
-    QString msg(getQFileMessage(_outFile.status())), f(_outFile.name());
+  if (! out.open(IO_WriteOnly | IO_Translate | IO_Truncate)) {    
+    QString msg(getQFileMessage(out.status())), f(out.name());
     throw FileException (QString("Error opening ") + f + " for writing.",
-			 QString("Log output file ") + f + " could not be "
-			 "opened for writing. " + msg);
+                         QString("Log output file ") + f + " could not be "
+                         "opened for writing. " + msg);
   }
+
+  QTextStream s(&out);
+
+  s.setEncoding(QTextStream::Latin1);
+  s << mle.text();
+  out.flush();
+  setUnsavedStatus(false);
 }
 
 /* Reads a file at location "fileName" and cleans up the
@@ -149,33 +245,9 @@ readFile(const QString & fileName)
       for (uint i = 0; i < length; i++) if (data[i] == 0) data[i] = 32;
       ret = QString(data);
     }
+    f.close();
   }
   return ret;
-}
-
-/* returns QString::null if forceUserToPickSomething is false and the user
-   cancelled the request, otherwise returns the filename the user
-   specified */
-QString
-ExperimentLog::
-queryUserForFile(const QString & selected, 
-		 bool forceUserToPickSomething = true)
-{
-  static const char *filters[2] = {"All files (*)", 0};
-  QFileDialog fileDialog(0, 0, true);
-
-  fileDialog.setMode(QFileDialog::AnyFile);
-  fileDialog.setViewMode(QFileDialog::Detail);
-  fileDialog.setFilters(filters);
-
-  fileDialog.setSelection(selected);
-    
-  /* keep retrying until they pick a damned file */
-  while (fileDialog.exec() != QDialog::Accepted && forceUserToPickSomething) 
-    fileDialog.setSelection(fileDialog.selectedFile());    
-  
-
-  return (QDialog::Accepted ? fileDialog.selectedFile() : QString::null);    
 }
 
 const QString

@@ -120,6 +120,9 @@ class DAQSystem : public QMainWindow
   void saveGraphSettings(const DAQECGGraphContainer *);
   void about() { /* about the application */ };
 
+  /* Log-related slots */
+  void logTimeStamp(); /* writes the current sample count into the log */
+
  protected slots:
   /* this slot does the necessary work to tell the rt-process that a 
      channel's range/gain setting needs to be changed */
@@ -137,6 +140,10 @@ class DAQSystem : public QMainWindow
   void windowMenuRemoveWindow(const DAQECGGraphContainer *w) 
     {windowMenuRemoveWindow((const QWidget *)w); } 
 
+  /* Simply enables and disables some menu options based on the
+     current window */
+  void windowActivated (QWidget *w);
+
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
@@ -151,14 +158,18 @@ class DAQSystem : public QMainWindow
 
   QWorkspace ws;
   QMenuBar _menuBar;
-  QPopupMenu fileMenu, channelsMenu, windowMenu, helpMenu;
+  QPopupMenu fileMenu, editMenu, logMenu, channelsMenu, windowMenu, helpMenu;
+
+  /* I don't even want to explain this.. but this stuff helps manage
+     the blurring and enabling of the edit menu based on context */
+  set<int> editMenuItemsToDisableWhenNoLog; QWidget *last_to_activate;
 
   /* keeps track of windowMenu indexes -> MDI windows so that the 
      Window menu works */
   map <int, QWidget *> menuIdToWindowMap; 
 
   QToolBar mainToolBar;
-  QToolButton addChannelB;
+  QToolButton addChannelB, timeStampB;
   QStatusBar statusBar;
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
