@@ -1,39 +1,7 @@
 #include <iostream>
-#include "dsdstream.h"
+#include "dsd_repair.h"
 
 using namespace std;
-
-class DSDRStream : public DSDIStream {
-public:
-
-  DSDRStream()  { init(); }
-  DSDRStream (const QString & inFile) : DSDIStream(inFile)
-    { init();  } ;
-  
-  void start();
-  bool readNextScan (map<uint, SampleStruct> & m);
-
-  bool readNextSample ( SampleStruct * s );
-  bool readNextSample ( SampleStruct & s ) { return readNextSample(&s); };
-
-private:
-  bool no_meta_data;
-
-  void createMetaData();
-
-  void init() { no_meta_data = false; }
-
-  template<class T> bool readNextSampleTempl ( SampleStruct * s);
-
-protected:
-
-   template<class T> DSDStream & operator>>(T & t) /*throw (FileException)*/ {
-      *static_cast<QDataStream *>(this) >> (t);
-      return *this;
-   };
-
-};
-
 
 void DSDRStream::start()
 {
@@ -93,6 +61,28 @@ DSDRStream::readNextScan (map<uint, SampleStruct> & m) //throw (IllegalStateExce
   return ret;
 }
 
+
+/* reads the next full scan and modifies v  */
+bool
+DSDRStream::readNextScan (vector<SampleStruct> & v) //throw (IllegalStateException, FileFormatException, FileException)
+{
+  v.clear();
+  bool ret = true;
+  uint i;
+  SampleStruct s;
+
+  v.clear();
+
+  if (chans_this_scan == 0)  {
+    ret = readNextSample(s);
+    v.push_back(s);
+  }
+
+  for (i = 0; chans_this_scan && ( ret = readNextSample(s) ) ; i++)
+    v.push_back(s);
+
+  return ret;
+}
 
 
 bool DSDRStream::readNextSample ( SampleStruct * s ) 
@@ -169,42 +159,4 @@ template<class T> bool DSDRStream::readNextSampleTempl ( SampleStruct * s) //thr
   if (chans_this_scan)  goto get_it_from_cache;
   return false;
 }
-
-
-
-#include <errno.h>
-
-int main (int argc, char *argv[]) 
-{
-
-  if (argc != 2) {
-    cerr << "Usage: dsdrepair filename.nds" << endl;
-    return EINVAL;
-  }
-
-  DSDRStream in(argv[1]);
-  DSDOStream out("RECOVERED.nds", 1000);
-
-
-  map<uint, SampleStruct> scan;
-
-  try {
-  
-    while (in.readNextScan(scan)) {
-      map<uint, SampleStruct>::iterator it;
-      
-      for (it = scan.begin(); it != scan.end(); it++) 
-        out.writeSample(&it->second);
-    }
-    out.end();
-    cout << "Recovered " << (uint64_to_cstr(out.scanCount())) << " samples." 
-         << endl;
-    return 0;
-
-  } catch (Exception & e) {
-    cerr << e.briefMsg().latin1() << " - " << e.fullMsg().latin1() << endl;
-    return EINVAL;
-  }
-}
-
 
