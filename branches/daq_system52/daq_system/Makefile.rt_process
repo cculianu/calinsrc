@@ -1,0 +1,19 @@
+#######################################################################
+#
+#  Makefile for rt_process.o
+#
+#  David Christini
+#
+#######################################################################
+
+#rtl.mk is automatically generated during rtlinux install. 
+include /usr/src/rtlinux/rtl.mk
+
+
+rt_process.o: rt_process.c
+	$(CC) ${INCLUDE} ${CFLAGS} -c -o rt_process_tmp.o rt_process.c
+	ld -r -static rt_process_tmp.o -o rt_process.o -L/usr/lib -lm 
+	rm -f rt_process_tmp.o
+
+clean:
+	-rm -f *.o 
