@@ -357,15 +357,19 @@ void ECGGraph::plotPoints (int firstIndex, int lastIndex,
       painter.drawRect(points[i].x()-(w/2), points[i].y()-(w/2), w, w );
     break;
   default:
-    painter.drawPolyline(points, firstIndex, lastIndex-firstIndex+1);
+    for (i = firstIndex; i < ((int)sz) && i <= lastIndex; i++)
+      if (!points[i].isNull()) break; // skip null points at beginning?
+    if (i < lastIndex)
+      painter.drawPolyline(points, i, lastIndex-i+1);
     break;
   }
   painter.end();
 }
 
 void ECGGraph::deletePlotsBetween (int firstIndex, int secondIndex) {
-  QPoint &p1 = points->at(firstIndex), &p2 = points->at(secondIndex);
-  
+  QPoint p1 = sampleVectorToPoint(0, firstIndex), 
+         p2 = sampleVectorToPoint(0, secondIndex);
+
   bitBlt(this, p1.x()+1, 0, &_background, p1.x()+1, 0, p2.x()-p1.x(), height(), CopyROP, TRUE);
   bitBlt(&_buffer, p1.x()+1, 0, &_background, p1.x()+1, 0, p2.x()-p1.x(), height(), CopyROP, TRUE);
 
@@ -558,19 +562,35 @@ void ECGGraph::setSecondsVisible(int seconds)
 }
 
 void
-ECGGraph::reset() 
+ECGGraph::reset(uint64 new_outside_concept_of_a_sample_index) 
 {
+  // hack
+  outside_concept_of_a_sample_index = new_outside_concept_of_a_sample_index;
+
   computeCurrentSampleIndex(true);
   _totalSampleCount = 0;
   remakeAllPoints();
+}
+
+uint
+ECGGraph::currentPosition() const
+{
+  return currentSampleIndex;
 }
 
 void 
 ECGGraph::ffwd(unsigned int amt)
 {
   if (!amt) return;
-  currentSampleIndex += amt-1; // since computeCurrentSampleIndex() adds one..
+  int old = currentSampleIndex;
+  _totalSampleCount += amt;  
+  currentSampleIndex += amt-1; // since computeCurrentSampleIndex() adds one.. 
   computeCurrentSampleIndex();
+  deletePlotsBetween(old, currentSampleIndex); // clear old plots!
+  for (int i = old; i < currentSampleIndex; i++) {
+    makePoint(NOT_VALID_AMPL, i);
+  }
+  
 }
 
 void ECGGraph::drawLittleBlip (int index) {
