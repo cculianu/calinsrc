@@ -108,8 +108,6 @@ typedef struct {
                            /* comedi channel structure for Analog Input      */
 } SharedMemStruct;
 
-int SpikeDetect(void); //func for detecting spikes
-void PrintkTimeCheckStats(void); //func for printk jitter & task rate stats
 
 const int NumOverThreshold=1;                //pts above thresh for a spike
 const float ScanToMsConversion=1000.0/(float)(RT_HZ); //

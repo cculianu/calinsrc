@@ -2,6 +2,7 @@
  * This file is part of the RT-Linux Multichannel Data Acquisition System
  *
  * Copyright (C) 1999,2000 David Christini
+ * Copyright (C) 2001 Calin Culianu
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,7 +20,6 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-
 
 
 #include <linux/module.h> 
@@ -52,12 +52,11 @@ int init_module(void);        /* set up RT stuff */
 void cleanup_module(void);    /* clean up RT stuff */
 static int init_shared_mem(void);   /* set up RT shared memory */
 static void cleanup_fifos(void);
+static int SpikeDetect(void); //func for detecting spikes
 static void cleanup_comedi_stuff(void);
 
 static pthread_t daq_task = 0;        /* main RT task */
 static volatile SharedMemStruct *sh_mem = 0; /* define mbuff shared memory */
-
-static int        it;                /* our comedi device */
 
 #ifdef FANCYPANTS_DATA_READ_METHOD 
 static comedi_trig ai_trig;          /* main comedi trigger structure */
@@ -77,10 +76,7 @@ static const unsigned int
        getFifos[NUM_GET_FIFOS] = GET_FIFOS, /* Our set of get fifos*/
        putFifos[NUM_PUT_FIFOS] = PUT_FIFOS; /* Our set of put fifos*/
 
-#define NUM_TIME_CHECK 10                /* num times through loop to check */
-long time_tick_check[2][NUM_TIME_CHECK]; /* check time first 10 times through */
-
-void *daq(void *arg) { /* this task reads and writes data to a DAQ board */
+static void *daq(void *arg) { /* this task reads and writes data to a DAQ board */
   int i; /*  loop index */
 
 #ifndef FANCYPANTS_READ_METHOD
@@ -156,8 +152,7 @@ int init_module(void) {
     goto init_error;
   }
 
-  if ( (it = comedi_open(AI_DEV)) < 0 ) {
-    error = it;
+  if ( (error = comedi_open(AI_DEV)) < 0 ) {
     errorMessage = "Error opening comedi device";
     goto init_error;
   }   
@@ -290,7 +285,7 @@ void cleanup_module(void) {
 
 }
 
-int SpikeDetect(void) {
+static int SpikeDetect(void) {
   /* check for spike in each AI signal: */
   /* must have been at least spike_blanking scans since last v_spike */
   /* must be at least NumOverThreshold scans in a row over threshold */
@@ -321,34 +316,6 @@ int SpikeDetect(void) {
 
   }
   return 0;
-}
-
-
-void PrintkTimeCheckStats (void) { /* func for printk jitter & task rate stats */
-
-  int jjj; /* loop index */
-  long time_usec_check[2][NUM_TIME_CHECK]; /* check time first 10 times through */
-
-  for (jjj=1; jjj<NUM_TIME_CHECK; jjj++) {
-    time_usec_check[0][jjj]=
-      (long)((1e6*time_tick_check[0][jjj])/NSECS_PER_SEC);
-    time_usec_check[1][jjj]=
-      (long)((1e6*time_tick_check[1][jjj])/NSECS_PER_SEC);
-
-    rtl_printf("rt_process loop %d:  time_in = %ld ticks (%ld us)
-                    us since last time_in (the rt_process period) = %ld
-                    time_out= %ld ticks (%ld us)
-                    us since time_in (how long task itself takes) = %ld\n",
-	   jjj,
-	   time_tick_check[0][jjj],
-	   time_usec_check[0][jjj],
-	   time_usec_check[0][jjj]-time_usec_check[0][jjj-1],
-	   time_tick_check[1][jjj],
-	   time_usec_check[1][jjj],
-	   time_usec_check[1][jjj]-time_usec_check[0][jjj]
-	   );
-  }
-
 }
 
 static void cleanup_fifos (void) {

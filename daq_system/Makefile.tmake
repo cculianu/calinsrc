@@ -2,6 +2,9 @@
 # edit the below line to specify the location of the rtl.mk files created
 # when you compiled the rt-linux kernel 
 #
+#TODO: Have ONE unified Makefile.tmake/template combo that generates both
+#      Makefile.daq_system and Makefile.rt_process based on the common
+#      config options and file paths. 
 RTL_MK = /usr/src/rtlinux/rtl.mk
 
 TEMPLATE    =	daq_system.t
