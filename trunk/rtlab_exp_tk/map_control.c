@@ -90,7 +90,7 @@ module_exit(map_control_cleanup);
 static MCShared *shm = 0;
 
 static RRIntervals  rr_intervals;
-static MCLiebnitz  working_liebnitz; /* used for inter-function comm.      */
+static MCSnapShot  working_liebnitz; /* used for inter-function comm.      */
 static int          last_ao_chan_used = -1;
 static unsigned int ao_range = 0;
 static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
@@ -116,7 +116,8 @@ static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
 #define G_ADJ_CURR    CURR->g_adjustment_mode
 
 /*---------------------------------------------------------------------------- 
-  Some initial values or otherwise private constants...                 
+  Some initial parameters or otherwise private constants...                 
+  Tweak these to suit your taste...
 -----------------------------------------------------------------------------*/
 static const   int INIT_NOM_NUM_STIMS = 20;  /* the nominal num_stims value  */
 static const   int STIM_PERIOD        = 5;   /* in milliseconds              */
@@ -220,7 +221,7 @@ static void do_map_control_stuff (MultiSampleStruct * m)
 static int init_shared_mem(void)
 {
 
-  memset(&working_liebnitz, 0, sizeof(MCLiebnitz));
+  memset(&working_liebnitz, 0, sizeof(MCSnapShot));
 
   shm = 
     (MCShared *) rtos_shm_attach (MC_SHM_NAME,

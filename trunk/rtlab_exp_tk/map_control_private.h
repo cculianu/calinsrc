@@ -29,7 +29,7 @@ class ShmController;
 class ECGGraph;
 class QWidget;
 struct MCShared;
-struct MCLiebnitz;
+struct MCSnapShot;
 class QGridLayout;
 class QLabel;
 class SearchableComboBox;
@@ -107,7 +107,7 @@ private:
 
   QCheckBox *g_adj_manual_only, *control_toggle; 
 
-  TempSpooler<MCLiebnitz> *spooler;
+  TempSpooler<MCSnapShot> *spooler;
 
   void addAxisLabels(); /* puts the axis labels for the above graphs in */
   void populateAOComboBox();  
