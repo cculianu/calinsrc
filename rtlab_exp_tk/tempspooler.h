@@ -73,6 +73,8 @@ template <class T> class TempSpooler : public TempFile
       unsigned long long int numLeft = 0;
       int r;
 
+      if (!numSpooled()) return; /* abort early if we have no data */
+
       r = ::lseek(*this, 0, SEEK_SET);
       Assert<FileException>(r >= 0, "Seek error in "__FILE__, strerror(errno));
       r = ::read(*this, &numLeft, sizeof(numLeft));

@@ -133,7 +133,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   log(0),
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu"),
-  windowTemplateDlg(0)
+  windowTemplateDlg(0),
+  last_secs_vis_they_picked(0)
 {
   setIcon(QPixmap(DAQImages::daq_system_img));
 
@@ -150,6 +151,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
           this, SLOT(spikeBlankingChanged(uint, uint)));
   connect(graphControls, SIGNAL(spikePolarityChanged(uint, SpikePolarity)), 
           this, SLOT(spikePolarityChanged(uint, SpikePolarity)));
+  connect(graphControls, SIGNAL(secondsVisibleChanged(uint, uint)),
+          this, SLOT(rememberSecondsVisibleThatUserPicked(uint, uint)));
   
 
   printer.setPageSize(settings.getPageSize());
@@ -519,6 +522,8 @@ DAQSystem::queryOpen(uint & chan, uint & range,
       if (i < sizeof(n_seconds_options) / sizeof(const int)) {
         /* build n_secs combo box here */
         nSecs.insertItem(QString().setNum(n_seconds_options[i]) +" seconds");
+        if (last_secs_vis_they_picked == n_seconds_options[i])
+          nSecs.setCurrentItem(i);
       }
     }
     
@@ -549,7 +554,7 @@ DAQSystem::queryOpen(uint & chan, uint & range,
   if (retval) {
     chan = cbox2idMap[ id.currentItem() ];
     range = gain.currentItem();
-    n_secs = n_seconds_options[nSecs.currentItem()];    
+    last_secs_vis_they_picked=n_secs = n_seconds_options[nSecs.currentItem()];
     /* save ok settings on accepted */
     prevRange = range; prevNSecs = n_secs;
   }
@@ -1026,6 +1031,12 @@ void DAQSystem::channelsOn (const vector<uint> & chanspec)
 
   for (i = 0; i < chanspec.size(); i++) 
     shmCtl.setChannel(ComediSubDevice::AnalogInput, chanspec[i], true);  
+}
+
+void DAQSystem::rememberSecondsVisibleThatUserPicked(uint c, uint s)
+{
+  (void)c;
+  last_secs_vis_they_picked = s;
 }
 
 ReaderLoop::
