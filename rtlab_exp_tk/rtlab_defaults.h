@@ -51,6 +51,8 @@ extern "C" {
    use in the AO and AI RT-Fifos -- defaults to 5 seconds worth 
    of scans! */
 #define DEFAULT_FIFO_SECS 5
+/** Each fifo shouldn't exceeed this size in bytes by default */
+#define DEFAULT_MAX_FIFO 1000000
 
 #define DEFAULT_SPIKE_BLANKING ((unsigned int)100) /* In milliseconds        */
 

@@ -199,8 +199,8 @@ volatile const char *
 ShmController::chanUseArray (int channeltype) 
 {
   return ( channeltype == COMEDI_SUBD_AO
-	   ? shm->ao_chans_in_use
-	   : shm->ai_chans_in_use );
+           ? shm->ao_chans_in_use
+           : shm->ai_chans_in_use );
 }
 
  

@@ -23,35 +23,80 @@
 #ifndef _RTLAB_TYPES_H
 #define _RTLAB_TYPES_H 1
 
-/*
-  RTLab Type definitions -- some day we will be 32/64 bit neutral
-  using these type aliases.
 
-  In other words, these type aliases might some day be conditional upon the 
-  architecture we are on -- but for now they just are basic and assume we are 
-  on an IA32-like architechture. 
-  (That is, a 32-bit arch with a 64 bit long long type.)
+
+/*
+  RTLab Type definitions -- provides 32/64 bit neutrality using these type 
+  aliases.
+
+  In other words, these type aliases are conditional upon the 
+  architecture we are on -- this is based on the kernel's own __sXX/__uXX 
+  types defined in asm/types.h
 */
+
 #ifdef __KERNEL__
-/* Kernel headers seem to define uint so we will make sure we have uint from
-   kernel headers in kernel mode                                             */
+
+/*  KERNEL */
+
+/* Kernel headers seem to define stuff well so we will use their type
+   aliases when in kernel mode                                               */
 #  include <linux/types.h>
-#else 
+
+typedef __s32 int32;
+typedef __u32 uint32;
+
+typedef __s16 int16;
+typedef __u16 uint16;
+
+typedef __s8 int8;
+typedef __u8 uint8;
+
+typedef __s64 int64;
+typedef __u64 uint64;
+
+
+#else
+
+/*  USER */
+
 /* User headers may not have uint so we will define it here                  */
 typedef unsigned int uint;
-#endif
 
+#  include <limits.h>
+
+/* assumes gnu c!! */
+#  if  LONG_MAX  ==   2147483647L 
+#    define WORDSIZE 32
+#  else 
+#    define WORDSIZE 64
+#  endif
+
+#  if WORDSIZE == 64
 typedef int int32;
 typedef unsigned int uint32;
+#  else
+typedef long int int32;
+typedef unsigned long int uint32;
+#  endif
 
 typedef short int16;
 typedef unsigned short uint16;
 
-typedef char int8;
+typedef signed char int8;
 typedef unsigned char uint8;
 
+#  if WORDSIZE == 64
+typedef signed long int    int64;
+typedef unsigned long int uint64;
+#  else
+typedef signed long long int    int64;
 typedef unsigned long long int uint64;
-typedef long long int int64;
+#  endif
+
+#  undef WORDSIZE
+
+
+#endif /* __KERNEL__ */
 
 
 /* Used in SharedMemStruct                                                   */

@@ -217,14 +217,13 @@ Probe::validate() const
   
   // we don't have at least 1 analog input device
 
-  throw NoComediDeviceException("Missing AI subdevice", 
-                                "Required analog input subdevice not found.  "
-                                "You may have an incompatible board, or your "
-                                "board may be configured incorrectly.\n\n"
-                                "If you are using the rtlab.o driver, "
-                                "there maybe have been a problem attaching  "
-                                "to the real-time task due to permissions or "
-                                "other assored setup issues.");
+  throw NoComediDeviceException
+    ("Missing AI subdevice", 
+     "The required analog input subdevice was not found.  You may have an\n"
+     "incompatible board, or your board may be misconfigured.\n\n"
+     "If you are using the rtlab.o driver, there maybe have been a problem\n"
+     "attaching  to the real-time task due to permissions or other assored\n"
+     "setup issues.");
 }
 
 static pid_t get_attached_to_rtlab(void)
@@ -280,17 +279,14 @@ Probe::attach_to_shm_and_stuff()
     if (num_procs_of_my_exe_no_children() > 1 || 
         have_rt_process && pid && attachedName == myName )  {
       const char *msg =
-        "It appears that either another instance of this program is running, "
+        "It appears that either another instance of this program is running,\n"
         "or that a previous instance may have exited uncleanly.\n\n"
-        "It is recommended that you make sure there are no other instances "
+        "It is recommended that you make sure there are no other instances\n"
         "running.\n",
         *title = "DAQ System already running!";
-      //int warning ( QWidget * parent, const QString & caption, const QString & text, const QString & button0Text = QString::null, const QString & button1Text = QString::null, const QString & button2Text = QString::null, int defaultButtonNumber = 0, int escapeButtonNumber = -1 )
-      /* there _is_ another DAQSystem running! But we will just warn them.. */
-      //UniqueResourceException(title,  msg).showError();
       if (QMessageBox::warning(0, title, msg, QMessageBox::Ignore, 
-                               QMessageBox::Cancel, QMessageBox::NoButton) 
-          == QMessageBox::Cancel) abort();
+                               QMessageBox::Abort, QMessageBox::NoButton) 
+          != QMessageBox::Ignore) abort();
     }
   }
 

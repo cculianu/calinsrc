@@ -586,7 +586,23 @@ void APDcontrol::moduleAttach()
                           "memory buffer named \"" MC_SHM_NAME "\".  "
                           "(Or it is of the wrong version)\n\n"
                           "Are you sure that module apd_control.o is loaded?");
-  
+  {
+    uint 
+      my_freq  = shm->rt_monitoring_frequency, 
+      daq_freq = daq_shmCtl->samplingRateHz();
+
+    Assert<PluginException>(my_freq <= daq_freq && 
+                           ((my_freq * (daq_freq / my_freq)) == daq_freq),
+                           "Sampling Rate Error",QString (
+                           "The APD Control Plugin can not start because the "
+                           "%1 Hz sampling rate that\n"
+                           "DAQSystem is using to acquire data is either "
+                           "below the required %2 Hz rate,\n"
+                           "or is not numerically compatible with %3 Hz.\n\n"
+                           "Please set DAQSystem to a rate that is either "
+                           "%4 Hz or a multiple thereof.").arg(daq_freq)
+                          .arg(my_freq).arg(my_freq).arg(my_freq));
+  }
 
   QString fname;
 

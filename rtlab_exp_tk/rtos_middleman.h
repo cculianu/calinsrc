@@ -35,6 +35,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
+#include <asm/div64.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,26 +64,16 @@ typedef hrtime_t rtos_time_t;
 static inline rtos_time_t rtos_get_time(void) { return gethrtime(); }
 
 static inline unsigned long long ulldiv(unsigned long long ull, unsigned long uld, unsigned long *r)
-{
-        unsigned long long q, rf;
-        unsigned long qh, rh, ql, qf;
- 
-        q = 0;
-        rf = (unsigned long long)(0xFFFFFFFF - (qf = 0xFFFFFFFF / uld) * uld) + 1ULL;
- 
-        while (ull >= uld) {
-                ((unsigned long *)&q)[1] += (qh = ((unsigned long *)&ull)[1] / uld);
-                rh = ((unsigned long *)&ull)[1] - qh * uld;
-                q += rh * (unsigned long long)qf + (ql = ((unsigned long *)&ull)[0] / uld);                ull = rh * rf + (((unsigned long *)&ull)[0] - ql * uld);
-        }
- 
-        *r = ull;
-        return q;
+{         
+        *r = do_div(ull, uld);
+        return ull;
 }
 
 static inline void nano2timespec(hrtime_t time, struct timespec *t)
 {
-  t->tv_sec = ulldiv(time, 1000000000, (unsigned long *)&t->tv_nsec);
+  unsigned long rem = 0;
+  t->tv_sec = ulldiv(time, 1000000000, &rem);
+  t->tv_nsec = rem;
 }
 
 /* just like clock_gethrtime but instead it used timespecs */

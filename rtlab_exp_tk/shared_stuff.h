@@ -60,9 +60,9 @@ extern "C" {
 
 
 struct SpikeParams {
-  volatile int8 enabled_mask [CHAN_MASK_SIZE];      /* bits correspond to 
+  volatile char enabled_mask [CHAN_MASK_SIZE];      /* bits correspond to 
                                                        channels..            */
-  volatile int8 polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive */
+  volatile char polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive */
   volatile unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds      */
   volatile double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be 
                                                         dangerous!           */
@@ -102,13 +102,13 @@ struct SharedMemStruct {
 						       et al to modify this  */
   volatile  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)    */
   
-  volatile  int8 ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the 
+  volatile  char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the 
                                                      kernel  process which 
                                                      channels to ignore. 
                                                      Use inline funcs 
                                                      set_chan() and 
                                                      is_chan_on() to set this*/
-  volatile  int8 ao_chans_in_use[CHAN_MASK_SIZE];  
+  volatile  char ao_chans_in_use[CHAN_MASK_SIZE];  
   
   /* The constant sampling rate --
      this directly affects the period of the rt loop.  

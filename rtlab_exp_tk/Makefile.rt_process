@@ -19,7 +19,7 @@ COMEDI_MODBUILD_DIR  = ${COMEDI_DEVEL_INCLUDE}/modbuild
 
 all: rtlab.o avn_stim.o apd_control.o
 
-rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h user_cmd.h user_to_kernel.h proc_macros.h rtlab_cmd.h stimulator.h kmath.h rtlab_defaults.h rtlab_types.h .buildvars
+rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h user_cmd.h user_to_kernel.h proc_macros.h rtlab_cmd.h stimulator.h kmath.h rtlab_defaults.h rtlab_types.h kutil.h .buildvars
 # Some checks are on the next line
 	@( [ -d "${COMEDI_DEVEL_INCLUDE}" ] && [ -r "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" ] || ( \
 	echo "***************************************************************************"; \
@@ -34,7 +34,7 @@ rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h user_cmd
 	@echo "***************************************************************************"
 	$(CC) ${MODULE_COMPILE_FLAGS} -I ${COMEDI_DEVEL_INCLUDE} -I ${COMEDI_MODBUILD_DIR} -c -o rt_process.o rt_process.c
 
-rtos_middleman.o: rtos_middleman.c shared_stuff.h rtos_middleman.h .buildvars
+rtos_middleman.o: rtos_middleman.c shared_stuff.h rtos_middleman.h rtlab_types.h .buildvars
 	$(CC) ${MODULE_COMPILE_FLAGS} -c -o rtos_middleman.o rtos_middleman.c
 
 rtlab_cmd.o: rtlab_cmd.c rtlab_cmd.h bheap.h heap_info.h rt_process.h shared_stuff.h rtlab_types.h rtlab_defaults.h .buildvars
@@ -49,8 +49,11 @@ stimulator.o: stimulator.c stimulator.h rtlab_cmd.h rt_process.h rtlab_types.h r
 user_cmd.o: user_cmd.c user_cmd.h user_to_kernel.h rt_process.h shared_stuff.h spike_polarity.h rtlab_defaults.h rtlab_types.h .buildvars
 	$(CC) ${MODULE_COMPILE_FLAGS} -c -o user_cmd.o user_cmd.c
 
-rtlab.o: rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o user_cmd.o
-	$(LD) ${LDFLAGS} -r -o rtlab.o rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o user_cmd.o
+kutil.o: kutil.c kutil.h  rtlab_types.h .buildvars
+	$(CC) ${MODULE_COMPILE_FLAGS} -c -o kutil.o kutil.c
+
+rtlab.o: rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o user_cmd.o kutil.o
+	$(LD) ${LDFLAGS} -r -o rtlab.o rt_process.o rtos_middleman.o rtlab_cmd.o bheap.o stimulator.o user_cmd.o kutil.o
 
 avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h rtos_middleman.h proc_macros.h rtlab_defaults.h rtlab_types.h .buildvars
 	@( [ -d "${COMEDI_DEVEL_INCLUDE}" ] && [ -r "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" ] || ( \
