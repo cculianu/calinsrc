@@ -30,6 +30,7 @@
 #ifdef __KERNEL__
 #  include <linux/comedilib.h>
 #  include "rtos_middleman.h"
+#  include "rt_process.h"
 #  define ERROR(a...) rtos_printf(a)
 #else
 #  include <unistd.h>
@@ -177,7 +178,7 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
        NB: This gets normalized here (and inside rtlab.o's rt-loop) so that
        it's a multiple of 1000Hz or an even factor of 1000Hz 
        ex: 231Hz becomes 250Hz, 1733 Hz becomes 2000Hz, etc.. */
-    rtp_shm->sampling_rate_hz = normalizeSamplingRate(cmd->u.sampling_rate_hz);
+    rtp_set_sampling_rate(cmd->u.sampling_rate_hz);
     break;
   case RTLAB_SET_SCAN_INDEX:
     ERROR("user_cmd.c: Scan Index change unimplemented!!");

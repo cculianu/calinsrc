@@ -40,8 +40,13 @@ MODULE_LICENSE("GPL");
 
 #define MODULE_NAME "MC Stim"
 
+<<<<<<< apd_control.c
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
+=======
+MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu");
+MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
+>>>>>>> 1.9
 
 int apd_control_init(void); 
 void apd_control_cleanup(void);
@@ -79,23 +84,19 @@ static uint64       last_time_ms = 0; /* copied from rtp_shm->time_ms
   Some initial parameters or otherwise private constants...                 
   Tweak these to suit your taste...
 ---------------------------------------------------------------------*/
-static const  int STIM_PULSE_WIDTH = 2;      /* in milliseconds              */
+/* Monitor frequency -- leave this at 1000 as all the code in this module 
+   assumes rate at which APD control is called is 1000 Hz */
+static const  int  APD_CONTROL_MONITOR_FREQUENCY = 1000; /* in Hz            */
+static const  int  STIM_PULSE_WIDTH = 2;      /* in milliseconds             */
 static const float STIM_VOLTAGE       = 5.0;   /* Preferred stim voltage       */
-static const float INITIAL_DELTA_G    = 0.01; /* for MCShared init.           */
-static const float INITIAL_G_VAL          = 0.5;   /* "   "         "           */
+static const float INITIAL_DELTA_G    = 0.01; /* for MCShared init.          */
+static const float INITIAL_G_VAL          = 0.5;   /* "   "         "        */
 static const int MS_AFTER_THRESH_TO_LOOK_FOR_PEAK = 25; // time (ms) to look for AP peak after threshold crossing
 static const int INIT_APD_XX=90;
 static const int INITIAL_PI=500;
 #define RESET_V_BASELINE 999.0  //set v_baseline to very large value, must use define for StimState initializer
 #define RESET_V_APA -999.0      //set v_apa to very small value, must use define for StimState initializer
 /*-------------------------------------------------------------------*/
-
-/* NB: This module needs at least a 1000 hz sampling rate!
-   It will fail if that is not the case at module initialization, 
-   and may produce undefined results if that is not the case while the 
-   module is running. */
-// ***** this should be changes so sampling rate is not hard wired
-static const int REQUIRED_SAMPLING_RATE = 1000;
 
 //structure storing the state of the system so that one scan knows the
 //state from the previous scan
@@ -165,11 +166,15 @@ struct StimState stim_state[NumAOchannels],
 /****************************************************************************************/
 static void do_apd_control_stuff (MultiSampleStruct * m)
 {
+<<<<<<< apd_control.c
+  int which_ai_chan;
+=======
   int which_ai_chan;
 
   /* we're still on the same millisecond - this module should really run 
      once every milliseond */
   if (rtp_shm->time_ms == last_time_ms) return; 
+>>>>>>> 1.9
 
   /* Note that do_pacing assumes that rt_process.o is running at precisely 1000 hz! */
   setup_analog_output();
@@ -189,6 +194,7 @@ static void do_apd_control_stuff (MultiSampleStruct * m)
   /* update last_time_ms */
   last_time_ms = rtp_shm->time_ms;
 }
+
 
 // this function does periodic pacing at the PI controlled by the user in the GUI
 // via the shm->nominal_pi shared memory variable
@@ -487,24 +493,20 @@ int apd_control_init (void)
   for (i=0; i<NumAPDs; i++) memcpy(&apd_state[i],&default_apd_state,sizeof(struct APDState));
   for (i=0; i<NumAOchannels; i++) memcpy(&stim_state[i],&default_stim_state,sizeof(struct StimState));
 
-  if (rtp_shm->sampling_rate_hz < REQUIRED_SAMPLING_RATE) {
-    printk("apd_control: cannot start the module because the sampling rate of "
-           "rt_process is not %d hz! apd_control.o *requires* a %d hz period "
-           "on the rt loop for its own internal simplicity.  The current "
-           "rate that rt_process is looping at is: %d", 
-           REQUIRED_SAMPLING_RATE, REQUIRED_SAMPLING_RATE, 
-           (int)rtp_shm->sampling_rate_hz);
-    return -ETIME;
-  }
-
-  if ( (retval = rtp_register_function(do_apd_control_stuff))
-       || (retval = init_shared_mem())
-       || (retval = rtp_find_free_rtf(&shm->fifo_minor, MC_FIFO_SZ))
-       || (retval = init_ao_chan()) 
-       || (retval = rtp_activate_function(do_apd_control_stuff))
-    ) 
+  if ((retval = rtp_register_function(do_apd_control_stuff))
+      || (retval = init_shared_mem())
+      || (retval = rtp_find_free_rtf(&shm->fifo_minor, MC_FIFO_SZ))
+      || (retval = init_ao_chan()) 
+      || (retval = rtp_set_callback_frequency (do_apd_control_stuff,
+                                               APD_CONTROL_MONITOR_FREQUENCY))
+      || (retval = rtp_activate_function(do_apd_control_stuff))
+     )
     apd_control_cleanup();  
 
+  if (!retval) 
+    printk("apd_control: started with monitor frequency %d Hz\n", 
+           rtp_get_callback_frequency(do_apd_control_stuff));
+  
   return retval;
 }
 

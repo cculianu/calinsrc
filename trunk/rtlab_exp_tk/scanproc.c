@@ -220,7 +220,7 @@ int num_procs_of_exe_no_children(const char *exe)
     for (cur = pids; *cur; cur++) {
       ppid = grab_parent_of_pid(*cur);
       pos = find_in_list((void **)pids, (void *)ppid);
-      if (pos >= 0 && *cur != ppid) ret--; /* ppid is one of out pids, 
+      if (pos >= 0 && *cur != ppid) ret--; /* ppid is one of our pids, 
                                               so dis-count *cur */
     }
   }

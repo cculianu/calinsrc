@@ -168,6 +168,7 @@ int avn_stim_init (void)
        || (retval = init_shared_mem())
        || (retval = rtp_find_free_rtf(&shm->fifo_minor, AVN_FIFO_SZ))
        || (retval = init_ao_chan()) 
+       || (retval = rtp_set_callback_frequency(do_avn_control_stuff, 1000))
        || (retval = rtp_activate_function(do_avn_control_stuff))
     ) 
     avn_stim_cleanup();  
