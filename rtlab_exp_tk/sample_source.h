@@ -4,6 +4,8 @@
 #include <string>
 #include "shared_stuff.h"
 
+# define SAMPLE_SOURCE_BLOCK_SZ_BYTES RT_QUEUE_BLOCK_SZ_BYTES
+
 class SampleStructSource {
 
  public:
@@ -14,6 +16,11 @@ class SampleStructSource {
   virtual void flush() = 0; /* flushes the reader input buffer */
   virtual size_t numBytesLastRead() const;
   virtual unsigned int numSamplesLastRead() const;
+
+  /* time in ms that this source suggests the reading process should
+     spend waiting for more data, for maximal efficiency */
+  virtual int suggestSleepTime(int proc_time_ms = 0) const 
+    { return ( proc_time_ms < 0 ? 0 : proc_time_ms); };
 
  protected:
   SampleStructSource(); /* abstract class.. no public constructors */
@@ -46,10 +53,29 @@ class SampleStructFileSource : public SampleStructSource {
 
 };
 
+/* 
+   DESIRED_FIFO_FEEL_MS --
+
+   Defines the amount of time in milliseconds that we desire to wait
+   on the RTF fifos (for 'feel' -- waiting too long leads to
+   jerky graph drawing and the possibility of dropped samples) 
+   The idea is that we try to sleep for around this time, if possible.
+   However, we can't guarantee that we will sleep this time, because
+   we also must take into account fifo size, sampling rate, and 
+   daq system's own processing time.  
+
+   What ends up happening is that we usually sleep for less than this time, 
+   but that overall, daq_system's data sampling loop is periodic with a period
+   of roughly DESIRED_FIFO_FEEL_MS.
+
+*/
+#define DESIRED_FIFO_FEEL_MS 30
+
 class SampleStructRTFSource : public SampleStructFileSource {
  public:
   SampleStructRTFSource(unsigned short minor = 0);
   void flush(); // flush old/stale data that may be in fifo, throws exceptions
+  int suggestSleepTime(int proc_time_ms = 0) const;
   
 };
 

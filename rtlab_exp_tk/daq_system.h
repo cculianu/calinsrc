@@ -34,7 +34,6 @@
 #include "configuration.h"
 #include "sample_source.h"
 #include "sample_reader.h"
-#include "shared_stuff.h"
 #include "ecggraph.h"
 #include "daq_ecggraphcontainer.h"
 #ifdef __RTLINUX__

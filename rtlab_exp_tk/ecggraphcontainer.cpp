@@ -6,9 +6,7 @@
 #include <qevent.h>
 #include <qregexp.h>
 #include <qtooltip.h>
-
 #include <stdio.h>
-#include <math.h>
 
 #include "ecggraphcontainer.h"
 

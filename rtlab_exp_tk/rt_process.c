@@ -263,12 +263,12 @@ int init_module(void)
     goto init_error;
   }
 
-  if ( (error = rtf_create(sh_mem->ai_fifo_minor, RT_QUEUE_SIZE)) ) {
+  if ( (error = rtf_create(sh_mem->ai_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
   }
 
-  if ( (error = rtf_create(sh_mem->ao_fifo_minor, RT_QUEUE_SIZE)) ) {
+  if ( (error = rtf_create(sh_mem->ao_fifo_minor, RT_QUEUE_SZ_BYTES)) ) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }

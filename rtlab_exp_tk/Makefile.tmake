@@ -13,7 +13,7 @@ INCLUDEPATH =
 HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp shm_mgr.h ecggraph.h ecggraphcontainer.h daq_ecggraphcontainer.h
 SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp daq_ecggraphcontainer.cpp
 TARGET      =	daq_system
-DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\" #QT_THREAD_SUPPORT
+DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\" #DAQ_SYSTEM_PROFILE_SLEEPTIME_CODE #QT_THREAD_SUPPORT
 CFLAGS      =   
 LIBS        =   -lcomedi
 TMAKE_LIBS_QT = -lqt #-lqt-mt

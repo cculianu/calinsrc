@@ -30,6 +30,7 @@
 #include <qinputdialog.h> 
 #include <qmessagebox.h>
 #include <qtimer.h>
+#include <qdatetime.h>
 #include <iostream>
 #include <map>
 #include <stdio.h>
@@ -374,12 +375,15 @@ ReaderLoop::~ReaderLoop()
 void
 ReaderLoop::loop()
 {
-
-  if (pleaseStop) return;
+  static QTime qTime;
   
-  /* the following readAll()  may block indefinately which is why we 
-     needed a thread in the first  place :) */
+  if (pleaseStop) return;
 
+  qTime.start(); /* for calculating sleep time below... :) */
+  
+  /* the following readAll()  may (theoretically) block indefinitely which is 
+     why eventually we should think about threading this bad boy... :) */
+  
   const SampleStruct *sbuf = reader->readAll(); 
 
   int n_read = reader->numLastRead();
@@ -392,7 +396,9 @@ ReaderLoop::loop()
       listeningGraphs.graphs[channel_id]->graph->plot(unitdata);
     }
   }
-  QTimer::singleShot(1, this, SLOT(loop()));
+  
+  QTimer::singleShot(reader->getSource()->suggestSleepTime(qTime.elapsed()), 
+		     this, SLOT(loop()));
 }
 
 

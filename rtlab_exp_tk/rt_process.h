@@ -27,15 +27,14 @@
 # include "shared_stuff.h" /* for SampleStruct type */
 
 
+# define BILLION ((long int)1000000000)
+
 # define RT_PROCESS_MODULE_NAME "rt_process"
 
-# define BILLION ((int)1000000000)
-# define RT_QUEUE_SIZE (16 * INITIAL_SAMPLING_RATE_HZ * (/*sizeof(FIFO_DELIMITER_T)+*/sizeof(SampleStruct))) /* size of RT queue */
 # define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
 # define INITIAL_V_CHANNEL 0     //initial channel for V signal
 # define INITIAL_A_CHANNEL 1     //initial channel for A signal
 # define INITIAL_SAMPLING_RATE_HZ 1000
-
 # define INITIAL_SPIKE_BLANKING INITIAL_SAMPLING_RATE_HZ/20 
                                    /* initial interval for disabling
                                       v_spike detect ... i.e. 1/20 sec, 50ms */

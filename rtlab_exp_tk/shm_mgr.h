@@ -85,8 +85,12 @@ namespace ShmMgr
   bool isChanOn(int t, unsigned int chan); 
   void setChannel (ComediSubDevice::SubdevType t, unsigned int chan, 
 		   bool onoroff);
-  void setChannel (int t, unsigned int chan, bool onoroff);
-  
+  void setChannel (int t, unsigned int chan, bool onoroff);  
+  unsigned int numChannels (ComediSubDevice::SubdevType t);
+  unsigned int numChannels (int subdevtype);
+  unsigned int numChannelsInUse (ComediSubDevice::SubdevType t);
+  unsigned int numChannelsInUse (int subdevtype);
+
   /* return the right array for this type */
   unsigned int *chanArray(ComediSubDevice::SubdevType t);
   unsigned int *chanArray(int subdevtype);
