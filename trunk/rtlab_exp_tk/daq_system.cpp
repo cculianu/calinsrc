@@ -1082,6 +1082,8 @@ PluginMenu::PluginMenu(DAQSystem * ds,
 
   connect(load_button, SIGNAL(clicked()), this, SLOT(carefullyLoadSelected()));
   connect(remove_button, SIGNAL(clicked()), this, SLOT(removeSelectedPlugin()));
+  connect(plugin_box, SIGNAL(doubleClicked(QListViewItem *)), 
+          this, SLOT(carefullyLoadSelected()));
   connect(plugin_box, 
           SIGNAL(contextMenuRequested (QListViewItem *, const QPoint &,int)), 
           this, 
