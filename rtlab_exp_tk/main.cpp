@@ -74,10 +74,11 @@ main(int argc, char *argv[])
              && (showConfigScreen = true) );
 
     daqSystem = new DAQSystem(*conf, 0, DAQ_SYSTEM_APPNAME_CSTRING, 
-                              Qt::WType_TopLevel | Qt::WDestructiveClose );
+                              Qt::WType_TopLevel | Qt::WDestructiveClose );    
     a.setMainWidget(daqSystem);     
     
     daqSystem->show();
+
     retval = a.exec();
     
   } catch (const UnimplementedException & e) {

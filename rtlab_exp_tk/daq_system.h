@@ -228,6 +228,10 @@ class DAQSystem : public QMainWindow
   void spikeThresholdSet(double value);
   void spikeThresholdOff();
 
+  void resynch(); /* synchronize graph windows and tile them as well */
+  void showLogWindow(); /* calls show() on the Log Window widget */
+  void printDialog(); /* brings up various pring dialogs and the like */
+
  private slots:
 
   void windowMenuRemoveWindow(const QWidget *w);
@@ -240,10 +244,6 @@ class DAQSystem : public QMainWindow
      2) notifies the readerLoop */
   void graphOff(const ECGGraphContainer *);
 
-  void resynch();
-
-  void showLogWindow();
-  void printDialog(); /* brings up various pring dialogs and the like */
 
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */

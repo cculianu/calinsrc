@@ -167,7 +167,14 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   for (set<uint>::iterator i = s.begin(); i != s.end();  i++) {
     openChannelWindow(*i, 0, 10); /* modify this to read other defaults too */
   }
-  
+
+  /* KLUDGE -- due to implementation quirks in QWorkspace, a resynch() must
+     be called on a non-hidden DAQSystem.. */
+  show();
+  resynch(); /* so that open windows in DAQSystem (if any) 
+                get tiled/synchronized */
+  hide();
+
   /* now begin the main loop that grabs data and plots it */
   readerLoop.loop();
 
@@ -478,6 +485,7 @@ void
 DAQSystem::logTimeStamp()
 {
   log.insertAtCursor(statusBarScanIndex.text());
+  showLogWindow();
 }
 
 void 

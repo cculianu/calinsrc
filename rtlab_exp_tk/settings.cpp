@@ -215,7 +215,7 @@ void
 Settings::saveSettings()
 {
   QString line, matchedLine, key, value, outBuf("");
-  set<QString>::iterator it;
+  DirtyKeys::iterator it;
 
   configFile->open(IO_ReadOnly);
   QString theWholeThing(QTextStream(configFile).read());

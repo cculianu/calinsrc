@@ -22,6 +22,7 @@
  */
 #include "sample_spooler.h"
 #include <qmessagebox.h>
+#include <iostream>
 
 SampleSpooler::SampleSpooler()
   : TempSpooler<SampleStruct>("daq", true)
@@ -55,11 +56,10 @@ void SampleSpooler::flush()
     uint64 numDropped = numSpooled() + (n_buffer - (numSpooled() - orig_ns));
 
     truncate();    
-    QMessageBox::warning(0, "Out of temporary storage", 
-                         QString("Temporary storage exhausted.  As a result, "
-                                 "%1 samples were lost.")
-                         .arg(uint64_to_cstr(numDropped)), 
-                         QMessageBox::Ok, QMessageBox::NoButton);
+    cerr << __FILE__ << ", line " << __LINE__ 
+         << ": Out of temporary storage. " << "Temporary storage exhausted.  "
+         << "As a result, " <<  uint64_to_cstr(numDropped) 
+         << " samples were lost." << endl;
     
     return;
   }

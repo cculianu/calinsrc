@@ -32,13 +32,13 @@
 #include <asm/bitops.h>    /* for set/clear bit                        */
 #include <linux/malloc.h>
 #include <linux/string.h> /* some memory copyage */
+#include <linux/fs.h> /* for the determine_minor() functionality */
 
 #include <rtl.h>
 #include <rtl_fifo.h>
 #include <rtl_sched.h>
 #include <rtl_sync.h>
 #include <mbuff.h> 
-
 
 #ifdef TIME_RT_LOOP
 #  include <rtl_time.h>
@@ -47,7 +47,6 @@
 #endif
 
 #include <linux/comedilib.h>
-
 #include "shared_stuff.h"     /* header file that is shared between user/kernel
 				 in this system */
 #include "rt_process.h"       /* header file specific to this program */
@@ -59,10 +58,10 @@
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time Sampling Task for use with kcomedilib and the daq_system user program");
 
-MODULE_PARM(ai_comedi_device, "i");
-MODULE_PARM_DESC(ai_comedi_device, "The comedi device minor number to use for analog input. Defaults to 0.");
-MODULE_PARM(ao_comedi_device, "i");
-MODULE_PARM_DESC(ao_comedi_device, "The comedi device minor number to use for analog output. Defaults to 0.");
+MODULE_PARM(ai_device,"s");
+MODULE_PARM_DESC(ai_device, "The comedi device file to use for analog input. Defaults to minor number " DEFAULT_COMEDI_DEVICE ".");
+MODULE_PARM(ao_device, "s");
+MODULE_PARM_DESC(ao_device, "The comedi device file to use for analog output. Defaults to minor number " DEFAULT_COMEDI_DEVICE ".");
 
 EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
@@ -71,12 +70,16 @@ EXPORT_SYMBOL_NOVERS(rtp_activate_function);
 EXPORT_SYMBOL_NOVERS(rtp_find_free_rtf);
 EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
+EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
+EXPORT_SYMBOL_NOVERS(rtp_comedi_ao_dev_handle);
 
 int init_module(void);        /* set up RT stuff */
 void cleanup_module(void) ;    /* clean up RT stuff */
 
+/* initializes some comedi stuff. Returns 0 and sets global 'error' on error */
+static int init_comedi(void);
 /* sets up RT shared memory */
-static int init_shared_mem(int ai_subdev, int ao_subdev);   
+static int init_shared_mem(void);   
 /* sets up the krange cache */
 static int build_krange_cache(void) ;
 
@@ -128,8 +131,19 @@ static struct rt_function_list
 DECLARE_MUTEX(rt_functions_sem);
 
 /* module parameters */
-int    ai_comedi_device = DEFAULT_COMEDI_MINOR,
-       ao_comedi_device = DEFAULT_COMEDI_MINOR;
+char *ai_device = DEFAULT_COMEDI_DEVICE,
+     *ao_device = DEFAULT_COMEDI_DEVICE;
+
+/* exported handles to be used with comedi functions.  This abstraction of
+   comedi types is needed due to different treatments of the first parameter
+   to many kcomedilib functions between comedi before version 0.7.64 and 
+   newer versions */
+COMEDI_T rtp_comedi_ai_dev_handle = (COMEDI_T)-1, 
+         rtp_comedi_ao_dev_handle = (COMEDI_T)-1;
+
+
+/* used to store working values of some comedi params */
+static int ai_minor = -1, ao_minor = -1, ai_subdev = -1, ao_subdev = -1;
 
 /* Exported globals below.. */
 SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
@@ -147,6 +161,9 @@ static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
                                            modules -- not exported so as
                                            to keep the interface clean...*/
 
+/* Used in init_module so that subroutines can report errors... */
+static int error;
+static const char *errorMessage = "Success";
 
 /* this task reads data from the DAQ board, then calls 
    all of the functions registered in rt_functions linked list */
@@ -235,15 +252,14 @@ static void *daq_rt_task (void *arg)
   return (void *)0;
 }
 
-int  init_module(void) 
+int init_module(void) 
 {
   pthread_attr_t attr;
-  int error = -EBUSY, ai_subdev = -1, ao_subdev = -1, i;
-
   struct sched_param sched_param;
-  const char *errorMessage = "Success";
+  int i;
 
-
+  error = -EBUSY;
+  
   /* initialize the array of last spikes encountered */
   for (i = 0; i < SHD_MAX_CHANNELS; i++)  {
     spike_info.last_spike_time[i] = 0;
@@ -267,51 +283,9 @@ int  init_module(void)
   __rtp_set_f_active(putFullScanIntoAIFifo, 1);
   __rtp_set_f_active(detectSpikes, 1);
 
-  /* find a subdevice of type COMEDI_SUBD_AI */
-  if ( (
-	ai_subdev = 
-	comedi_find_subdevice_by_type(ai_comedi_device, COMEDI_SUBD_AI, 0)
-       ) < 0 ) {
-    errorMessage = "Cannot find an analog input subdevice for the specified "
-                   "minor number";
-    error = ai_subdev;
-    goto init_error;
-  }
-  /* find a subdevice of type COMEDI_SUBD_AO */
-  if ( (
-	ao_subdev = 
-	comedi_find_subdevice_by_type(ao_comedi_device, COMEDI_SUBD_AO, 0)
-       ) < 0 ) {
-    errorMessage = "Cannot find an analog output subdevice for the specified "
-                   "minor number";
-    error = ao_subdev;
-    goto init_error;
-  }
+  if ( init_comedi() ) goto init_error;
 
-  /* lock the subdevice  */
-  if ( (error =	comedi_lock(ai_comedi_device, ai_subdev)) < 0 ) {  
-    errorMessage = "Cannot lock analog input comedi subdevice";
-    goto init_error;
-  }
-
-  /* lock the subdevice  */
-  if ( (error =	comedi_lock(ao_comedi_device, ao_subdev)) < 0 ) {  
-    errorMessage = "Cannot lock analog output comedi subdevice";
-    goto init_error;
-  }
-
-  if ( (error = comedi_open(ai_comedi_device)) < 0 ) {
-    errorMessage = "Error opening comedi device for analog input";
-    goto init_error;
-  }   
-
-  if ( ai_comedi_device != ao_comedi_device &&
-       (error = comedi_open(ao_comedi_device)) < 0 ) {
-    errorMessage = "Error opening comedi device for analog output";
-    goto init_error;
-  }   
-
-  if (!init_shared_mem(ai_subdev, ao_subdev))  {  
+  if ( init_shared_mem() )  {  
     /* error initializing shared memory */
     errorMessage = "Cannot allocate mbuff shared memory.  Did you create the "
                    "device node? Are you low on memory?";
@@ -320,7 +294,7 @@ int  init_module(void)
   }
 
   /* cache the krange list... */
-  if (!build_krange_cache()) {
+  if (build_krange_cache()) {
     /* cannot allocate memory for krange cache */
     errorMessage = "Cannot allocate memory for some internal data structures. "
                    "Are we low on memory?";
@@ -367,10 +341,155 @@ int  init_module(void)
   return error;
 }
 
+/* returns error if file is not a (configured) comedi device */
+static int determine_comedi_minor(const char *file)
+{
+  struct nameidata nd;
+  int err;
+
+  if (!file || !*file) return -EINVAL;
+  if (!path_init("/", 0, &nd)) return -ENOENT;
+  if ( (err = path_walk(file, &nd)) ) return err;
+  if (!S_ISCHR(nd.dentry->d_inode->i_mode)) return -ENODEV;
+  if (MAJOR(nd.dentry->d_inode->i_rdev) != COMEDI_MAJOR) return -EINVAL;
+  
+  return MINOR(nd.dentry->d_inode->i_rdev);
+}
+
+static int
+init_comedi(void)
+{
+  ai_minor = determine_comedi_minor(ai_device);
+  if (ai_minor < 0) {
+    error = ai_minor;
+    errorMessage = "Error opening the ANALOG INPUT device.  Please verify "
+      "that you passed the right ai_device module parameter to rt_process.o!";
+    return error;
+  }
+
+  ao_minor = determine_comedi_minor(ao_device); 
+  if (ao_minor < 0) {
+    error = ai_minor;
+    errorMessage = "Error opening the ANALOG OUTPUT device.  Please verify "
+      "that you passed the right ao_device module parameter to rt_process.o!";
+    return error;
+  }
+
+#ifdef NEW_STYLE_KCOMEDILIB
+  {
+    char tempbuf[32];
+
+    sprintf(tempbuf, "/dev/comedi%d", ai_minor);
+
+    rtp_comedi_ai_dev_handle = comedi_open(tempbuf);
+
+    if (!rtp_comedi_ai_dev_handle) {
+      rtp_comedi_ai_dev_handle = (COMEDI_T)-1;
+      errorMessage = "Error opening comedi device for analog input";
+      error = -ENOMSG;
+      return error;
+    }  
+
+    if (ai_minor != ao_minor) {
+      sprintf(tempbuf, "/dev/comedi%d", ao_minor);    
+      rtp_comedi_ao_dev_handle = comedi_open(tempbuf);
+      if ( !rtp_comedi_ao_dev_handle ) {
+        rtp_comedi_ao_dev_handle = (COMEDI_T)-1;
+        errorMessage = "Error opening comedi device for analog output";
+        error = -ENOMSG;
+        return error;
+      } 
+    }
+    else
+      rtp_comedi_ao_dev_handle = rtp_comedi_ai_dev_handle;
+
+  } 
+#else
+  rtp_comedi_ai_dev_handle = ai_minor;
+  rtp_comedi_ao_dev_handle = ao_minor;
+#endif
+
+  /* find a subdevice of type COMEDI_SUBD_AI */
+  if ( (
+	ai_subdev = 
+	comedi_find_subdevice_by_type(rtp_comedi_ai_dev_handle, COMEDI_SUBD_AI, 0)
+       ) < 0 ) {
+    errorMessage = "Cannot find an analog input subdevice for the specified "
+                   "minor number";
+#ifdef OLD_STYLE_KCOMEDILIB
+    /* indicate the device isn't really open */
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;
+#endif
+    error = ai_subdev;
+    return error;
+  }
+
+  /* find a subdevice of type COMEDI_SUBD_AO */
+  if ( (
+	ao_subdev = 
+	comedi_find_subdevice_by_type(rtp_comedi_ao_dev_handle, COMEDI_SUBD_AO, 0)
+       ) < 0 ) {
+#ifdef OLD_STYLE_KCOMEDILIB
+    /* indicate the device isn't really open */
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;
+#endif
+    errorMessage = "Cannot find an analog output subdevice for the specified "
+                   "minor number";
+    error = ao_subdev;
+    return error;
+  }
+
+  /* lock the subdevice  */
+  if ( (error =	comedi_lock(rtp_comedi_ai_dev_handle, ai_subdev)) < 0 ) {  
+    errorMessage = "Cannot lock analog input comedi subdevice";
+#ifdef OLD_STYLE_KCOMEDILIB
+    /* indicate the device isn't really open */
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;
+#endif
+    return error;
+  }
+
+  /* lock the subdevice  */
+  if ( (error =	comedi_lock(rtp_comedi_ao_dev_handle, ao_subdev)) < 0 ) {  
+    errorMessage = "Cannot lock analog output comedi subdevice";
+#ifdef OLD_STYLE_KCOMEDILIB
+    /* unlock it so that cleanup_comedi_stuff() isn't confused */
+    comedi_unlock(rtp_comedi_ai_dev_handle, ai_subdev);
+    /* indicate the device isn't really open */
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;
+#endif
+    return error;
+  }
+
+#ifdef OLD_STYLE_KCOMEDILIB
+  if ( (error = comedi_open(ai_minor)) < 0 ) {
+    comedi_unlock(ai_minor, ai_subdev);
+    comedi_unlock(ao_minor, ao_subdev);
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;
+    errorMessage = "Error opening comedi device for analog input";
+    return error;
+  }  
+  rtp_comedi_ai_dev_handle = ai_minor;
+  
+  if ( ai_minor != ao_minor &&
+       (error = comedi_open(ao_minor)) < 0 ) {
+    comedi_unlock(ai_minor, ai_subdev);
+    comedi_unlock(ao_minor, ao_subdev);
+    comedi_close(ai_minor);
+    rtp_comedi_ai_dev_handle = rtp_comedi_ao_dev_handle = -1;    
+    errorMessage = "Error opening comedi device for analog output";
+    return error;
+  }   
+  rtp_comedi_ao_dev_handle = ao_minor;  
+#endif
+
+  return 0;
+}
+
 /*  Initializes the rtlinux shared memory 
     returns 1 on success, 0 on failure */
 static int 
-init_shared_mem(int ai_subdev, int ao_subdev) 
+init_shared_mem(void) 
 { 
   uint i;
 
@@ -380,20 +499,20 @@ init_shared_mem(int ai_subdev, int ao_subdev)
                                      sizeof(SharedMemStruct));
   
   if (! rtp_shm) { /* means there was some sort of error allocating mbuff */
-    return 0;
+    return -ENOMEM;
   }
 
   /* initialize shared memory variables ... see rt_process.h for definitions */
   rtp_shm->struct_version = SHD_SHM_STRUCT_VERSION;
-  rtp_shm->ai_minor = ai_comedi_device;
-  rtp_shm->ao_minor = ao_comedi_device;
+  rtp_shm->ai_minor = ai_minor;
+  rtp_shm->ao_minor = ao_minor;
   rtp_shm->ai_subdev = ai_subdev;
   rtp_shm->ao_subdev = ao_subdev;
   rtp_shm->ai_fifo_minor = -1;
   rtp_shm->ao_fifo_minor = -1;
   /* num AI channels in use */
-  rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_shm->ai_minor, ai_subdev); 
-  rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_shm->ao_minor, ao_subdev);
+  rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_comedi_ai_dev_handle, ai_subdev); 
+  rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_comedi_ao_dev_handle, ao_subdev);
   rtp_shm->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
   rtp_shm->scan_index = 0;
 
@@ -411,13 +530,13 @@ init_shared_mem(int ai_subdev, int ao_subdev)
     }
   }
 
-  return 1;
+  return 0;
 }
 
 static
 int  build_krange_cache(void)
 {
-  int i, j, *ai_n_ranges = 0, *ao_n_ranges = 0, ret = 0;
+  int i, j, *ai_n_ranges = 0, *ao_n_ranges = 0, ret = -1;
 
   if (!(ai_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ai_chans, GFP_KERNEL)) ||
       !(ao_n_ranges = kmalloc(sizeof(int) * rtp_shm->n_ao_chans, GFP_KERNEL)) ||
@@ -428,19 +547,19 @@ int  build_krange_cache(void)
   /* record the number of ranges for each channel */
   for (i = 0; i < rtp_shm->n_ai_chans; i++) {
     if ( (ai_n_ranges[i] = 
-	  comedi_get_n_ranges(rtp_shm->ai_minor, rtp_shm->ai_subdev, i)) 
+	  comedi_get_n_ranges(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i)) 
 	 > krange_cache.ai_max_n_ranges )
       krange_cache.ai_max_n_ranges = ai_n_ranges[i];
     krange_cache.ai_maxdatas[i] = 
-      comedi_get_maxdata(rtp_shm->ai_minor, rtp_shm->ai_subdev, i);
+      comedi_get_maxdata(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i);
   }
   for (i = 0; i < rtp_shm->n_ao_chans; i++) {
       if ( (ao_n_ranges[i] =
-	    comedi_get_n_ranges(rtp_shm->ao_minor, rtp_shm->ao_subdev, i))
+	    comedi_get_n_ranges(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i))
 	   > krange_cache.ao_max_n_ranges )
 	krange_cache.ao_max_n_ranges = ao_n_ranges[i];
       krange_cache.ao_maxdatas[i] = 
-	comedi_get_maxdata(rtp_shm->ao_minor, rtp_shm->ao_subdev, i);
+	comedi_get_maxdata(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i);
   }
 
   if (!(krange_cache.ai_ranges =
@@ -453,17 +572,17 @@ int  build_krange_cache(void)
  
   for (i = 0; i < rtp_shm->n_ai_chans; i++) {
     for (j = 0; j < ai_n_ranges[i]; j++)
-      comedi_get_krange(rtp_shm->ai_minor, rtp_shm->ai_subdev, i, j, 
+      comedi_get_krange(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, i, j, 
 			krange_cache.ai_ranges + i 
 			* krange_cache.ai_max_n_ranges + j);
   }
   for (i = 0; i < rtp_shm->n_ao_chans; i++) {
     for (j = 0; j < ao_n_ranges[i]; j++)
-      comedi_get_krange(rtp_shm->ao_minor, rtp_shm->ao_subdev, i, j, 
+      comedi_get_krange(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, i, j, 
 			krange_cache.ao_ranges + i 
 			* krange_cache.ao_max_n_ranges + j);
   }
-  ret = 1;
+  ret = 0;
   end:
   if (ai_n_ranges) { kfree(ai_n_ranges); ai_n_ranges = 0; }
   if (ao_n_ranges) { kfree(ao_n_ranges); ao_n_ranges = 0; }  
@@ -517,32 +636,29 @@ static void cleanup_fifos (void)
 
 static void cleanup_comedi_stuff (void) 
 {
-  if (! rtp_shm) return;
-
-  if (rtp_shm->ai_subdev >= 0) {
+  if (((int)rtp_comedi_ai_dev_handle) >= 0 && ai_subdev >= 0) {
     /*  cancel any pending ai operation */
-    comedi_cancel(rtp_shm->ai_minor, rtp_shm->ai_subdev);
+    comedi_cancel(rtp_comedi_ai_dev_handle, ai_subdev);
 
     /* unlock subdevice so other comedi programs can use */
-    comedi_unlock(rtp_shm->ai_minor, rtp_shm->ai_subdev);
+    comedi_unlock(rtp_comedi_ai_dev_handle, ai_subdev);
   }
 
-  if (rtp_shm->ao_subdev >= 0) {
+  if (((int)rtp_comedi_ao_dev_handle) >= 0 && ao_subdev >= 0) {
     /*  cancel any pending ai operation */
-    comedi_cancel(rtp_shm->ao_minor, rtp_shm->ao_subdev);
+    comedi_cancel(rtp_comedi_ao_dev_handle, ao_subdev);
 
     /* unlock subdevice so other comedi programs can use */
-    comedi_unlock(rtp_shm->ao_minor, rtp_shm->ao_subdev);
+    comedi_unlock(rtp_comedi_ao_dev_handle, ao_subdev);
   }
 
     /* close the analog input minor device */
-  if (rtp_shm->ai_subdev >= 0)
-    comedi_close(rtp_shm->ai_minor);
+  if (((int)rtp_comedi_ai_dev_handle) >= 0)
+    comedi_close(rtp_comedi_ai_dev_handle);
   
     /* close the analog output minor device (if not already closed) */
-  if (rtp_shm->ao_subdev >= 0 && rtp_shm->ao_subdev != rtp_shm->ai_subdev)
-    comedi_close(rtp_shm->ao_minor);
-
+  if (((int)rtp_comedi_ao_dev_handle) >= 0 && ao_minor != ai_minor)
+    comedi_close(rtp_comedi_ao_dev_handle);
 }
 
 static 
@@ -592,7 +708,7 @@ static void grabScanOffBoard (MultiSampleStruct *m)
   for (i = 0, m->n_samples = 0; i < rtp_shm->n_ai_chans; i++) {
     if (is_chan_on(i, m->channel_mask)) {
       packed_param = rtp_shm->ai_chan[i]; /* for shorter line length  below */
-      comedi_data_read(rtp_shm->ai_minor, rtp_shm->ai_subdev, 
+      comedi_data_read(rtp_comedi_ai_dev_handle, rtp_shm->ai_subdev, 
                        CR_CHAN(packed_param),CR_RANGE(packed_param), 
                        CR_AREF(packed_param),&samp);      
       m->samples[m->n_samples].data = 
