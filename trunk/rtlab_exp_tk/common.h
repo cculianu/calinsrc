@@ -23,6 +23,8 @@
 
 #ifndef _COMMON_H
 #  define _COMMON_H
+#  include <string>
+#  include <string.h>
 #  include "config.h"
 #  include <values.h>
 #ifndef BUG
@@ -61,6 +63,9 @@ string operator+(const string & s, uint64 in);
 
 /* this function is non-reentrant! */
 QString operator+(const QString & s, uint64 in);
+
+/* Checks whether file can be opened for reading ('r') or writing ('w'). Returns an empty sting if opened successfully, an error message otherwise. */
+string fileErrorMsg( const char *file_name, char mode ); 
 #endif
 
 #endif
