@@ -217,8 +217,10 @@ init_spike_params (SpikeParams *p)
   }
 }
 
+#ifdef __KERNEL__
 /* For round, et al */
 #include "kmath.h"
+#endif
 
 /** This enforces sampling rates to be 'millisecond friendly' numbers  --
     numbers that are factors of 1000 or are multiples of 1000 */
