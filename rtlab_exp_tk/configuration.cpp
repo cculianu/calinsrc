@@ -446,7 +446,7 @@ ConfigurationWindow::DeviceListView::selectedDevice() const
 }
 
 ConfigurationWindow::TextContentsPreviewer::
-TextContentsPreviewer ( QWidget *w = 0,  const char *n = 0 ) : QTextView(w, n)
+TextContentsPreviewer ( QWidget *w,  const char *n ) : QTextView(w, n)
 {
   /* nothing */
 }
