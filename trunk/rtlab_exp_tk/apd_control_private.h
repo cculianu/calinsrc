@@ -43,6 +43,47 @@ class QScrollBar;
 class QCheckBox;
 template<class T> class TempSpooler;
 
+#include <map>
+#include <qcolor.h>
+class APDInterleaver: public QObject
+{
+  Q_OBJECT
+  /**
+     Class responsible for interleaving APD Data on graph number 
+     NumApdChannels
+  */
+     
+ public:
+  APDInterleaver(QObject *parent,
+                 ECGGraph *graph, 
+                 const QColor & color1 = "#ff0000", 
+                 const QColor & color2 = "white",
+                 DAQSystem *ds = 0);
+  
+ public slots:
+  void spikeSet(uint, double);
+  void spikeOff(uint); 
+  void gotAPD(MCSnapShot *);
+  
+ private:
+  DAQSystem *ds;
+  ECGGraph *graph;
+  QColor color1, color2;
+
+  struct APDPair {
+    APDPair() : ct(0) {};
+    int apd[2]; /* 0 even, 1 odd */
+    unsigned char ct; // count -- 0 even 1 odd
+  };
+
+  typedef map<unsigned int, APDPair> ChannelAPDs;
+  ChannelAPDs channelAPDs;
+
+  void reset(); // resets the state of everything..
+  void graphAPDs(); /* draws them all to graph */
+};
+
+
 class APDcontrol: public QObject, public Plugin
 {
   Q_OBJECT
@@ -69,6 +110,8 @@ public:
   QSignalMapper *only_negative_toggle_mapper;
   QSignalMapper *target_shorter_toggle_mapper;
   QSignalMapper *g_adj_manual_only_mapper;
+
+  APDInterleaver *apd_interleaver;
 
 private slots:
   void periodic(); /* does stuff periodically.. called by the timer */

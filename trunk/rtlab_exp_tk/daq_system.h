@@ -255,9 +255,13 @@ class DAQSystem : public QMainWindow
   /* useful for implementing a killhandler in main.cpp?? */
   static set<DAQSystem *> daqSystems() { return daq_systems; }
 
+  set<uint> channelsWithSpikeThresholds() const;
+
  signals:
   void channelOpened(uint chan);
   void channelClosed(uint chan);
+  void spikeThresholdSet(uint chan, double value);
+  void spikeThresholdOff(uint chan);
   
  public slots:
   void addChannel();  /* brings up the add channel dialog box */

@@ -186,10 +186,16 @@ signals:
   /* resets this graph to start plotting at the leftmost position */
   virtual void reset(); 
 
+  /* Fast forward the graph's plotting by amt sample indices */
+  virtual void ffwd(unsigned int amt); 
+
  protected:
 
   /** creates real (points array) and virtual (samples array) points,
-      for a given amplitude at a given index  */
+      for a given amplitude at a given index  
+      if clear = true, then sets the real point to null and the virtual
+      point to a ridiculous value (-10000000) 
+  */
   virtual void makePoint (double amplitude, int sampleIndex = -1);
 
  protected:
@@ -215,7 +221,7 @@ signals:
           _sampleRateHz,
           secsVisible;
 
-
+  static const double NOT_VALID_AMPL = -4000000.0; // hopefully will never occur
 
   double   _rangeMin, _rangeMax,
            *samples;             // array of size numSamples 

@@ -45,6 +45,8 @@
 #include <qpen.h>
 #include <qcolor.h>
 
+#include <set>
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -66,6 +68,7 @@
 
 #include "apd_control_private.h"
 #include "searchable_combo_box.h"
+
 
 #define RCS_VERSION_STRING  "$Id$"
 
@@ -185,7 +188,7 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     apd_graph[which_apd_graph]   = new ECGGraph (beats_per_gridline, num_gridlines, 
                                                  apd_ranges[0].min, apd_ranges[0].max, 
                                                  graphs, QString(name()) + " - APD");
-    apd_graph[which_apd_graph]->setPlotFactor(1);
+    apd_graph[which_apd_graph]->setPlotFactor(0);
     apd_graph[which_apd_graph]->setPlotMode(ECGGraph::Points);
     apd_graph[which_apd_graph]->plotPen().setWidth(apdGraphPointWidth);
     int which_graph_row;
@@ -195,9 +198,14 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
     if (which_apd_graph < NumAPDGraphs)
       graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
-    else
+    else {
+      // the 'All APD's' graph..
       graphlayout->addWidget(new QLabel(QString("All APDs"), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
+      // create the interleaver class that talks to this graph
+      apd_interleaver = new APDInterleaver(this, apd_graph[which_apd_graph],
+                                           APColor1, APColor2);
+    }
     apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
     graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
 
@@ -665,13 +673,22 @@ void APDcontrol::readInFifo()
     /* HACK to alternate colors every other AP */
     if (apd_graph[buf[i].apd_channel]->plotPen().color() != APColor1) {
       apd_graph[buf[i].apd_channel]->plotPen().setColor(APColor1);
-      apd_graph[buf[i].apd_channel]->blipPen().setColor(APColor1);
+      // the blip pen has a delayed reaction so we set it to the opposite
+      apd_graph[buf[i].apd_channel]->blipPen().setColor(APColor1);       
+
     } else {
       apd_graph[buf[i].apd_channel]->plotPen().setColor(APColor2);
+      // the blip pen has a delayed reaction so we set it to the opposite
       apd_graph[buf[i].apd_channel]->blipPen().setColor(APColor2);
     }
       
     apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
+    // do it twice.. bigger points?
+    apd_graph[buf[i].apd_channel]->plot(static_cast<double>(buf[i].apd));
+
+    // this is responsible for drawing apd's to the last graph in the 
+    // perkinje-fiber-friendly layout
+    apd_interleaver->gotAPD(buf + i);
 
     if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
 
@@ -1022,3 +1039,113 @@ QString APDcontrol::stringifyDeltaG(double g)
 }
 
 #undef spooler
+
+
+
+/*----------------------------------------------------------------------------
+  APD INTERLEAVER -- Don't touch this unless you are Calin and/or you 
+  know what you are doing! 
+-----------------------------------------------------------------------------*/
+
+
+APDInterleaver::APDInterleaver(QObject *parent,
+                               ECGGraph *g, 
+                               const QColor & c1, 
+                               const QColor & c2, 
+                               DAQSystem *_ds)
+  : QObject(parent), graph(g), color1(c1), color2(c2)
+{
+  set<unsigned int> cs;
+  set<unsigned int>::iterator it, end;
+
+  ds = _ds;
+  if (!ds) {
+    ds = *(DAQSystem::daqSystems().begin());
+  }
+
+  cs = ds->channelsWithSpikeThresholds();
+  for (it = cs.begin(), end = cs.end(); it != end; it++)  spikeSet(*it, 0);
+  connect(ds, SIGNAL(spikeThresholdSet(uint, double)),
+          this, SLOT(spikeSet(uint, double)));
+  connect(ds, SIGNAL(spikeThresholdOff(uint)),
+          this, SLOT(spikeOff(uint)));  
+}
+
+void APDInterleaver::spikeSet(uint chan, double d)
+{
+  (void)d;
+
+  (void)channelAPDs[chan]; /* doesn't matter if it's already there.. */
+  reset();
+}
+
+void APDInterleaver::spikeOff(uint chan)
+{ 
+  channelAPDs.erase(chan); /* doesn't matter if it isn't there..
+                               this is a set! */
+  reset();
+}
+
+void APDInterleaver::reset()
+{
+  ChannelAPDs::iterator it, end;
+  for (it = channelAPDs.begin(), end = channelAPDs.end(); it != end; it++) {
+    APDPair & p = it->second;
+    p.ct = 0;
+    p.apd[0] = it->second.apd[1] = 0;
+  }
+}
+
+void APDInterleaver::gotAPD(MCSnapShot *m)
+{
+  ChannelAPDs::iterator it;
+
+  if ( (it = channelAPDs.find((uint)m->apd_channel)) != channelAPDs.end()) {
+    APDPair & p = it->second;
+    
+    p.apd[p.ct % 2] = m->apd;
+    p.ct++;
+  
+    it++;
+    if(it == channelAPDs.end() && p.ct == 2) {
+      graphAPDs();
+      reset();
+    }
+  }    
+}
+
+void APDInterleaver::graphAPDs()
+{
+  ChannelAPDs::iterator it, end;
+
+  /* . <-- reset graph here.. */
+  graph->reset();
+
+  graph->ffwd(static_cast<uint>
+              ((graph->secondsVisible()*graph->sampleRateHz())
+               /(channelAPDs.size() + 1)
+               - 2));
+
+  for (it = channelAPDs.begin(), end = channelAPDs.end(); it != end; it++) {
+    APDPair & p = it->second;
+    if (p.ct >= 2) { // should actually always EQUAL 2!
+      /* plot even here ..*/
+      graph->blipPen().setColor(color1);
+      graph->plotPen().setColor(color1);
+      graph->plot(p.apd[0]);
+      graph->plot(p.apd[0]);
+                                  
+      /* now plot odd here.. */
+      graph->blipPen().setColor(color2);
+      graph->plotPen().setColor(color2);
+      graph->plot(p.apd[1]);
+      graph->plot(p.apd[1]);
+
+      /* fast forward */
+      graph->ffwd(static_cast<uint>
+                  ((graph->secondsVisible()*graph->sampleRateHz())
+                   /(channelAPDs.size() + 1)
+                   - 2));
+    }
+  }
+}
