@@ -165,4 +165,8 @@ private:
   /* static data that is generated at compile-time and goes into
      the output textfile as a header */
   static const char * fileheader;
+
+  /* Simply prints delta G to a string uses the constant
+     MC_DELTA_G_GUI_PRECISION defined in apd_control.h to control the sprintf*/
+  static QString stringifyDeltaG(double g); 
 };

@@ -119,9 +119,17 @@ struct MCShared {
 /* Some sanity limits imposed by both UI and realtime thread */
 #define MC_DELTA_G_MIN ((float)0.001)
 #define MC_DELTA_G_MAX ((float)0.5)
+#define MC_DELTA_G_FIXEDPOINT_MULT (1e6)
+/* The below don't affect kernel whatsoever, just GUI */
+#define MC_DELTA_G_SCROLLBAR_STEP (mc_delta_g_toint(MC_DELTA_G_MIN / MC_DELTA_G_MAX))
+/* below affects GUI display of delta-g value.. this becomes the '*' in
+   an sprintf %.*f */
+#define MC_DELTA_G_GUI_PRECISION (3)
 
-static inline   int mc_delta_g_toint(float x) { return (int)(x * 100); }
-static inline float mc_delta_g_fromint(int x) { return x / 100.0; }
+static inline   int mc_delta_g_toint(float x) 
+                { return (int)(x * (int)MC_DELTA_G_FIXEDPOINT_MULT); }
+static inline float mc_delta_g_fromint(int x) 
+                { return x / MC_DELTA_G_FIXEDPOINT_MULT; }
 
 #ifdef __cplusplus
 }

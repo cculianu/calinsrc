@@ -363,10 +363,10 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 
     (void)new QLabel("delta g:", tmphb);
     /* delta-g controls */   
-    gui_indicator_delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
+    gui_indicator_delta_g_bar_value = new QLabel(stringifyDeltaG(shm->delta_g), tmphb);
     delta_g_bar = new QScrollBar
       ( mc_delta_g_toint(MC_DELTA_G_MIN), mc_delta_g_toint(MC_DELTA_G_MAX),
-        1, mc_delta_g_toint((MC_DELTA_G_MAX - MC_DELTA_G_MIN) / 5.0), 
+        MC_DELTA_G_SCROLLBAR_STEP, MC_DELTA_G_SCROLLBAR_STEP * 5, 
         mc_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
      connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
      delta_g_bar->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed)); 
@@ -637,21 +637,15 @@ void APDcontrol::readInFifo()
   gui_indicator_ap_ti->setText(QString(uint64_to_cstr(snapshot.ap_ti)));
   gui_indicator_ap_tf->setText(QString(uint64_to_cstr(snapshot.ap_tf)));
   gui_indicator_g_val->setText(QString::number(snapshot.g_val));
-  gui_indicator_delta_g->setText(QString::number(snapshot.delta_g));
+  gui_indicator_delta_g->setText(stringifyDeltaG(snapshot.delta_g));
   gui_indicator_consec_alternating->setText(QString::number(snapshot.consec_alternating));
-  /* update our slider value representation if actual last read delta_g
-     disagrees with the UI's notion of what it is... */
-  static const float smallf = 0.0001;
-#define f_equal(x, y) ( x > y ? x - y < smallf : y - x < smallf )
-  if (!f_equal(snapshot.delta_g, gui_indicator_delta_g_bar_value->text().toFloat())) {
+  if (gui_indicator_g_val->text() !=  gui_indicator_delta_g_bar_value->text()) {
     disconnect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
     delta_g_bar->setValue(mc_delta_g_toint(snapshot.delta_g));
-    gui_indicator_delta_g_bar_value->setText(QString::number(snapshot.delta_g, 'g', 3));
+    gui_indicator_delta_g_bar_value->setText(stringifyDeltaG(snapshot.delta_g));
     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
   }
 
-  /* incomplete... please finish! - Calin */
-#undef f_equal
 }
 
 /* Possible race conditions here but it's too much trouble to implement
@@ -822,7 +816,7 @@ void APDcontrol::changeG(const QString &g)
 void APDcontrol::changeDG(int new_dg_sliderval) 
 {
   shm->delta_g = mc_delta_g_fromint(new_dg_sliderval);
-  gui_indicator_delta_g_bar_value->setNum(mc_delta_g_fromint(new_dg_sliderval));
+  gui_indicator_delta_g_bar_value->setText(stringifyDeltaG(mc_delta_g_fromint(new_dg_sliderval)));
 }
 
 const char * APDcontrol::fileheader = 
@@ -991,5 +985,12 @@ void APDcontrol::graphHasChangedRange(int index)
   }
 }
 
+
+/* Simply prints delta G to a string uses the constant
+   MC_DELTA_G_GUI_PRECISION defined in apd_control.h to control the sprintf*/
+QString APDcontrol::stringifyDeltaG(double g)
+{
+  return QString().sprintf("%.*f", MC_DELTA_G_GUI_PRECISION, g);
+}
 
 #undef spooler
