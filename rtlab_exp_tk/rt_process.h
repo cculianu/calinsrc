@@ -67,6 +67,11 @@ typedef comedi_t* COMEDI_T;
 
 #define DEFAULT_COMEDI_DEVICE "/dev/comedi0"
 
+/* The number of full scans (if all channels were turned on) to
+   use in the AO and AI RT-Fifos -- defaults to 10 seconds worth 
+   of scans! */
+#define DEFAULT_FIFO_SECS 5
+
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
   hrtime_t acq_start; /* hrtime that data acquisition started for first chan.*/
