@@ -236,7 +236,6 @@ int init_module(void)
     error = ai_subdev;
     goto init_error;
   }
-#ifndef NO_AO
   /* find a subdevice of type COMEDI_SUBD_AO */
   if ( (
 	ao_subdev = 
@@ -247,35 +246,30 @@ int init_module(void)
     error = ao_subdev;
     goto init_error;
   }
-#else
-  ao_subdev = -1;
-#endif
+
   /* lock the subdevice  */
   if ( (error =	comedi_lock(ai_comedi_device, ai_subdev)) < 0 ) {  
     errorMessage = "Cannot lock analog input comedi subdevice";
     goto init_error;
   }
 
-#ifndef NO_AO
   /* lock the subdevice  */
   if ( (error =	comedi_lock(ao_comedi_device, ao_subdev)) < 0 ) {  
     errorMessage = "Cannot lock analog output comedi subdevice";
     goto init_error;
   }
-#endif
 
   if ( (error = comedi_open(ai_comedi_device)) < 0 ) {
     errorMessage = "Error opening comedi device for analog input";
     goto init_error;
   }   
 
-#ifndef NO_AO
   if ( ai_comedi_device != ao_comedi_device &&
        (error = comedi_open(ao_comedi_device)) < 0 ) {
     errorMessage = "Error opening comedi device for analog output";
     goto init_error;
   }   
-#endif 
+
   if (!init_shared_mem(ai_comedi_device, ai_subdev, ai_fifo,
 		       ao_comedi_device, ao_subdev, ao_fifo))  {  
     /* error initializing shared memory */
@@ -353,11 +347,8 @@ static int init_shared_mem(int im, int is, int iF, int om, int os, int oF)
   sh_mem->ao_fifo_minor = oF;
   /* num AI channels in use */
   sh_mem->n_ai_chans = comedi_get_n_channels(sh_mem->ai_minor, 0); 
-#ifndef NO_AO
   sh_mem->n_ao_chans = comedi_get_n_channels(sh_mem->ao_minor, 0);
-#else
   sh_mem->n_ao_chans = 0;
-#endif
   sh_mem->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
   sh_mem->scan_index = 0;
 
