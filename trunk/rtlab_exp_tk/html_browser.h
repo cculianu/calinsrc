@@ -21,37 +21,32 @@
  * http://www.gnu.org.
  */
 
-#ifndef _DAQ_HELP_SOURCES_H
-#define _DAQ_HELP_SOURCES_H
-#include <qmime.h>
+#ifndef _HELP_BROWSER_H
+#define _HELP_BROWSER_H
 
-#include "common.h"
+#include <qstring.h>
+#include <qdialog.h>
 
-namespace DAQHelpSources {
-  extern QString configWindowHelpSource,
-    mainWindowHelpSource,
-    aboutHelpSource,
-    recordHelpSource,
-    addChannelHelpSource,
-    pauseHelpSource,
-    spikeHelpSource,
-    printHelpSource,
-    pluginHelpSource,
-    logHelpSource,
+class QVBoxLayout; class QHBox; class QPushButton; class QTextBrowser;
 
-    addChannelImage,
-    pauseImage,
-    playImage,
-    spikeMinusImage,
-    spikePlusImage,
-    synchImage,
-    timeStampImage;
 
-  extern QMimeSourceFactory * initFactory(); /* the function that registers all sources with QMimeSourceFactory */
+class HTMLBrowser : public QDialog
+{
+  Q_OBJECT
+ public:
 
+  HTMLBrowser ( QWidget *parent = 0);
+
+  void openPage ( QString page );
+
+ protected:
+  QTextBrowser *helpTextBrowser;
+
+ private:
+
+  QVBoxLayout *mainBox;
+  QHBox *navBox;
+  QPushButton *backButton, *forwardButton, *homeButton;
+  
 };
-
-
 #endif
-
-

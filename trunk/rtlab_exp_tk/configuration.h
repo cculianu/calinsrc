@@ -47,8 +47,6 @@
 #include <qlineedit.h>
 #include "comedi_device.h"
 #include "output_file_w.h"
-#include "daq_help_sources.h"
-#include "help_browser.h"
 
 class Probe;
 class DAQSettings;

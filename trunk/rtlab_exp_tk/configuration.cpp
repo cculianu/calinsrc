@@ -43,8 +43,8 @@
 #include "probe.h"
 #include "comedi_device.h"
 #include "output_file_w.h"
-#include "daq_help_sources.h"
-#include "help_browser.h"
+#include "daq_help_browser.h"
+#include "daq_mime_sources.h"
 
 #ifdef TEST_CW
 #include <qapplication.h>
@@ -291,8 +291,8 @@ ConfigurationWindow::accept()
 void
 ConfigurationWindow::configHelp()
 {
-  HelpBrowser::getDefaultBrowser()->
-    openPage( DAQHelpSources::configWindowHelpSource );
+  DAQHelpBrowser::getDefaultBrowser()->
+    openPage( DAQMimeSources::HTML::configWindow );
 }
 
 bool
