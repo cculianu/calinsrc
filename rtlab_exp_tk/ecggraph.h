@@ -32,6 +32,7 @@
 #include <qpoint.h>
 #include <qpointarray.h>
 #include <qpixmap.h>
+#include <vector>
 
 /* To Do: Understand the quirks of qt's line drawing!
    Clean up this code! */
@@ -150,6 +151,10 @@ signals:
   void spikeThresholdSet(double amplitude);
   void spikeThresholdUnset(void);
 
+  /* emitted whenever the meaning of a particular (vertical) gridline has
+     changed */
+  void gridlineMeaningChanged(const vector<uint64> &); 
+
  public slots:
  
   virtual void setRange(double newRangeMin, double newRangeMax);
@@ -210,6 +215,7 @@ signals:
   QColor _gridColor, _backgroundColor;
 
   uint64 outside_concept_of_a_sample_index;
+  vector<uint64> sample_indices_at_gridlines; 
 
   bool spikeTHoldEnabled;
   double spikeTHold;
@@ -256,6 +262,8 @@ signals:
 
   /** draws that little blip artifact at the current position */
   virtual void drawLittleBlip (int index = -1);
+
+  void computeCurrentSampleIndex(bool reset = false);
 
 };
 

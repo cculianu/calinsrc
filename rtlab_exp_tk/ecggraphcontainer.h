@@ -34,10 +34,15 @@
 #include <qbuttongroup.h>
 #include <qradiobutton.h>
 #include <qstatusbar.h>
+
+#include <vector>
+
 #include "common.h"
 #include "ecggraph.h"
 #include "sample_consumer.h"
 #include "shared_stuff.h"
+
+class QGridLayout;
 
 class ECGGraphContainer : public QFrame, public SampleConsumer {
   Q_OBJECT
@@ -149,6 +154,8 @@ public slots:
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
 
+  void setXAxisLabels(const vector<uint64> &);
+
  protected:
 
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
@@ -189,9 +196,14 @@ public slots:
 
   /* status bar related stuff */
  QStatusBar *statusBar;
+ QWidget *xaxis;
+ QGridLayout *xaxis_layout;
+ vector<QLabel *> xaxis_labels;
+
  QLabel *currentIndex, *mouseOverVector, *spikeThreshold, *lastSpike, 
          *spikeFrequency;
 
+ 
   const scan_index_t scan_index_threshold; // internal
   scan_index_t last_scan_index, 
                last_spike_index; /* for computing instantaneous hz */

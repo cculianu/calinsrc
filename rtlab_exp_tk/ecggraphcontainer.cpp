@@ -76,7 +76,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   this->setFrameStyle(StyledPanel);
   
   // this is the master layout for this widget
-  layout = new QGridLayout (this, 2, 2, 1, 1);
+  layout = new QGridLayout (this, 2, 3, 1, 1);
   
 
   // the controls on top
@@ -224,6 +224,21 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   layout->setRowStretch(1,1);
 
   if (name)  this->setCaption(name);
+
+  { /* for the x-axis stuff */
+    QLabel *xaxislabel = new QLabel("Time: ", this);
+    layout->addWidget(xaxislabel, 2, 0);
+
+    xaxis = new QWidget(this);
+    layout->addWidget(xaxis, 2, 1);
+    xaxis_layout = 0; /* will be built dynamically by setXAxisLabels() */
+
+    connect(graph, SIGNAL(gridlineMeaningChanged(const vector<uint64> &)),
+            this,  SLOT(setXAxisLabels(const vector<uint64> &)));
+
+    graph->reset();
+  }    
+
 
   { /* status bar related stuff */
     // for the status bar..
@@ -520,5 +535,37 @@ ECGGraphContainer::parseRangeString (const QString & rangeString,
   }
   return false;
   
+}
+
+void ECGGraphContainer::setXAxisLabels(const vector<uint64> & 
+                                       sample_indices)
+{
+  int i;
+  char buf[64];
+  bool hidenshow = !xaxis->isHidden();
+
+  
+  if (hidenshow) xaxis->hide();
+
+  for (i = 0; i < static_cast<int>(xaxis_labels.size()); i++) 
+    delete xaxis_labels[i];
+  
+
+  xaxis_labels.clear();
+  if (xaxis_layout) delete xaxis_layout;
+  xaxis_layout = new QGridLayout(xaxis); /* so that our labels will be evenly 
+                                            spaced below */
+
+  for (i = 0; i < (int)sample_indices.size(); i++) {
+    double time = sample_indices[i] 
+                 / (double)(graph->sampleRateHz() ? graph->sampleRateHz() : 1);
+
+    snprintf(buf, 64, "%.1f", time); /* cheesy way to round to nearest 10th */
+    xaxis_labels.push_back(new QLabel(QString() + buf + " sec.", xaxis));
+    xaxis_layout->addWidget(xaxis_labels[i], 0, i);
+    xaxis_layout->setColStretch(i, 1); 
+  }
+
+  if (hidenshow) xaxis->show();
 }
 
