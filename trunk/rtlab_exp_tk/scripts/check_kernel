@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# This script stolen and modified from Comedi sources -- but since this and
+# comedi are GPL that is ok.  -Calin
+
+if [ -z "$LINUXDIR" -o ! -d "$LINUXDIR" ]; then
+	echo "Directory '${LINUXDIR}' does not exist!"
+	exit 1
+fi
+
+
+if [ $(grep -c "$(uname -r)" ${LINUXDIR}/include/linux/version.h) != 0 ]
+then
+	cat <<EOF
+ *****
+ *****    WARNING!!!
+ *****
+ *****    The kernel that is currently running is a different
+ *****    version than the source in ${LINUXDIR}.  The current
+ *****    compile will create a module that may be *incompatible*
+ *****    with the running kernel.  (This may be exactly what
+ *****    you want, however.)
+ *****
+EOF
+fi
+
