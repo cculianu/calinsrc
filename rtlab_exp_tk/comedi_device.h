@@ -91,7 +91,7 @@ class ComediDevice
 
   /* returns a null (isNull() == true) ComediSubDevice if not found */
   const ComediSubDevice & find(ComediSubDevice::SubdevType type, 
-			       int id_start = 0) const; 
+                               int id_start = 0) const; 
 
   QString filename;
   QString devicename, drivername;

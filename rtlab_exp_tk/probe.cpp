@@ -184,7 +184,7 @@ Probe::do_probe(const QString & filename)
     }
 
     sdev.used_by_rt_process = 
-      have_rt_process && (i == 0 ? rtpshm->ai_minor : rtpshm->ao_minor) == dev.minor;
+      have_rt_process && (i == 0 ? shm->ai_minor : shm->ao_minor) == dev.minor;
     sdev.can_be_locked = comedi_lock(it, sdev.id) >= 0;
     comedi_unlock(it, sdev.id);
 
@@ -203,12 +203,6 @@ void
 Probe::validate() const
 {
   uint i;
-
-  /* TODO: Fixme.  There needs to be a way to tell if rt_process.o is loaded
-     which is independent of the RTPShm. */
-  if (!have_rt_process) {    
-    throw ShmBase::exception();
-  }
 
   /* try and find at least 1 comedi analog input device */
   for (i = 0; i < probed_devices.size(); i++) {
@@ -231,13 +225,13 @@ Probe::validate() const
 void
 Probe::attach_to_shm_and_stuff()
 {
-  have_rt_process = (rtpshm = new RTPShm()) != 0;
+  have_rt_process = ((shm = ShmController::attach(ShmController::MBuff)) != 0);
 }
 
 void
 Probe::kill_shm() /* Only to be called if instance initialization is done! */
 {
-  if (rtpshm) delete rtpshm;
+  if (shm) ShmController::detach(shm, ShmController::MBuff);
 }
 
 

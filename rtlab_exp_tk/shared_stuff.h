@@ -30,7 +30,7 @@
 
 /* dconst, or dummy const is a hackish way to enforce the fact that userland
    should NOT modify certain key shared memory struct members */
-# ifdef MODULE
+# if defined(MODULE) || defined (SHARED_MEM_STRUCT_SUBCLASS)
 #  define dconst /* */ /* dconst is nothing in kernel land.. so we can write */
 # else
 #  define dconst const /* dconst is const in userland (enforce read-only) */
@@ -93,8 +93,8 @@ typedef struct SpikeParams SpikeParams;
                                            struct_version member            */
 struct SharedMemStruct {
 #ifdef __cplusplus
-  /* prevent compiler errors due to consts below */
-  SharedMemStruct(): struct_version(SHD_SHM_STRUCT_VERSION) {};
+/* prevent compiler errors due to consts below */
+  SharedMemStruct(): struct_version(SHD_SHM_STRUCT_VERSION)  {}
 #endif
   dconst int struct_version;             /* magic number used to make sure
                                             this structure version is synch'd
@@ -112,7 +112,7 @@ struct SharedMemStruct {
                            
   volatile char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
                                            process which channels to ignore. 
-                                           Use inline funcs set_chan() and 
+7                                           Use inline funcs set_chan() and 
                                            is_chan_on() to set this           */
   volatile char ao_chans_in_use[CHAN_MASK_SIZE];  
   volatile sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
@@ -136,7 +136,6 @@ struct SharedMemStruct {
   dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
   dconst unsigned int n_ao_chans;        /* ditto                            */
   volatile dconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
-  volatile int reserved[4];              /* misc data                        */
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;

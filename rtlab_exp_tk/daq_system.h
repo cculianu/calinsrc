@@ -107,7 +107,6 @@ class ReaderLoop: public QObject
 
   DAQSystem *daq_system;
 
-  ShmBase *shm;   
   ShmController * shmCtl; /* daq_system accesses this */
 
   bool graphListenerExists(uint channel_id);
