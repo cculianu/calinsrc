@@ -1,0 +1,19 @@
+#
+# edit the below line to specify the location of the rtl.mk files created
+# when you compiled the rt-linux kernel 
+#
+#TODO: Have ONE unified Makefile.tmake/template combo that generates both
+#      Makefile.daq_system and Makefile.rt_process based on the common
+#      config options and file paths. 
+RTL_MK = /usr/src/rtlinux/rtl.mk
+
+TEMPLATE    =	daq_system.t
+CONFIG      =	qt warn_on debug #release thread
+INCLUDEPATH =   
+HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp shm_mgr.h ecggraph.h ecggraphcontainer.h daq_ecggraphcontainer.h
+SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp daq_ecggraphcontainer.cpp
+TARGET      =	daq_system
+DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\" #QT_THREAD_SUPPORT
+CFLAGS      =   
+LIBS        =   -lcomedi
+TMAKE_LIBS_QT = -lqt #-lqt-mt
