@@ -53,9 +53,6 @@ public:
   void setFileName(const QString & fn);
   void setFileFormat(DAQSettings::DataFileFormat fmt);
 
-  static const char * const NDS_ASCII_SUFFIX,
-                    * const NDS_BIN_SUFFIX;
-
 public slots:
   void toSettings();
   void fromSettings();

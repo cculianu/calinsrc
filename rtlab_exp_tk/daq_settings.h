@@ -51,6 +51,8 @@ class DAQSettings: public Settings
     invalid_format_high    
   };
 
+  /* indexed by the above enum */
+  static const QString fileFormatExts [2];
 
   /* Class used to encapsulate default settings for the daq system.
      Instances of this class should be assigned to Settings::masterSettings,

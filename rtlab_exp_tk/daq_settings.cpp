@@ -32,6 +32,12 @@ const QString DAQSettings::defaultConfigFileName
 
 const DAQSettings::DAQMasterDefaults DAQSettings::daqMasterSettings;
 
+const QString DAQSettings::fileFormatExts [2] = {
+  ".nds",
+  ".nds-ascii.gz"
+};
+
+
 /* Constructs a map with daq_system specific default settings */
 DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
 {
@@ -46,7 +52,7 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
   me [SECTION_NAME][ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
   me [SECTION_NAME][ KEY_DEFAULT_INPUT_SOURCE ] = QString::number((int)Comedi);
   me [SECTION_NAME][ KEY_SHOW_CONFIG_ON_STARTUP ] = QString::number((int)true);
-  me [SECTION_NAME][ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.bin";
+  me [SECTION_NAME][ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.nds";
   me [SECTION_NAME][ KEY_DATA_FORMAT ] = QString::number((int)Binary);
 
   /* the following is a  'special' setting.  It is basically
