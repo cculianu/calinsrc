@@ -40,8 +40,6 @@
 #include "exception.h"
 #include "comedi_device.h"
 
-const int ComediCoprocess::sample_buffer_size = 100;
-
 static inline void microsleep(long time_us);
 
 const int ComediCoprocess::INITIAL_SAMPLING_RATE_HZ = 1000,
@@ -69,6 +67,10 @@ ComediCoprocess::ComediCoprocess(const ComediDevice & d)
   ao_subdev = aoSubDev.id;;
 
   ai_fifo_minor = pipe[0]; /* cheap hack */
+
+  fcntl(pipe[0], F_SETFL, O_SYNC);
+  fcntl(pipe[1], F_SETFL, O_SYNC);  
+
   ao_fifo_minor = -1;
   /* num AI channels in use */
   n_ai_chans = aiSubDev.n_channels; 
@@ -89,16 +91,22 @@ ComediCoprocess::ComediCoprocess(const ComediDevice & d)
     if (i < n_ao_chans)  set_chan(i, ao_chans_in_use, 0);
     
   }
+  
+  /* the buffer size should be able to store 1s of a full scan */
+  sample_buffer_size = n_ai_chans * sampling_rate_hz;
 
   sample_buffer = new SampleStruct[sample_buffer_size];
 
-  /* nothing */
+  ao_dev = ai_dev = comedi_open(device.filename);
+
+    /* nothing */
 }
 
 ComediCoprocess::~ComediCoprocess()
 {  
   stop();
-
+  comedi_close(ai_dev);
+  if (ai_dev != ao_dev) comedi_close(ao_dev);
   close(pipe[0]); close(pipe[1]);
   if (sample_buffer) { delete sample_buffer; sample_buffer = 0; }
 }
@@ -115,6 +123,7 @@ void ComediCoprocess::start()
 {
   stop(); /* kill any already-running threads */
 
+  //comedi_lock(ai_dev, device.find(ComediSubDevice::AnalogInput).id);
   int err = 
     pthread_create(&thread, 0, pthread_friendly_threadLoop_wrapper, 
                    reinterpret_cast<void *>(this));
@@ -133,6 +142,7 @@ void ComediCoprocess::stop()
     pthread_join(thread, 0);
     thread = 0;
   } 
+  //comedi_unlock(ai_dev, device.find(ComediSubDevice::AnalogInput).id);
 }
 
 
@@ -145,7 +155,6 @@ ComediCoprocess::threadLoop()
   comedi_insn insn[n_ai_chans];
   comedi_insnlist insn_list;
   lsampl_t databuf[n_ai_chans];
-  SampleStruct tmp_sample;
   vector<comedi_range> ranges = device.find(ComediSubDevice::AnalogInput).ranges();
   lsampl_t maxdata = device.find(ComediSubDevice::AnalogInput).maxData();
 
@@ -166,17 +175,19 @@ ComediCoprocess::threadLoop()
         insn_list.n_insns++;
       }      
     }
+    if (insn_list.n_insns)
+      comedi_do_insnlist(ai_dev, &insn_list);
 
-    comedi_do_insnlist(ai_dev, &insn_list);
+    for (uint i = 0; sbuf_i < sample_buffer_size && i < insn_list.n_insns;  
+         i++, sbuf_i++) {
+      SampleStruct & sample = sample_buffer[sbuf_i];
 
-    for (uint i = 0; i < insn_list.n_insns; i++) {
-      tmp_sample.scan_index = scan_index;
-      tmp_sample.channel_id = CR_CHAN(insn[i].chanspec);
-      tmp_sample.data = comedi_to_phys(databuf[tmp_sample.channel_id], &ranges[CR_RANGE(insn[i].chanspec)], maxdata);
-      tmp_sample.spike = 0; // hack for now
-      tmp_sample.spike_period = 0;
-      if (sbuf_i < sample_buffer_size) 
-	sample_buffer[sbuf_i++] = tmp_sample; 
+      sample.scan_index = scan_index;
+      sample.channel_id = CR_CHAN(insn[i].chanspec);
+      comedi_range r = ranges[CR_RANGE(insn[i].chanspec)];
+      sample.data = comedi_to_phys(databuf[sample.channel_id], &r, maxdata);
+      sample.spike = 0; // hack for now
+      sample.spike_period = 0;
     }
 
     flushBuffer();
@@ -198,21 +209,25 @@ ComediCoprocess::threadLoop()
 /* busy sleep */
 inline void microsleep(long time_us)
 {
-  struct timeval begin, now;
+  struct timeval begin_tv, now_tv;
+  long long int now, begin, time = time_us;
 
-  gettimeofday(&begin, 0);
-
+  gettimeofday(&begin_tv, 0);
+  begin = begin_tv.tv_sec * 1000000; begin += begin_tv.tv_usec;
+  
   do {
-    gettimeofday(&now, 0);
-  } while ( (now.tv_sec * 1000000 + now.tv_usec) 
-            - (begin.tv_sec * 1000000 + now.tv_usec) <= time_us);
+    gettimeofday(&now_tv, 0);
+    now  = now_tv.tv_sec * 1000000; now += now_tv.tv_usec;
+  } while ( (now - begin) <= time_us);
   
 }
 
 
 void ComediCoprocess::flushBuffer()
 {
-  if (sbuf_i >= sample_buffer_size/4) { /* do write on 1/4 buffer fill? */
+  if (sbuf_i && sampling_rate_hz >= 10 
+      && ! ((scan_index+1) % (sampling_rate_hz / 10)) ) { 
+    /* do a blocking  write every 100ms iff we have any samples ready */
 
     /* assumption is a blocking write */
     int bytes_written = 
@@ -222,3 +237,48 @@ void ComediCoprocess::flushBuffer()
     
   }
 }
+
+#ifdef TEST_COMEDI_COPROCESS
+#include <signal.h>
+#include <iostream>
+#include "probe.h"
+#include "shm.h"
+
+int n_skipped = 0;
+
+void sig(int)
+{
+  cerr << "Skipped " << n_skipped << " samples." << endl;
+  exit(0);
+}
+
+int main(void)
+{
+  signal(SIGINT, sig);
+
+  Probe p;
+  ComediCoprocess cc(p.probed_devices[0]);
+  ShmController sc(&cc);
+
+  for (uint i = 0; i < 10; i++)
+    sc.setChannel(ComediSubDevice::AnalogInput, i, true);
+
+  cc.start();
+
+  int n_read;
+  scan_index_t currentIndex = 0;
+  SampleStruct ss[1000];
+
+  while ( (n_read = read(cc.fifoFd(), ss, sizeof(SampleStruct) * 1000)) > -1 ) {
+    int n_samps = n_read / sizeof(SampleStruct);
+      
+    for (int i = 0; i < n_samps; i++) {
+      if (currentIndex != 0 && ss[i].scan_index > currentIndex + 1 ) {
+        n_skipped++;
+      } 
+      currentIndex = ss[i].scan_index;
+      cout << ss[i].data << endl;
+    }
+  }
+}
+#endif

@@ -76,7 +76,7 @@ class ComediCoprocess : public SharedMemStruct
   int pipe[2]; /* [0] is for reading, [1] is for writing */
   pthread_t thread;
 
-  static const int sample_buffer_size;  
+  int sample_buffer_size;  
   SampleStruct *sample_buffer;
   int sbuf_i; /* index into next free pos in sample_buffer */
 };
