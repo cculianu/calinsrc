@@ -171,8 +171,11 @@ extern int rtp_get_callback_frequency(rtfunction_t function);
 extern int rtp_find_free_rtf(int *minor, int size);
 
 
-/* Sets the sampling rate.  Returns the new (possibly normalized) rate. */
-extern sampling_rate_t rtp_set_sampling_rate(sampling_rate_t);
+/* 
+   Sets the sampling rate.  Returns the new (possibly normalized) rate. 
+   Can be called from realtime context, but non realtime ok! 
+*/
+extern sampling_rate_t rtlab_set_sampling_rate(sampling_rate_t);
 
 /* 
    EXPORTED VARIABLES:

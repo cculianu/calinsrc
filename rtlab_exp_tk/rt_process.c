@@ -92,7 +92,7 @@ EXPORT_SYMBOL_NOVERS(rtp_activate_function);
 EXPORT_SYMBOL_NOVERS(rtp_set_callback_frequency);
 EXPORT_SYMBOL_NOVERS(rtp_get_callback_frequency);
 EXPORT_SYMBOL_NOVERS(rtp_find_free_rtf);
-EXPORT_SYMBOL_NOVERS(rtp_set_sampling_rate);
+EXPORT_SYMBOL_NOVERS(rtlab_set_sampling_rate);
 EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
@@ -515,7 +515,7 @@ int init_module(void)
   rtlab_proc_register(); /* it doesn't matter if this fails, we still go on */
 
 
-  printk(RT_PROCESS_MODULE_NAME ": acquisition started at %d Hz (%s)\n", 
+  printk(RT_PROCESS_MODULE_NAME ": acquisition started at %u Hz (%s)\n", 
          rtp_shm->sampling_rate_hz, 
          errorMessage);
 
@@ -1278,7 +1278,7 @@ int rtp_set_callback_frequency(rtfunction_t f, uint freq)
   while ((r = __find_func(f, r))) {    
     /* keep scanning for this function (as it may appear multiple times!)
        and set all instances of it to frequency_hz = freq */
-      r->time_between_callbacks_us = MILLION / freq;
+      r->time_between_callbacks_us = MILLION / normalizeSamplingRate(freq);
       r = r->next;
       retval = 0;
   }
@@ -1461,12 +1461,17 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
   PROC_PRINT_DONE;
 }
 
-sampling_rate_t rtp_set_sampling_rate(sampling_rate_t r)
+sampling_rate_t rtlab_set_sampling_rate(sampling_rate_t r)
 {
   /* normalize sampling rate -- DANGEROUS if set too high!!! */
   rtp_shm->sampling_rate_hz = normalizeSamplingRate(r);
   computeNanosPerScan();
   task_period = rtp_shm->nanos_per_scan;
+
+  if (r != rtp_shm->sampling_rate_hz 
+      || last_sampling_rate != rtp_shm->sampling_rate_hz)
+    rtos_printf(RT_PROCESS_MODULE_NAME ": acquisition set to %u Hz\n", 
+                rtp_shm->sampling_rate_hz);
 
   last_sampling_rate = rtp_shm->sampling_rate_hz;
 
@@ -1475,11 +1480,11 @@ sampling_rate_t rtp_set_sampling_rate(sampling_rate_t r)
 
 inline void readjust_rt_task_wakeup(void)
 {
-  if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
-    /* uh-oh.. user changed sampling rate directly in the shm 
-       -- DANGEROUS if set too high!!! */
-    rtp_set_sampling_rate(rtp_shm->sampling_rate_hz);
-  }
+  if (rtp_shm->sampling_rate_hz != last_sampling_rate)  {
+      /* uh-oh.. user changed sampling rate directly in the shm 
+         -- DANGEROUS if set too high!!! */
+      rtlab_set_sampling_rate(rtp_shm->sampling_rate_hz);
+    }
 
   /* now re-tune the period, note that this is dangerous if set too
      fast, as the user task may never get to run! */
@@ -1753,7 +1758,7 @@ static int internal_data_read_delayed( COMEDI_T dev, uint subdev, uint chan,
 static inline void update_wall_clock_times(rtos_time_t now)
 {
   
-  static int64         first_call = -1; /* always relative to first_call. */
+  static int64         first_call = 0; /* always relative to first_call. */
   static const int32   nanos_per_micro = 1000L,
                        micros_per_milli= 1000L;
   uint64               quotient;
@@ -1762,7 +1767,7 @@ static inline void update_wall_clock_times(rtos_time_t now)
   /* TODO FIX THIS TO SOMEHOW USE NATIVE LONG LONG DIVISION!!
      NOTE: do_div() is in asm/div64.h and is supposedly 64-bit-safe! */
 
-  if (first_call == -1LL) first_call = now; 
+  if (first_call == 0LL) first_call = now; 
 
   /* rtp_shm->time_us.. */
   quotient = now - first_call;  
