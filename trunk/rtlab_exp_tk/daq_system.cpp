@@ -69,14 +69,50 @@
 #include "common.h"
 #include "daq_help_sources.h"
 #include "help_browser.h"
+#include "simple_text_editor.h"
+#include "plugin.h"
+#include "comedi_coprocess.h"
 
+/* Icons */
 #include "timestamp.xpm"
 #include "plus.xpm"
 #include "synch.xpm"
 
-#include "plugin.h"
 
-#include "comedi_coprocess.h"
+/* 
+   An Opaque Class that handles the log window.. this allows us
+   to add that custom CTRL+T accelerator for pasting timestamps into the 
+   log ... 
+   This is a VERY cheap hack!!
+*/
+#include <qaccel.h> /* needed in this class... */
+class ExperimentLog : public SimpleTextEditor
+{
+public:
+  ExperimentLog(DAQSystem & d, QWidget * parent = 0, const char * name = 0) 
+    : SimpleTextEditor(parent, name), daqSystem(d) { init(); }
+    
+  ExperimentLog(DAQSystem & d, const QString & file, 
+                const QString & log_template = QString::null, 
+                QWidget * parent = 0, 
+                const char * name = 0)
+    : SimpleTextEditor (file, log_template, parent, name), daqSystem (d)  
+  { init(); }
+  
+private:
+  QAccel * accel;
+  void init();
+  DAQSystem & daqSystem;
+};
+
+void ExperimentLog::init()
+{
+  accel = new QAccel(this); /* to be auto-deleted since it's a child of ours */
+  int id = accel->insertItem(CTRL + Key_T);
+  accel->connectItem( id, &daqSystem, SLOT(logTimeStamp()) );
+}
+
+
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
 		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
@@ -97,10 +133,13 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   shmCtl(*readerLoop.shmCtl),
   daqSystemIsClosingMode(false), /* for now, this becomes true when
                                     daq system is closing */
-  log(0, "Log Window"),
+  log(0),
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu")
 {
+  log = new ExperimentLog(*this, 0, "Log Window");
+
+
   printer.setPageSize(settings.getPageSize());
 
   this->setCaption(QString("%1 - %2").arg(name).arg(settings.getDataFile()));
@@ -152,8 +191,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   }
 
   /* add the log window */
-  log.loadTemplate(settings.getTemplateFileName());
-  windowMenuAddWindow(&log); /* add this window to the windowMenu QPopupMenu */
+  log->loadTemplate(settings.getTemplateFileName());
+  windowMenuAddWindow(log); /* add this window to the windowMenu QPopupMenu */
 
 
   { /* add toolbar */
@@ -203,6 +242,7 @@ DAQSystem::~DAQSystem()
 {
   settings.saveSettings(); /* commit settings (usually just window setting
                               changes) */
+  if (log)  delete log; 
 }
 
 bool
@@ -518,14 +558,14 @@ DAQSystem::saveGraphSettings(const ECGGraphContainer  *gcont)
 void 
 DAQSystem::logTimeStamp()
 {
-  log.insertAtCursor(statusBarScanIndex.text());
-  showLogWindow();
+  log->insertAtCursor(statusBarScanIndex.text());
+  if (!log->isActiveWindow()) showLogWindow();
 }
 
 void 
 DAQSystem::closeEvent (QCloseEvent * e)
 {
-  if (!log.checkUnsaved()) return;
+  if (!log->checkUnsaved()) return;
 
   daqSystemIsClosingMode = true; /* this changes the behavior of the
                                     saveGraphSettings() method */
@@ -646,6 +686,11 @@ DAQSystem::windowMenuRemoveWindow(const QWidget *w)
   }
 }
 
+/* defeat qt's type-dumbness with signals/slots */
+void 
+DAQSystem::windowMenuRemoveWindow(const ECGGraphContainer *w)
+{ windowMenuRemoveWindow(static_cast<const QWidget *>(w)); }
+
 void
 DAQSystem::graphOff(const ECGGraphContainer * gcont)
 {
@@ -690,7 +735,7 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 
 void DAQSystem::showLogWindow()
 {
-  windowMenuFocusWindow(&log);
+  windowMenuFocusWindow(log);
 }
 
 
