@@ -274,7 +274,7 @@ Probe::attach_to_shm_and_stuff()
     if (attachedname) free(attachedname);
 
   
-    if (num_procs_of_my_exe() > 1 || 
+    if (num_procs_of_my_exe_no_children() > 1 || 
         have_rt_process && pid && attachedName == myName )  {
       const char *msg =
         "It appears that another instance of this program may already be "

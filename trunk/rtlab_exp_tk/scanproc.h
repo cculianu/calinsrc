@@ -37,8 +37,12 @@ extern "C" {
 
 
   extern int    num_procs_of_my_exe(void);
-  extern int    num_procs_of_exe(const char *exe_path);
+  /* like above but discounts children that may be the result of LWP/pthreads*/
+  extern int    num_procs_of_my_exe_no_children(void);
 
+  extern int    num_procs_of_exe(const char *exe_path);
+  /* like above but discounts children that may be the result of LWP/pthreads*/
+  extern int    num_procs_of_exe_no_children(const char *exe);
   /* 
      returns a malloc'd char * string (which might be NULL on error)
      if sz != NULL then it stores the string size in sz.
@@ -64,6 +68,9 @@ extern "C" {
   /* same as above but wrappers using getpid() */
   extern char * grab_my_full_cmd_name(int *sz);
   extern char * grab_my_stripped_cmd_name(int *sz);
+
+  /* scan /proc/PID/status and grab the PPid of a proces, if any */
+  extern pid_t grab_parent_of_pid(pid_t pid);
 
 #ifdef __cplusplus
 }

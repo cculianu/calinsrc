@@ -26,6 +26,7 @@ extern "C" {
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
+#include <signal.h>
 }
 #include <iostream>
 #include <qapplication.h>
@@ -119,8 +120,8 @@ uninit(void)
   if (conf) delete conf; conf = 0;
   if (settings) delete settings; settings = 0;
   if (probe) delete probe; probe = 0;
-  /* do not delete because of WDestructiveClose ? 
-     if (daqSystem) delete daqSystem; daqSystem = 0; */  
+  /* do not delete because of WDestructiveClose ? */  
+  //if (daqSystem) delete daqSystem; daqSystem = 0; 
 }
 
 static
