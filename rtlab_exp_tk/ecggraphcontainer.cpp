@@ -34,12 +34,7 @@
 #include <math.h>
 
 #include "ecggraphcontainer.h"
-
-/* Icons */
-#include "pause.xpm"
-#include "play.xpm"
-#include "spike_plus.xpm"
-#include "spike_minus.xpm"
+#include "daq_images.h"
 
 /* ugly non-class-specific static constants but this saves needing to 
    duplicate this work in the .h file */
@@ -99,7 +94,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
   pauseBox = new QPushButton ( controlsBox );
-  pauseBox->setPixmap( QPixmap( pause_xpm ) );
+  pauseBox->setPixmap( DAQImages::pause_img );
   pauseBox->setMaximumSize(pauseBox->sizeHint());
   QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
                 "actual data acquisition");
@@ -432,7 +427,7 @@ void ECGGraphContainer::setSpikePolarity(SpikePolarity p)
   polarity = p;
   if ( polarity == Positive )
     {
-      polarityButton->setPixmap( spike_plus_xpm );
+      polarityButton->setPixmap( DAQImages::spike_plus_img );
       QToolTip::remove(polarityButton);
       QToolTip::add(polarityButton, 
                     "A positive spike polarity means that a spike is detected if\n"
@@ -441,7 +436,7 @@ void ECGGraphContainer::setSpikePolarity(SpikePolarity p)
     }
   else
     {
-      polarityButton->setPixmap( spike_minus_xpm );
+      polarityButton->setPixmap( DAQImages::spike_minus_img );
       QToolTip::remove(polarityButton);
       QToolTip::add(polarityButton, 
                     "A negative spike polarity means that a spike is detected if\n"
@@ -630,13 +625,13 @@ void ECGGraphContainer::pause()
 {
   if (nothungry) //from pause to play
     {
-      pauseBox->setPixmap( QPixmap( pause_xpm ) );
+      pauseBox->setPixmap( DAQImages::pause_img );
       nothungry = FALSE;
     }
   else //from play to pause
     {
       currentIndex->setText("Graph Display PAUSED");
-      pauseBox->setPixmap( QPixmap( play_xpm ) );
+      pauseBox->setPixmap( DAQImages::play_img );
       nothungry = TRUE;
     }
 }

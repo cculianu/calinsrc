@@ -21,34 +21,20 @@
  * http://www.gnu.org.
  */
 
-#ifndef _DAQ_HELP_SOURCES_H
-#define _DAQ_HELP_SOURCES_H
-#include <qmime.h>
+#ifndef _DAQ_IMAGES_H
+#define _DAQ_IMAGES_H
 
-#include "common.h"
-
-namespace DAQHelpSources {
-  extern QString configWindowHelpSource,
-    mainWindowHelpSource,
-    aboutHelpSource,
-    recordHelpSource,
-    addChannelHelpSource,
-    pauseHelpSource,
-    spikeHelpSource,
-    printHelpSource,
-    pluginHelpSource,
-    logHelpSource,
-
-    addChannelImage,
-    pauseImage,
-    playImage,
-    spikeMinusImage,
-    spikePlusImage,
-    synchImage,
-    timeStampImage;
-
-  extern QMimeSourceFactory * initFactory(); /* the function that registers all sources with QMimeSourceFactory */
-
+#include <qimage.h>
+namespace DAQImages {
+    extern const QImage 
+        plus_img,
+        pause_img,
+        play_img,
+        spike_minus_img,
+        spike_plus_img,
+        synch_img,
+        timestamp_img;
+  
 };
 
 
