@@ -41,7 +41,7 @@ DAQSettings::DAQMasterDefaults::DAQMasterDefaults()
      this map also has default settings in case they aren't found in the 
      config file */
   me [SECTION_NAME][ KEY_TEMPLATE_FILE_NAME ]
-    = QString(DAQ_RESOURCES_PREFIX) + DAQ_DIRNAME + "/default.log";
+    = QString(DAQ_RESOURCES_PREFIX) + "/default.log";
   me [SECTION_NAME][ KEY_DEVICE ] = "/dev/comedi0";
   me [SECTION_NAME][ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
   me [SECTION_NAME][ KEY_DEFAULT_INPUT_SOURCE ] = QString().setNum((int)Comedi);

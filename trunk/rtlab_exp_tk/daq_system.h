@@ -32,6 +32,8 @@
 #include <qtoolbutton.h>
 #include <qbuttongroup.h>
 #include <qstatusbar.h> 
+#include <qlistview.h>
+#include <qtextedit.h>
 
 #include <map>
 #include <vector>
@@ -134,23 +136,43 @@ public slots:
   void raisenShow();
 
 private slots:
-  bool queryLoadPlugin(); /* asks the user for a plugin to load       */
+  void showDetails(QListViewItem *);
+  void carefullyLoadSelected(); /* asks the user for a plugin to load       */
   void showSelectedWindow();  /* focuses the selected plugin */
   void removeSelectedPlugin(); /* unloads and deletes the selected plugin */
 
-  void pluginMenuContextReq(QListBoxItem *, const QPoint &);
+  void pluginMenuContextReq(QListViewItem *, const QPoint &, int);
   
   void unloadAll();
 
 private:
 
+  struct PluginInfo {
+    QString name;
+    QString description;
+    QString author;
+    QString requires;
+    QString short_filename; /* sans leading directory */
+    QString filename; /* with leading directory */
+  };
+
+  typedef vector<PluginInfo> scanned_plugins_t;
+  typedef scanned_plugins_t::iterator scanned_plugins_it_t;
+
+  scanned_plugins_t scanned_plugins;
+
+  scanned_plugins_it_t findScannedByName(const QString & name); 
+
   Plugin *pluginFindByName(QString name);
 
-  void loadPlugin(const char *filename) throw (PluginException);
+  void loadPlugin(const char *filename, Plugin * & p, void * & handle) 
+    throw (PluginException);
   void unloadPlugin(Plugin *p);
+  bool inspectPlugin(const char *filename, PluginInfo & info) const;
 
   map <Plugin *, int *> plugins_and_handles;
-  QListBox *plugin_box;
+  QListView *plugin_box;
+  QTextEdit *details;
   QPopupMenu *plugin_cmenu;
 
   DAQSystem * daqSystem; 

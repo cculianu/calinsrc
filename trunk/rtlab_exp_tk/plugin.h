@@ -38,4 +38,32 @@ public:
 /* all entry functions throw an Exception if they cannot be started */
 typedef Plugin * (*plugin_entry_fn_t)(QObject *);
 
+#define DS_PLUGIN_VER 0x01
+
+/*
+  Plugin rules:
+
+  a plugin .so must contain the following symbols:
+
+  o "ds_plugin_ver" - int indicating the version of the plugin engine
+                      this plugin was written for.  Must equal 
+                      DS_PLUGIN_VER preprocessor symbol defined in this file
+  o "entry"         - the entry function of type plugin_enrty_fn_t, should
+                      return a valid Plugin * reference (you need to
+                      subcladd Plugin * to implement your plugin)
+  o "name"          - the const char * friendly name of the plugin
+
+
+  Any plugins missing the above symbols will fail to load!
+
+
+  Optional symbols: 
+
+  o "description"   - const char *, a brief description of the plugin's 
+                      functionality
+  o "author"        - const char *, authors of this plugin
+  o "requires"      - const char *, a descriptive string explaining what is
+                      required to properly load this module
+
+*/
 #endif
