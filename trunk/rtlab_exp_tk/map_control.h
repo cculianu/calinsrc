@@ -42,31 +42,40 @@ extern "C" {
    get scheduled by Linux).
 */
 struct MCSnapShot {
-  int rr_interval; /* the time in ms for this beat */
-  int stimuli; /* the number of stims delivered */
-  double g_val; /* the value of our magic coefficient g */
-  /* below is stuff that can be inferred from the structs in shared memory 
+
+  /* some of these could be inferred from the structs in shared memory 
      but is copied to the MCSnapShot structs for historical purposes */
+  int pi; /* the pacing interval in ms for this beat */
+  int delta_pi; /* the perturbation to pacing interval in ms */
+  int apd; /* computed current apd */
+  int previous_apd; /* previous apd */
+  int di; /* current di */
+  int previous_di; /* current di */
+  double vmax; /* current AP max voltage */
+  double vmin; /* current AP diastolic voltage */
+  scan_index_t ap_ti; /* current AP initial time (when crossed threshold in upward direction) */
+  scan_index_t ap_t90; /* current AP end time (when crossed below APD90 voltage value) */
+  int consec_alternating; /* number of perturbations in a row that alternated on, off, on, off */
+  double g_val; /* the value of our magic coefficient g */
   scan_index_t scan_index; /* copied from rt_process's rtp_shm */
-  int rr_avg; /* computed momentary average rr, num_rr_avg plays into this */
-  int g_too_small_count; /* computed */
-  int g_too_big_count; /* computed */
+  //scan_index_t last_beat_index;
 
   /* all below fields are here as a record of what the ui had told the
-     realtime process to do during this rr interval -- the actual
+     realtime process to do during this scan -- the actual
      communication of the ui to the rt process happens via struct MCShared */
-  int rr_target; /* ui-controlled */
-  float delta_g; /* ui-controlled */
-  int num_rr_avg; /* ui-controlled */
-  int nom_num_stims; /* ui-controlled */
-  char stim_on;    /* ui-controlled */
+  char pacing_on; /* ui-controlled */
+  int nominal_pi; /* ui-controlled */
+  char control_on;    /* ui-controlled */
+  char continue_underlying;    /* ui-controlled */
+  char target_shorter;   /* ui-controlled */
   char g_adjustment_mode; /* ui-controlled */
+  float delta_g; /* ui-controlled */
+
 };
 
 #ifndef __cplusplus
   typedef struct MCSnapShot MCSnapShot;
 #endif
-
 
 /* Two defines for MCShared.g_adjustment_mode:
    Automatic means the control loop is always re-adjusting g
@@ -74,19 +83,22 @@ struct MCSnapShot {
 #define MC_G_ADJ_MANUAL 0x0
 #define MC_G_ADJ_AUTOMATIC 0x1
 
+//shared memory
 struct MCShared {
-  int rr_target; /* in milliseconds */  
+  int map_channel; /* The channel we are monitoring in the kernel */
+  int ao_chan; /* The channel that is doing the control, specified by user interface */
+  char pacing_on;    /* if nonzero, pace */
+  int nominal_pi; /* in milliseconds */  
+  char control_on;    /* if nonzero, control */
+  char continue_underlying;    /* if nonzero, continue underlying pacing during control */
+  char target_shorter;    /* if nonzero, target shorter APD for first control attempt */
+  char g_adjustment_mode; /* see above #defines */
+
+  int fifo_minor; /* Just informational for user side to know where the fifo is */
+
   volatile double g_val;  /* the ui can change this and it affects control */
   volatile float delta_g; /* the amount we modify g each time we do control */
-  volatile int num_rr_avg; /* the number of recent beats we take into account 
-                              to reach rr_avg (see MCSnapShot::rr_avg) */
-  volatile int nom_num_stims; /* the number of stims that we +/- around in our
-                                 control algorithm */
-  char stim_on;    /* if nonzero, do the actual stimulations */
-  char g_adjustment_mode; /* see above #defines */
-  int fifo_minor; /* Just informational for user side to know where the fifo is */
-  int spike_channel; /* The channel we are monitoring in the kernel */
-  int ao_chan; /* The channel that is doing the control, specified by user interface */
+
   unsigned int magic;   /* should always equal MC_SHM_MAGIC */
   int reserved[4]; /* just so i can look like i know what i am doing... */
 };
@@ -101,12 +113,8 @@ struct MCShared {
 #define MC_FIFO_SZ (sizeof(struct MCSnapShot) * 100)
 
 /* Some sanity limits imposed by both UI and realtime thread */
-#define MC_NUM_RR_AVG_MAX 50
-#define MC_NUM_RR_AVG_MIN 1
 #define MC_DELTA_G_MIN ((float)0.01)
 #define MC_DELTA_G_MAX ((float)0.5)
-#define MC_MAX_NUM_STIMS  150 /* maximum number stims in AO   */
-#define MC_MIN_NUM_STIMS  0   /* obvious, but still set here  */
 
 static inline   int mc_delta_g_toint(float x) { return (int)(x * 100); }
 static inline float mc_delta_g_fromint(int x) { return x / 100.0; }

@@ -77,8 +77,8 @@ extern "C" {
              * description =
               "Some GUI controls for interfacing with the Map Control stimulation "
               "real-time module named 'map_control.o'.  This rtl/rt_process "
-              "addon was developed for an experiment in the Cardiac "
-              "Electrodynamics Laboratory of  Cornell University.",
+              "addon was developed for a cardiac action potential control "
+              "at Cornell University.",
              * author =
               "David J. Christini, Ph.D and Calin A. Culianu.",
              * requires =
@@ -98,17 +98,26 @@ extern "C" {
 
 };
 
+/*************************************************************/
+/* edit this section to change graph axes, grids, etc. */
+/*************************************************************/
+/* default values for the graphs */
 static const int beats_per_gridline = 100;
 static const int num_gridlines = 5;
-/* default values for the graphs */
-static const double rr_min   = 0.0,
-                    rr_max   = 2000.0,
-                    stim_min = 0.0,
-                    stim_max = 50.0,
-                    g_min    = -15.0,
-                    g_max    = 15.0;
+static const double apd_min   = 0.0,   //for graph axis
+  apd_max   = 500.0,  //for graph axis
+  delta_pi_min = -50,  //for graph axis
+  delta_pi_max = 50,  //for graph axis
+  g_min    = -15.0,  //for graph axis
+  g_max    = 15.0;  //for graph axis
 
-
+/********************************************************************/
+/*
+ *MAIN OBJECT*
+ edit this function to change the GUI look and feel
+ Most of your edits should probably be in this function
+*/
+/********************************************************************/
 MapControl::MapControl(DAQSystem *daqSystem_parent) 
   : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
@@ -142,32 +151,34 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
   graphlayout = new QGridLayout(graphs, 6, 2);
   graphlayout->setColStretch(1, 1);
   
-  rr_graph   = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             rr_min, rr_max, 
+  apd_graph   = new ECGGraph (beats_per_gridline, num_gridlines, 
+                             apd_min, apd_max, 
                              graphs, QString(name()) + " - RR Interval");
-  stim_graph = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             stim_min, stim_max, 
+  delta_pi_graph = new ECGGraph (beats_per_gridline, num_gridlines, 
+                             delta_pi_min, delta_pi_max, 
                              graphs, QString(name()) + " - Number of Stimuli");
   
   g_graph    = new ECGGraph (beats_per_gridline, num_gridlines, 
                              g_min, g_max,
                              graphs, QString(name()) + " - G Values");
 
-  g_graph->plotFactor = stim_graph->plotFactor = rr_graph->plotFactor = 2;
+  g_graph->plotFactor = delta_pi_graph->plotFactor = apd_graph->plotFactor = 2;
 
-  graphlayout->addWidget(rr_graph, 1, 1); graphlayout->setRowStretch(1, 3);
-  graphlayout->addWidget(stim_graph, 3, 1); graphlayout->setRowStretch(3, 3);
+  graphlayout->addWidget(apd_graph, 1, 1); graphlayout->setRowStretch(1, 3);
+  graphlayout->addWidget(delta_pi_graph, 3, 1); graphlayout->setRowStretch(3, 3);
   graphlayout->addWidget(g_graph, 5, 1); graphlayout->setRowStretch(5, 3);
   
 
-  graphlayout->addWidget(new QLabel("RR Graph", graphs), 0, 1);
-  graphlayout->addWidget(new QLabel("Stim Graph", graphs), 2, 1);
-  graphlayout->addWidget(new QLabel("G Graph", graphs), 4, 1);
+  graphlayout->addWidget(new QLabel("APD", graphs), 0, 1);
+  graphlayout->addWidget(new QLabel("Delta PI", graphs), 2, 1);
+  graphlayout->addWidget(new QLabel("g", graphs), 4, 1);
 
   addAxisLabels();
   /* end graphs... */
 
-  /* controls... */
+/*******************************************************/
+/* edit this section to change text displays etc. */
+/*******************************************************/
 
   controls = new QWidget(window);
   masterlayout->addWidget(controls, 1, 0);
@@ -183,38 +194,54 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
 
     QGridLayout *tmplo = new QGridLayout(tmpw, 11, 2);
 
-    tmplo->addWidget(new QLabel("Number of Stims: ", tmpw), 0, 0);
-    tmplo->addWidget(new QLabel("Nominal Number of Stims: ", tmpw), 1, 0);
-    tmplo->addWidget(new QLabel("RR Interval (ms): ", tmpw), 2, 0);
-    tmplo->addWidget(new QLabel("RR Target (ms): ", tmpw), 3, 0);
-    tmplo->addWidget(new QLabel("RR Average (ms): ", tmpw), 4, 0);
-    tmplo->addWidget(new QLabel("No. of beats in RR Avg.: ", tmpw), 5, 0);
-    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 6, 0);
-    tmplo->addWidget(new QLabel("g-Too-Small-Count: ", tmpw), 7, 0);
-    tmplo->addWidget(new QLabel("g-Too-Big-Count: ", tmpw), 8, 0);
-    tmplo->addWidget(new QLabel("Delta g: ", tmpw), 9, 0);
-    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 10, 0);
+    // text displays
+    tmplo->addWidget(new QLabel("APD_n (ms): ", tmpw), 0, 0);
+    tmplo->addWidget(new QLabel("APD_n-1 (ms): ", tmpw), 1, 0);
+    tmplo->addWidget(new QLabel("APD_*: ", tmpw), 2, 0);
+    tmplo->addWidget(new QLabel("DI_n: ", tmpw), 3, 0);
+    tmplo->addWidget(new QLabel("DI_n-1: ", tmpw), 4, 0);
+    tmplo->addWidget(new QLabel("PI = APD+DI(ms): ", tmpw), 5, 0);
+    tmplo->addWidget(new QLabel("delta PI (ms): ", tmpw), 6, 0);
+    tmplo->addWidget(new QLabel("Vmax (V): ", tmpw), 7, 0);
+    tmplo->addWidget(new QLabel("Vmin (V): ", tmpw), 8, 0);
+    tmplo->addWidget(new QLabel("AP_ti (ms): ", tmpw), 9, 0);
+    tmplo->addWidget(new QLabel("AP_t90 (ms): ", tmpw), 10, 0);
+    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 11, 0);
+    tmplo->addWidget(new QLabel("delta g: ", tmpw), 12, 0);
+    tmplo->addWidget(new QLabel("consec. alternating perturbations: ", tmpw), 13, 0);
+    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 14, 0);
     
-    tmplo->addWidget(current_stim = new QLabel(tmpw), 0, 1);
-    tmplo->addWidget(current_nom_stim = new QLabel(tmpw), 1, 1);
-    tmplo->addWidget(current_rri = new QLabel(tmpw), 2, 1); 
-    tmplo->addWidget(current_rrt = new QLabel(tmpw), 3, 1); 
-    tmplo->addWidget(current_rr_avg = new QLabel(tmpw), 4, 1);
-    tmplo->addWidget(current_num_rr_avg = new QLabel(tmpw), 5, 1);    
-    tmplo->addWidget(current_g   = new QLabel(tmpw), 6, 1);
-    tmplo->addWidget(current_g2small = new QLabel(tmpw), 7, 1);
-    tmplo->addWidget(current_g2big = new QLabel(tmpw), 8, 1);
-    tmplo->addWidget(current_delta_g = new QLabel(tmpw), 9, 1);
-    tmplo->addWidget(last_beat_index = new QLabel(tmpw), 10, 1);
+    tmplo->addWidget(gui_indicator_apd = new QLabel(tmpw), 0, 1); 
+    tmplo->addWidget(gui_indicator_previous_apd = new QLabel(tmpw), 1, 1); 
+    tmplo->addWidget(gui_indicator_apd_fp = new QLabel(tmpw), 2, 1); 
+    tmplo->addWidget(gui_indicator_di = new QLabel(tmpw), 3, 1);    
+    tmplo->addWidget(gui_indicator_previous_di   = new QLabel(tmpw), 4, 1);
+    tmplo->addWidget(gui_indicator_pi = new QLabel(tmpw), 5, 1);
+    tmplo->addWidget(gui_indicator_delta_pi = new QLabel(tmpw), 6, 1);
+    tmplo->addWidget(gui_indicator_vmax = new QLabel(tmpw), 7, 1);
+    tmplo->addWidget(gui_indicator_vmin = new QLabel(tmpw), 8, 1);
+    tmplo->addWidget(gui_indicator_ap_ti = new QLabel(tmpw), 9, 1);
+    tmplo->addWidget(gui_indicator_ap_t90 = new QLabel(tmpw), 10, 1);
+    tmplo->addWidget(gui_indicator_g_val = new QLabel(tmpw), 11, 1);
+    tmplo->addWidget(gui_indicator_delta_g = new QLabel(tmpw), 12, 1);
+    tmplo->addWidget(gui_indicator_consec_alternating = new QLabel(tmpw), 13, 1);
+    tmplo->addWidget(gui_indicator_last_beat_index = new QLabel(tmpw), 14, 1);
 
   }
+
+/*******************************************************/
+/* edit this section to change GUI controls      
+   note that to change the functionality of a 
+   particular control, you have to change its
+   slot function directly                                        */
+/*******************************************************/
   
   { /* controls groupbox */
     QGroupBox *ctls = new QGroupBox(1, Vertical, "Controls", controls);
     controlslayout->addMultiCellWidget(ctls, 1, 1, 0, n_ctl_c-1);
 
+    //new line of control widgets
     QVBox *tmpvb = new QVBox(ctls);
-
     QHBox *tmphb = new QHBox(tmpvb);
 
     (void) new QLabel("AI Channel to Monitor:", tmphb);
@@ -224,33 +251,43 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
     connect(daqSystem(), SIGNAL(channelClosed(uint)), this, SLOT(synchAIChan()));
     synchAIChan();
 
-    (void) new QLabel("  RR Target:", tmphb);
-    rr_target = new QSpinBox(static_cast<int>(rr_graph->rangeMin()),
-                             static_cast<int>(rr_graph->rangeMax()),
-                             1, tmphb);
-    rr_target->setValue(static_cast<int>(shm->rr_target));
-    connect(rr_target, SIGNAL(valueChanged(int)), this, SLOT(changeRRTarget(int)));
-    
-
-    /* the analog output-related controls */
-    tmphb = new QHBox(tmpvb);        
-    tmphb->setSpacing(6);
-    
-    
     (void) new QLabel("AO Stim Channel:", tmphb);
     ao_channels = new SearchableComboBox(tmphb);
     (void) new QLabel("    " /* poor man's spaceing */, tmphb);
-
     populateAOComboBox();
     synchAOChan();
     connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
-       
-    (void) new QLabel("Nominal Num. Stims:", tmphb);
-    QSpinBox *nomStimsSpinBox = new  QSpinBox (MC_MIN_NUM_STIMS, MC_MAX_NUM_STIMS, 1, tmphb);
-    nomStimsSpinBox->setValue(shm->nom_num_stims);
 
-    connect(nomStimsSpinBox, SIGNAL(valueChanged(int)), this, SLOT(changeNomNumStims(int)));
+    //new line of control widgets
+    tmphb = new QHBox(tmpvb);        
+    tmphb->setSpacing(6);
 
+    pacing_toggle = new QCheckBox("Pacing On", tmphb);
+    pacing_toggle->setChecked(shm->pacing_on);    
+    connect(pacing_toggle, SIGNAL(toggled(bool)), this, SLOT(togglePacing(bool)));
+    
+    (void) new QLabel("  Nominal PI:", tmphb);
+    nominal_pi = new QSpinBox(1, 2000, 1, tmphb);
+    nominal_pi->setValue(static_cast<int>(shm->nominal_pi));
+    connect(nominal_pi, SIGNAL(valueChanged(int)), this, SLOT(changeNominalPI(int)));
+    
+    //new line of control widgets
+    tmphb = new QHBox(tmpvb);
+    tmphb->setSpacing(6);
+
+    control_toggle = new QCheckBox("Control On", tmphb);
+    control_toggle->setChecked(shm->control_on);    
+    connect(control_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleControl(bool)));
+
+    underlying_toggle = new QCheckBox("Continue Underlying Pacing", tmphb);
+    underlying_toggle->setChecked(shm->continue_underlying);    
+    connect(underlying_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleUnderlying(bool)));
+
+    target_shorter_toggle = new QCheckBox("Target shorter APD initially", tmphb);
+    target_shorter_toggle->setChecked(shm->target_shorter);    
+    connect(target_shorter_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleTargetShorter(bool)));
+
+    //new line of control widgets
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(6);
 
@@ -262,52 +299,21 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
     (void) new QLabel("    ", tmphb); // po' man's spacing
 
     g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
-
     g_adj_manual_only->setChecked(shm->g_adjustment_mode == MC_G_ADJ_MANUAL);
-    g_adj_manual_only->setDisabled(!shm->stim_on);
-    gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->stim_on);
+    g_adj_manual_only->setDisabled(!shm->control_on);
+    //gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->control_on);
     connect(g_adj_manual_only, SIGNAL(stateChanged(int)), this, SLOT(gAdjManualOnly(int)));
 
-    control_toggle = new QCheckBox("Control On", tmphb);
-
-    control_toggle->setChecked(shm->stim_on);    
-
-    connect(control_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleControl(bool)));
-   
-
-
-  
-    /* delta-g controls */
-    tmphb = new QHBox(tmpvb);
-
-    tmphb->setSpacing(5);
-    
-    (void) new QLabel("Delta-g:", tmphb);
-
-   
-    delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
+    (void) new QLabel("Delta g:", tmphb);
+    /* delta-g controls */   
+    gui_indicator_delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
     delta_g_bar = new QScrollBar
       ( mc_delta_g_toint(MC_DELTA_G_MIN), mc_delta_g_toint(MC_DELTA_G_MAX),
         1, mc_delta_g_toint((MC_DELTA_G_MAX - MC_DELTA_G_MIN) / 5.0), 
         mc_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
-    
-    tmphb->setStretchFactor(delta_g_bar, 1);
-    
-    /* num_rr_avg controls */
-    (void) new QLabel("  No. RR Avg:", tmphb);
-
-    num_rr_avg_bar_value = new QLabel(QString::number(shm->num_rr_avg), tmphb);
-    num_rr_avg_bar = new QScrollBar
-      ( MC_NUM_RR_AVG_MIN, MC_NUM_RR_AVG_MAX, 1, 
-        (MC_NUM_RR_AVG_MAX - MC_NUM_RR_AVG_MIN) / 10, shm->num_rr_avg,
-        Qt::Horizontal, tmphb );  
-
-    tmphb->setStretchFactor(num_rr_avg_bar, 1);
-   
-
     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));
-    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), num_rr_avg_bar_value, SLOT(setNum(int)));
+    tmphb->setStretchFactor(delta_g_bar, 1);
+
   }
   
   controlslayout->addMultiCellWidget // footnote at the bottom
@@ -318,23 +324,31 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
                .arg(beats_per_gridline), controls), 
      n_ctl_r-1, n_ctl_r-1, 0, n_ctl_c-1, AlignBottom | AlignLeft);
 
-
   window_id = daqSystem()->windowMenuAddWindow(window);  
   window->show();
-
 
   timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(periodic()));
   timer->start(50);
 }
 
+
+/********************************************************************/
+/*
+Most of the stuff below here won't need major editing.
+Notable exceptions are: (1) the slot functions for your GUI 
+controls, (2) readInFifo, and (3) PVSaver
+*/
+/********************************************************************/
+
+//destructor
 MapControl::~MapControl() 
 {
   timer->stop();
   safelyQuit(); /* prompts the user to save, if necessary.. kinda sloppy to 
                    put this in a destructor.. but 'oh well' */
   daqSystem()->windowMenuRemoveWindow(window_id);
-  if (shm)  shm->spike_channel = -1; // to 'turn off' avn stim...
+  if (shm) shm->pacing_on = 0; // to 'turn off' pacing ...
   moduleDetach();  
   delete window;
   delete spooler;
@@ -459,13 +473,13 @@ void MapControl::addAxisLabels()
 
   tmp_lo = new QGridLayout(w, 3, 1);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(rr_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
   tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((rr_graph->rangeMax() - rr_graph->rangeMin()) / 2.0 + rr_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((apd_graph->rangeMax() - apd_graph->rangeMin()) / 2.0 + apd_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
   tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(rr_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
   tmp_l->setFont(f);
 
   /* Stim Graph Axis Labels */
@@ -474,13 +488,13 @@ void MapControl::addAxisLabels()
 
   tmp_lo = new QGridLayout(w, 3, 1);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(stim_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
   tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((stim_graph->rangeMax() - stim_graph->rangeMin()) / 2.0 + stim_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((delta_pi_graph->rangeMax() - delta_pi_graph->rangeMin()) / 2.0 + delta_pi_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
   tmp_l->setFont(f);
 
-  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(stim_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+  tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
   tmp_l->setFont(f);
 
   /* G Graph Axis Labels */
@@ -510,6 +524,7 @@ void MapControl::periodic()
 
 }
 
+// read fifo from real-time-process, store in snapshot, and display via setText
 void MapControl::readInFifo()
 {
   static const int n2rd = 1000; /* number of MCSnapShot's to read at a time */
@@ -526,8 +541,8 @@ void MapControl::readInFifo()
   
   for (i = 0; i < n_bufs; i++) {
     /* todo: plot to graphs here... */
-    rr_graph->plot(static_cast<double>(buf[i].rr_interval));
-    stim_graph->plot(static_cast<double>(buf[i].stimuli));
+    apd_graph->plot(static_cast<double>(buf[i].apd));
+    delta_pi_graph->plot(static_cast<double>(buf[i].delta_pi));
     g_graph->plot(buf[i].g_val);
     spooler->spool(buf, n_bufs);
   }
@@ -535,41 +550,33 @@ void MapControl::readInFifo()
      last MCSnapShot we got */
   if (!n_bufs) return;
   
-  MCSnapShot & last = buf[n_bufs-1];
+  MCSnapShot & snapshot = buf[n_bufs-1];
 
-  current_rri->setText(QString::number(last.rr_interval));
-  current_rrt->setText(QString::number(last.rr_target));
-  current_stim->setText(QString::number(last.stimuli));
-  current_nom_stim->setText(QString::number(last.nom_num_stims));
-  current_g->setText(QString::number(last.g_val));
-  if (!g_adj_manual_only->isChecked()) 
-    gval->setText(QString::number(last.g_val));
-  last_beat_index->setText(QString(uint64_to_cstr(last.scan_index))); 
-  current_rr_avg->setText(QString::number(last.rr_avg));
-  current_num_rr_avg->setText(QString::number(last.num_rr_avg));
-  current_g2small->setText(QString::number(last.g_too_small_count));
-  current_g2big->setText(QString::number(last.g_too_big_count));
-  current_delta_g->setText(QString::number(last.delta_g));
+  gui_indicator_pi->setText(QString::number(snapshot.pi));
+  gui_indicator_delta_pi->setText(QString::number(snapshot.delta_pi));
+  gui_indicator_apd->setText(QString::number(snapshot.apd));
+  gui_indicator_previous_apd->setText(QString::number(snapshot.previous_apd));
+  gui_indicator_apd_fp->setText(QString::number((snapshot.apd+snapshot.previous_apd)/2));
+  gui_indicator_di->setText(QString::number(snapshot.di));
+  gui_indicator_previous_di->setText(QString::number(snapshot.previous_di));
+  gui_indicator_vmax->setText(QString::number(snapshot.vmax));
+  gui_indicator_vmin->setText(QString::number(snapshot.vmin));
+  gui_indicator_ap_ti->setText(QString(uint64_to_cstr(snapshot.ap_ti)));
+  gui_indicator_ap_t90->setText(QString(uint64_to_cstr(snapshot.ap_t90)));
+  gui_indicator_g_val->setText(QString::number(snapshot.g_val));
+  gui_indicator_delta_g->setText(QString::number(snapshot.delta_g));
+  gui_indicator_consec_alternating->setText(QString::number(snapshot.consec_alternating));
+  gui_indicator_last_beat_index->setText(QString(uint64_to_cstr(snapshot.scan_index))); 
   /* update our slider value representation if actual last read delta_g
      disagrees with the UI's notion of what it is... */
   static const float smallf = 0.0001;
 #define f_equal(x, y) ( x > y ? x - y < smallf : y - x < smallf )
-  if (!f_equal(last.delta_g, delta_g_bar_value->text().toFloat())) {
+  if (!f_equal(snapshot.delta_g, gui_indicator_delta_g_bar_value->text().toFloat())) {
     disconnect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-    delta_g_bar->setValue(mc_delta_g_toint(last.delta_g));
-    delta_g_bar_value->setText(QString::number(last.delta_g, 'g', 3));
+    delta_g_bar->setValue(mc_delta_g_toint(snapshot.delta_g));
+    gui_indicator_delta_g_bar_value->setText(QString::number(snapshot.delta_g, 'g', 3));
     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
   }
-
-  /* update our slider value representation if actual last read num_rr_avg
-     disagrees with the UI's notion of what it is... */
-  if (last.num_rr_avg != num_rr_avg_bar_value->text().toInt()) {
-    disconnect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));
-    num_rr_avg_bar->setValue(last.num_rr_avg);
-    connect(num_rr_avg_bar, SIGNAL(valueChanged(int)), this, SLOT(changeNumRRAvg(int)));          
-  }
-
-  
 
   /* incomplete... please finish! - Calin */
 #undef f_equal
@@ -626,9 +633,9 @@ void MapControl::changeAIChan(const QString &chan)
 {
   bool ok;
 
-  shm->spike_channel = chan.toInt(&ok);
+  shm->map_channel = chan.toInt(&ok);
 
-  if (!ok) shm->spike_channel = -1;
+  if (!ok) shm->map_channel = -1;
 }
 
 void MapControl::synchAIChan()
@@ -644,10 +651,10 @@ void MapControl::synchAIChan()
     if (daq_shmCtl->isChanOn(ComediSubDevice::AnalogInput, i))
       ai_channels->insertItem(QString().setNum(i));
   
-  sel = ai_channels->findItem(QString().setNum(shm->spike_channel), CaseSensitive | ExactMatch);
+  sel = ai_channels->findItem(QString().setNum(shm->map_channel), CaseSensitive | ExactMatch);
   if (sel < 0) {
     ai_channels->setSelected(0);
-    shm->spike_channel = -1;
+    shm->map_channel = -1;
   }
   else ai_channels->setSelected(sel); 
 
@@ -655,41 +662,59 @@ void MapControl::synchAIChan()
 
 }
 
+void MapControl::togglePacing(bool on)
+{
+  if (!on) {
+    shm->pacing_on = 0;
+  } else {
+    shm->pacing_on = 1;
+  }
+}
+
+void MapControl::changeNominalPI(int pi_in_ms)
+{
+  shm->nominal_pi = pi_in_ms;
+}
+
 void MapControl::toggleControl(bool on)
 {
   
   if (!on) {
-    shm->stim_on = 0;
+    shm->control_on = 0;
     g_adj_manual_only->setDisabled(true);
     gval->setDisabled(true);
     shm->g_adjustment_mode = MC_G_ADJ_MANUAL;
   } else {
-    shm->stim_on = 1;
+    shm->control_on = 1;
     g_adj_manual_only->setDisabled(false);
     gval->setDisabled(!g_adj_manual_only->isChecked());
     shm->g_adjustment_mode = (g_adj_manual_only->isChecked() 
                               ? MC_G_ADJ_MANUAL 
                               : MC_G_ADJ_AUTOMATIC);
   }
-    
 }
 
-
-
-void MapControl::changeRRTarget(int rrt_in_ms)
+void MapControl::toggleUnderlying(bool on)
 {
-  shm->rr_target = rrt_in_ms;
+  if (!on) {
+    shm->continue_underlying = 0;
+  } else {
+    shm->continue_underlying = 1;
+  }
 }
 
-void MapControl::changeNumRRAvg(int rra)
+void MapControl::toggleTargetShorter(bool on)
 {
-  shm->num_rr_avg = rra;
+  if (!on) {
+    shm->target_shorter = 0;
+  } else {
+    shm->target_shorter = 1;
+  }
 }
 
 void MapControl::gAdjManualOnly(int yes)
 {
   shm->g_adjustment_mode = (yes ? MC_G_ADJ_MANUAL : MC_G_ADJ_AUTOMATIC);
-  gval->setDisabled(!yes);
 }
 
 void MapControl::changeG(const QString &g)
@@ -705,32 +730,37 @@ void MapControl::changeG(const QString &g)
 void MapControl::changeDG(int new_dg_sliderval) 
 {
   shm->delta_g = mc_delta_g_fromint(new_dg_sliderval);
-  delta_g_bar_value->setNum(mc_delta_g_fromint(new_dg_sliderval));
-}
-
-void MapControl::changeNomNumStims(int n)
-{
-  shm->nom_num_stims = n;
+  gui_indicator_delta_g_bar_value->setNum(mc_delta_g_fromint(new_dg_sliderval));
 }
 
 const char * MapControl::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#Scan_Index RR_Interval Number_of_Stimuli G RR_Avg G_Too_Small_Count G_Too_Big_Count RR_Target Delta_G Num_RR_Avg Stim_On? G_Adj_Automatically?\n";
+"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD, previous_APD, DI, previous_DI, AP_ti, AP_t90, Vmax, Vmin, g, delta_g, g_adjustment_mode, consecutive_alternating, continue_underlying, target_shorter\n";
 
-
+//save important snapshot values to disk 
+//important to edit this to suit your data needs
 struct PVSaver
 {  
   PVSaver (QTextStream & o, QString header = "") 
     : out(o), header(header) { out << header; };
   
-  void operator()(MCSnapShot & l) 
+  void operator()(MCSnapShot & ws) 
   { 
+    QString scanIndex (uint64_to_cstr(ws.scan_index)),
+            apTi      (uint64_to_cstr(ws.ap_ti)),
+            apT90     (uint64_to_cstr(ws.ap_t90));
+    
     dummy.sprintf
-      ("%s %d %d %g %d %d %d %d %g %d %d %d\n",     
-       uint64_to_cstr(l.scan_index), l.rr_interval, l.stimuli, l.g_val,
-       l.rr_avg, l.g_too_small_count, l.g_too_big_count, l.rr_target, 
-       (double)l.delta_g, l.num_rr_avg, (int)l.stim_on, (int)l.g_adjustment_mode);
+      ("%s %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d\n",     
+       scanIndex.latin1(), 
+       (int)ws.pacing_on, (int)ws.control_on,
+       ws.nominal_pi, ws.pi, ws.delta_pi, 
+       ws.apd, ws.previous_apd, ws.di, ws.previous_di, 
+       apTi.latin1(), apT90.latin1(), ws.vmax, ws.vmin, 
+       ws.g_val, ws.delta_g, (int)ws.g_adjustment_mode, ws.consec_alternating, 
+       (int)ws.continue_underlying, (int)ws.target_shorter);
+
     out << dummy;
   }
 
@@ -804,7 +834,7 @@ void MapControl::safelyQuit()
       QMessageBox::warning(window, "Data is unsaved", "The Map Control Plugin is terminating, and the data for the Map Control Control Experiment is unsaved.\nDo you wish to save or discard changes?", "Save Changes", "Discard Changes");
     if (usersaid == 0)
       save(); /* this way even on file pick error
-                 they will be prompted to save */
+				     they will be prompted to save */
   }
 }
 
