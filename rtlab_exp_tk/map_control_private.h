@@ -61,16 +61,25 @@ private slots:
   void synchAIChan(); /* synchs combo box with list of open ai chans from
                          rt_process.o's shared memory struct SharedStuff */
 
-  void toggleControl(bool); /* disables control by making stim_on be false 
+  void toggleControl(bool); /* disables control by making control_on be false 
                                and also setting g_adjustment_mode to 
                                MC_G_ADJ_MANUAL */
 
-  void changeRRTarget(int);
-  void changeNumRRAvg(int);
+
+  void togglePacing(bool);    /* disables pacing by making pacing_on false */
+  void changeNominalPI(int); /* change the nominal Pacing Interval */
+  void toggleUnderlying(bool); /* toggles continue_underlying, which, if control is active,
+			     continues to pace at the pacing interval, i.e., the pacing 
+                                                     continues oblivious to control. if continue_underlying 
+                                                     is false, then after a given control stimulus, the next stimulus
+                                                    will occur at an interval equal to the pacing interval */
+  void toggleTargetShorter(bool); /* toggles target_shorter, which, if control is active,
+			           sets the initial control pacing interval equal to a value
+                                                           that will obtain an APD equal to the short alternating APD.
+				   i.e., two short APDs in a row. */
   void gAdjManualOnly(int);
   void changeG(const QString &);
   void changeDG(int);  
-  void changeNomNumStims(int);
 
   void save();
   void saveAs();
@@ -92,20 +101,22 @@ private:
   QGridLayout *masterlayout,   /* 1,2 */
               *graphlayout,    /* 6,2 */
               *controlslayout;
+
+  ECGGraph *apd_graph, *delta_pi_graph, *g_graph;
+
+  QLabel *gui_indicator_pi, *gui_indicator_delta_pi, *gui_indicator_apd, 
+    *gui_indicator_previous_apd, *gui_indicator_apd_fp,
+    *gui_indicator_di, *gui_indicator_previous_di, *gui_indicator_vmax, *gui_indicator_vmin, 
+    *gui_indicator_ap_ti, *gui_indicator_ap_t90,
+    *gui_indicator_g, *gui_indicator_g_val, *gui_indicator_delta_g, *gui_indicator_consec_alternating, 
+    *gui_indicator_last_beat_index, *gui_indicator_delta_g_bar_value;
+
   SearchableComboBox *ao_channels, *ai_channels;
-  QSpinBox *rr_target;
+  QSpinBox *nominal_pi;
   QLineEdit *gval;
-
-  ECGGraph *rr_graph, *stim_graph, *g_graph;
-
-  QLabel *current_rri,     *current_rrt,    *current_stim,   *current_nom_stim,
-         *current_g,   *last_beat_index, *current_rr_avg, *current_num_rr_avg, 
-         *current_g2small, *current_g2big,  *current_delta_g,
-         *delta_g_bar_value, *num_rr_avg_bar_value;
-
-  QScrollBar *delta_g_bar, *num_rr_avg_bar;
-
-  QCheckBox *g_adj_manual_only, *control_toggle; 
+  QScrollBar *delta_g_bar;
+  QCheckBox *g_adj_manual_only, *control_toggle, *pacing_toggle, *underlying_toggle, 
+	        *target_shorter_toggle;
 
   TempSpooler<MCSnapShot> *spooler;
 
