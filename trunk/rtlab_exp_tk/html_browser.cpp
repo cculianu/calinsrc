@@ -29,7 +29,7 @@
 #include <qhbox.h>
 #include <qtooltip.h>
 
-#include "back.xpm"
+//#include "back.xpm"
 #include "html_browser.h"
 
 HTMLBrowser::HTMLBrowser( QWidget *parent = 0 ) 
@@ -41,8 +41,8 @@ HTMLBrowser::HTMLBrowser( QWidget *parent = 0 )
 
   backButton = new QPushButton( "Back", navBox );
   QToolTip::add(backButton, "Go to previous document");
-  QPixmap back_pm(back_xpm);
-  backButton->setPixmap( back_pm );
+  //QPixmap back_pm(back_xpm);
+  //backButton->setPixmap( back_pm );
   backButton->setMaximumSize( back_pm.size() );
 
   forwardButton = new QPushButton( "Forward", navBox );  
