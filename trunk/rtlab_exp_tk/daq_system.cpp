@@ -110,8 +110,8 @@ void ExperimentLog::init()
 }
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
-		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
-		      WFlags f = WType_TopLevel)
+                      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
+                      WFlags f = WType_TopLevel)
 : QMainWindow(parent, name, f), 
   configWindow(cw),
   settings(configWindow.daqSettings()),
@@ -229,10 +229,13 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   /* now open up all the channel windows that are left over
      from the last session */
   set<uint> s = settings.windowSettingChannels();
-  for (set<uint>::iterator i = s.begin(); i != s.end();  i++) {
-    openChannelWindow(*i, 0, 10); /* modify this to read other defaults too */
-  }
-
+  uint n_chans_this_device = configWindow.selectedDevice()
+                             .find(ComediSubDevice::AnalogInput).n_channels;
+  for (set<uint>::iterator i = s.begin(); i != s.end();  i++) 
+    if (*i < n_chans_this_device) /* ignore non-existant channels in
+                                     case we just changed boards */
+      openChannelWindow(*i, 0, 10); /* modify this to read other defaults too*/
+    
   /* KLUDGE -- due to implementation quirks in QWorkspace, a resynch() must
      be called on a non-hidden DAQSystem.. */
   show();
