@@ -48,8 +48,14 @@ const QString
     DAQMimeSources::Images::spikeMinus        = "spikeMinus.img",
     DAQMimeSources::Images::spikePlus         = "spikePlus.img",
     DAQMimeSources::Images::synch             = "synch.img",
-    DAQMimeSources::Images::timeStamp         = "timeStamp.img";
-
+    DAQMimeSources::Images::timeStamp         = "timeStamp.img",
+    DAQMimeSources::Images::log               = "log.img",
+    DAQMimeSources::Images::print             = "print.img",
+    DAQMimeSources::Images::plugins           = "plugins.img",
+    DAQMimeSources::Images::daqSystem         = "daq_system.img",
+    DAQMimeSources::Images::configuration     = "config.img",
+    DAQMimeSources::Images::quit              = "quit.img",
+    DAQMimeSources::Images::channel           = "channel.img";
 
 /*--------------------------------------------------------------------------
    Actual html for help
@@ -207,13 +213,20 @@ static QMimeSourceFactory * initFactory()
       
       using namespace DAQImages;
 
-      mimeFactory->setImage( DAQMimeSources::Images::addChannel, plus_img );
+      mimeFactory->setImage( DAQMimeSources::Images::addChannel, add_channel_img );
       mimeFactory->setImage( DAQMimeSources::Images::pause, pause_img );
       mimeFactory->setImage( DAQMimeSources::Images::play, play_img );
       mimeFactory->setImage( DAQMimeSources::Images::spikePlus, spike_plus_img );
       mimeFactory->setImage( DAQMimeSources::Images::spikeMinus, spike_minus_img );
       mimeFactory->setImage( DAQMimeSources::Images::timeStamp, timestamp_img );
       mimeFactory->setImage( DAQMimeSources::Images::synch, synch_img );
+      mimeFactory->setImage( DAQMimeSources::Images::log, log_img );
+      mimeFactory->setImage( DAQMimeSources::Images::print, print_img );
+      mimeFactory->setImage( DAQMimeSources::Images::plugins, plugins_img );
+      mimeFactory->setImage( DAQMimeSources::Images::daqSystem, daq_system_img );
+      mimeFactory->setImage( DAQMimeSources::Images::configuration, configuration_img );
+      mimeFactory->setImage( DAQMimeSources::Images::quit, quit_img );
+      mimeFactory->setImage( DAQMimeSources::Images::channel, channel_img );
 
   }
 

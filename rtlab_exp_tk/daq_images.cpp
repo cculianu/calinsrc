@@ -23,19 +23,32 @@
 #include "daq_images.h"
 
 /* Icons */
-#include "plus.xpm"
+#include "add_channel.xpm"
 #include "pause.xpm"
 #include "play.xpm"
 #include "spike_minus.xpm"
 #include "spike_plus.xpm"
 #include "synch.xpm"
 #include "timestamp.xpm"
+#include "log.xpm"
+#include "print.xpm"
+#include "plugins.xpm"
+#include "daq_system.xpm"
+#include "configuration.xpm"
+#include "quit.xpm"
+#include "channel.xpm"
 
-
-const QImage  DAQImages::plus_img( plus_xpm ),
+const QImage   DAQImages::add_channel_img( add_channel_xpm ),
                DAQImages::pause_img( pause_xpm ),
                DAQImages::play_img( play_xpm ),
                DAQImages::spike_minus_img( spike_minus_xpm ),
                DAQImages::spike_plus_img( spike_plus_xpm ),
                DAQImages::synch_img( synch_xpm ),
-               DAQImages::timestamp_img( timestamp_xpm );
+               DAQImages::timestamp_img( timestamp_xpm ),
+               DAQImages::log_img( log_xpm ),
+               DAQImages::print_img( print_xpm ),
+               DAQImages::plugins_img( plugins_xpm ),
+               DAQImages::daq_system_img( daq_system_xpm ),
+               DAQImages::configuration_img( configuration_xpm ),
+               DAQImages::quit_img( quit_xpm ),
+               DAQImages::channel_img( channel_xpm);

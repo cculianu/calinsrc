@@ -195,6 +195,7 @@ private:
 
 class QListBox;
 class QTextEdit;
+class QPushButton;
 
 class WindowTemplateDialog: public QWidget
 {
@@ -212,6 +213,7 @@ class WindowTemplateDialog: public QWidget
   void renameSelected();
   void deleteSelected();
   void overwriteSelected();
+  void autoEnableDisableButtonsAndMenuStuff();
 
  private:
   DAQSystem *ds;
@@ -222,6 +224,7 @@ class WindowTemplateDialog: public QWidget
   QPopupMenu *cmenu;
 
   int delete_id, use_id, rename_id, overwrite_id;
+  QPushButton *deleteBut, *useBut, *renameBut;
 
   void refreshContents();
   
