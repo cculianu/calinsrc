@@ -55,6 +55,10 @@
 
 #define MODULE_NAME RT_PROCESS_MODULE_NAME
 
+#if LINUX_VERSION_CODE >= 132114
+MODULE_LICENSE("GPL"); 
+#endif
+
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time Sampling Task for use with kcomedilib and the daq_system user program");
 

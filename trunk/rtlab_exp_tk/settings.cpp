@@ -26,19 +26,16 @@
 #include <qtextstream.h> 
 #include <qfile.h>
 #include <qstring.h>
-#include <qregexp.h>
 #include "common.h"
 #include "config.h"
 #include "settings.h"
 
 
-static const char   *lineRE    = "^\\s*([a-zA-Z0-9./_]+)\\s*=\\s*\"?([^\\n\\r\\f=\"]*)\"?",
-                    *sectionRE = "\\s*\\[\\s*([^\\]]+)\\]";
 
-Settings::Settings() : lineRE(::lineRE), sectionRE(::sectionRE)
+Settings::Settings() 
 { init(); };
 
-Settings::Settings(QIODevice *d) : lineRE(::lineRE), sectionRE(::sectionRE)
+Settings::Settings(QIODevice *d) 
 {
   init();
   setConfigDevice(d);
@@ -302,27 +299,54 @@ Settings::saveSettings()
 /* returns a matched substring from line if line matches the lineRE, 
    or otherwise a null QString */
 QString
-Settings::testLine(const QString & line) const
+Settings::testLine(QString line) const
 {
+  /*
   int pos;
 
   if ( (pos = lineRE.search(line, 0)) > -1)
     return QRegExp(lineRE).cap(0);
   return QString();
+  */
+
+  /*   got rid of regexp's as they are SLOW.... */
+
+  line = line.stripWhiteSpace();
+
+  int eq_pos = line.find("=");
+
+  if (eq_pos > 0 && eq_pos < static_cast<int>(line.length()-1))
+    return line;
+  else 
+    return QString::null;
 }
 
 QString
-Settings::testSectionLine(const QString & line) const
+Settings::testSectionLine(QString line) const
 {
+  /*
   if ( sectionRE.search(line, 0) > -1)
     return QRegExp(sectionRE).cap(1); // need to avoid breaking const correctness...
-  return QString();
+  
+  return QString::null;
+  */
+
+  /*   got rid of regexp's as they are SLOW.... */
+
+  line = line.stripWhiteSpace();
+
+  if (line[0] == '[' &&  line[line.length()-1] == ']')
+    return line.mid(1,line.length()-2).stripWhiteSpace();
+  
+  return QString::null;
+  
 }
 
 void
-Settings::parseMatchedLine(const QString & matchedLine, 
+Settings::parseMatchedLine(QString line, 
                            QString & key, QString & value) const
 {
+  /*
   QRegExp lineRE_copy(lineRE); // need to avoid breaking const correctness...
 
   lineRE_copy.search(matchedLine, 0);
@@ -334,6 +358,16 @@ Settings::parseMatchedLine(const QString & matchedLine,
   value = lineRE_copy.cap(2);
   value.replace(QRegExp("^\\s*"), "");
   value.replace(QRegExp("\\s*$"), "");
+  */
+
+  /*   got rid of regexp's as they are SLOW.... */
+
+  line = line.stripWhiteSpace();
+
+  int eq_pos = line.find('=');
+
+  key = line.left(eq_pos).stripWhiteSpace();
+  value = line.right(line.length() - (eq_pos+1)).stripWhiteSpace();  
 }
 
 
