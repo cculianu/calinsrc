@@ -134,6 +134,17 @@ const unsigned int apdGraphPointWidth = 4; // only really affects the 'all apds'
 
 static const QRegExp ELECTRODE_ORDER_RE("^\\s*\\d+\\s*(,\\s*\\d+\\s*)*$");
 
+class MCSnapShotWithElectrodeId : public MCSnapShot
+{
+public:
+  MCSnapShotWithElectrodeId(const MCSnapShot & in, uint eid)
+  { 
+    static_cast<MCSnapShot &>(*this) = in; 
+    this->electrode_id = eid; 
+  }
+  uint electrode_id;
+};
+
 /********************************************************************/
 /*
  *MAIN OBJECT*
@@ -148,7 +159,7 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   
   daq_shmCtl = &daqSystem_parent->shmController();
 
-  spooler = new TempSpooler<MCSnapShot>("apdcontrol", true);
+  spooler = new TempSpooler<MCSnapShotWithElectrodeId>("apdcontrol", true);
 
   determineRTOS(); /* can throw exception here */
   moduleAttach(); /* can throw exception here */
@@ -709,7 +720,7 @@ void APDcontrol::readInFifo()
 
   n_bufs = n_read / sizeof(MCSnapShot);
 
-  spooler->spool(buf, n_bufs);
+  //spooler->spool(buf, n_bufs);
 
   need_to_save = (n_bufs ? true : need_to_save);
   
@@ -719,44 +730,27 @@ void APDcontrol::readInFifo()
 
   /*  plot to graphs here... */
   for (i = 0; i < n_bufs; i++) {
-    /*
-      if (buf[i].ao_chan >= 0) {
-       apd_graph[buf[i].ao_chan]->plot(static_cast<double>(buf[i].apd));
-       ao_chan_buf[buf[i].ao_chan]=i;
-      }
-    */
 
-    /* HACK to alternate colors every other AP 
-       also monitors current beat count */
-    apd_monitor->gotAPD(buf + i);
-    uint chan = apd_monitor->orderOf(buf[i].apd_channel);
+    MCSnapShotWithElectrodeId 
+      snapShot (buf[i], apd_monitor->orderOf(buf[i].apd_channel)); 
+
+    spooler->spool(&snapShot, 1); // save
+
+    apd_monitor->gotAPD(snapShot); // monitor
+
+    const uint & chan = snapShot.electrode_id;
 
     apd_graph[chan]->plotPen().setColor(apd_monitor->currentColor());
     apd_graph[chan]->blipPen().setColor(apd_monitor->currentColor());
 
-    apd_graph[chan]->plot(static_cast<double>(buf[i].apd));
+    apd_graph[chan]->plot(static_cast<double>(snapShot.apd));
 
     // this is responsible for drawing apd's to the last graph in the 
     // perkinje-fiber-friendly layout
-    apd_interleaver->gotAPD(buf + i);
+    apd_interleaver->gotAPD(snapShot);
 
-    if (buf[i].ao_chan >= 0) ao_chan_buf[buf[i].ao_chan]=i; //for chans with associated ao_chan
+    if (snapShot.ao_chan >= 0) ao_chan_buf[snapShot.ao_chan]=i; //for chans with associated ao_chan
 
-    /*
-      Dave's early-stage attempt at plotting all apds ... jettisoned in favor of Calin's class
-    all_apd_graph[buf[i].apd_channel] = buf[i].apd;
-    num_apds_in_all_apds++;
-
-    if (!(num_apds_in_all_apds%NUM_THRESHS_DRAWN)) {
-          if (!(num_apds_in_all_apds%(2*NUM_THRESHS_DRAWN))) {
-	    DumpAllAPDSwithonecolor();
-	    num_apds_in_all_apds=0; //reset after 2 draws
-	  }      
-	  else
-	    DumpAllAPDSwithOtherColor;
-    }
-
-    */
 }
 
   /* now update the stats once per read() call (meaning we take the
@@ -924,7 +918,7 @@ void APDcontrol::changeDG(int which_ao_chan)
 const char * APDcontrol::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#APD_channel AO_channel scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter, link_to_ao0, ao0_ao1_conduction_time\n";
+"#APD_channel Electrode_Id AO_channel scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter, link_to_ao0, ao0_ao1_conduction_time\n";
 
 //save important snapshot values to disk 
 //important to edit this to suit your data needs
@@ -933,15 +927,16 @@ struct PVSaver
   PVSaver (QTextStream & o, QString header = "") 
     : out(o), header(header) { out << header; };
   
-  void operator()(MCSnapShot & ws) 
+  void operator()(MCSnapShotWithElectrodeId & ws) 
   { 
     QString scanIndex (uint64_to_cstr(ws.scan_index)),
             apTi      (uint64_to_cstr(ws.ap_ti)),
             apTf     (uint64_to_cstr(ws.ap_tf));
     
     dummy.sprintf
-      ("%d %d %s %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d %d %d\n",     
+      ("%d %u %d %s %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d %d %d\n",     
        ws.apd_channel, 
+       ws.electrode_id,
        ws.ao_chan, 
        scanIndex.latin1(), 
        (int)ws.pacing_on, 
@@ -1144,16 +1139,16 @@ void APDInterleaver::reset()
   }
 }
 
-void APDInterleaver::gotAPD(MCSnapShot *m)
+void APDInterleaver::gotAPD(const MCSnapShot &m)
 {
   ChannelAPDs::iterator it;
 
-  if ( (it = channelAPDs.find((uint)m->apd_channel)) == channelAPDs.end())
+  if ( (it = channelAPDs.find((uint)m.apd_channel)) == channelAPDs.end())
     return;
   
   APDPair & p = it->second;
   
-  p.apd[p.ct % 2] = m->apd;
+  p.apd[p.ct % 2] = m.apd;
   p.color[p.ct % 2] = monitor->currentColor();
   p.ct++;
 }
@@ -1290,10 +1285,10 @@ void APDMonitor::rebuildOrder()
   emit orderChanged(orderString());
 }
 
-void APDMonitor::gotAPD(MCSnapShot *m)
+void APDMonitor::gotAPD(const MCSnapShot &m)
 {
 
-  if(orderFirst() == m->apd_channel) {
+  if(orderFirst() == m.apd_channel) {
     if (colorState == color1) colorState = color2;
     else colorState = color1;
     emit beatNumberChanged(++beat_num);    

@@ -32,6 +32,7 @@ class ECGGraph;
 class QWidget;
 struct MCShared;
 struct MCSnapShot;
+class MCSnapShotWithElectrodeId;
 class QGridLayout;
 class QLabel;
 class SearchableComboBox;
@@ -64,7 +65,7 @@ class APDInterleaver: public QObject
                  DAQSystem *ds = 0);
   
  public slots:
-  void gotAPD(MCSnapShot *);
+  void gotAPD(const MCSnapShot &);
 
  private slots:
   void calculateChannels();
@@ -114,7 +115,7 @@ class APDMonitor : public QObject
   QString masterOrder() const;
 
  public slots:
-  void gotAPD(MCSnapShot *m);
+  void gotAPD(const MCSnapShot &);
   /* Warning! Pass a valid, comma-delimited string */
   void setMasterOrder(const QString & order);
 
@@ -261,7 +262,7 @@ private:
     *target_shorter_toggle[NumAOchannels], 
     *g_adj_manual_only[NumAOchannels];
 
-  TempSpooler<MCSnapShot> *spooler;
+  TempSpooler<MCSnapShotWithElectrodeId> *spooler;
 
   /* puts the axis labels for the above graphs in
      if rebuildOnlyNull is true, then check if the graph already has labels,
