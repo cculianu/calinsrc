@@ -35,6 +35,8 @@
 #include <qradiobutton.h>
 #include <qstatusbar.h>
 #include <qcheckbox.h>
+#include <qpushbutton.h>
+#include <qiconset.h>
 
 #include <vector>
 
@@ -107,7 +109,7 @@ public:
      x axis labels */
   vector<QString> xAxisText() const;
   
-  bool isPaused() const { return pauseBox->isChecked(); }
+  bool isPaused() const { return nothungry; } //{ return pauseBox->isDown(); }
 
  signals:
   /* Emitted whenever the range changes on the graph this container 
@@ -162,7 +164,7 @@ public slots:
   void setSpikeThresholdStatus(double voltage);
   void unsetSpikeThresholdStatus();
 
-  void pause(bool pause = true); /* pauses the graph 
+  void pause(); /* pauses the graph 
                                     -- 'disables' it as a consumer */
 
  protected:
@@ -193,7 +195,7 @@ public slots:
 
   QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel;
 
-  QCheckBox *pauseBox;
+  QPushButton *pauseBox;
 
   QVBox *labelBox; // for the y axis labels
  
