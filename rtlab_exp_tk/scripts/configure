@@ -1,20 +1,47 @@
 #!/bin/bash
 
+# the list of variables we are concerned with
+VARS="LINUXDIR RTOSDIR RTOS CFLAGS CPPFLAGS CC LD MODULE_COMPILE_FLAGS COMEDI_DEVEL_INCLUDE QTDIR"
 
 # ============================================================================
 # FUNCTIONS
 # ============================================================================
 function save () {
 	(rm $1; touch $1) || (echo "Could not save to '$1'" && exit 1)
-	echo "LINUXDIR=${LINUXDIR}" >> $1
-	echo "RTOSDIR=${RTOSDIR}" >> $1
-	echo "RTOS=${RTOS}" >> $1
-	echo "CFLAGS=${CFLAGS}" >> $1
-	echo "CPPFLAGS=${CPPFLAGS}" >> $1
-	echo "CC=${CC}" >> $1
-	echo "LD=${LD}" >> $1
-	echo "INCLUDE=${INCLUDE}" >> $1
-	echo "OTHERCRAP=${OTHERCRAP}" >> $1 # etc...
+	for var in $VARS; do
+		eval "echo ${var}=$"${var}" >> $1"
+	done
+}
+
+function setDefaults {
+	if [ -z "$QTDIR" ]; then
+		QTDIR="/usr/local/qt"
+	fi
+
+	if [ -z "$LINUXDIR" ]; then
+		LINUXDIR="/usr/src/linux"
+	fi
+
+	if [ -z "${COMEDI_DEVEL_INCLUDE}" ]; then
+		COMEDI_DEVEL_INCLUDE=/usr/src/comedi/include
+	fi
+
+}
+
+function defaultifyRTOSDIRIntelligently {
+	if [ "$RTOS" != "$OLD_RTOS" -o -z "$RTOSDIR" ]; then
+		if [ $RTOS == "RTAI" ]; then
+			RTOSDIR="/usr/src/rtai"
+		else
+			RTOSDIR="/usr/src/rtlinux"
+		fi
+	fi
+}
+
+function saveOldVars {
+	for var in $VARS; do
+		eval "OLD_${var}=$"${var}
+	done
 }
 
 # ============================================================================
@@ -27,11 +54,12 @@ EOF
 	exit 1
 fi
 
-
 if [ -e ".config" ]; then
 	. .config
 fi
 
+saveOldVars
+setDefaults
 
 read -p "Please enter the location of your linux source directory [${LINUXDIR}]: "
 if [ -n "${REPLY}" ]; then
@@ -43,4 +71,38 @@ fi
 . scripts/check_rtos # populates RTOS variable
 
 
+echo
+echo "You appear to be running an ${RTOS}-patched kernel"
+
+defaultifyRTOSDIRIntelligently
+
+echo
+read -p "Please enter the location of your $RTOS directory [${RTOSDIR}]: "
+if [ -n "${REPLY}" ]; then
+	RTOSDIR=$REPLY
+fi
+
+. scripts/check_rtosdir
+
+echo
+read -p "Please enter the location of your Comedi development headers (must contain linux/comedilib.h) [${COMEDI_DEVEL_INCLUDE}]: "
+if [ -n "${REPLY}" ]; then
+	COMEDI_DEVEL_INCLUDE=$REPLY
+fi
+
+. scripts/check_comedi
+
+echo
+read -p "Please enter the location of your Qt 3.x directory [${QTDIR}]: "
+if [ -n "${REPLY}" ]; then
+	QTDIR=$REPLY
+fi
+
+. scripts/check_qtdir
+
+. scripts/set_compile_vars
+
 save .config
+
+echo
+echo "Generated .config, next run 'make' to build RTLab"

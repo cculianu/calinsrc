@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# This script is the most complex of all of them as it builds
+# compile variables for creating kernel modules based on
+# stuff in the rtl.mk and/or linux kernel build vars
+
+# ...
+# do stuff....
+# ...

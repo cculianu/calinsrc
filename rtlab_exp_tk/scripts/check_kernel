@@ -9,7 +9,7 @@ if [ -z "$LINUXDIR" -o ! -d "$LINUXDIR" ]; then
 fi
 
 
-if [ $(grep -c "$(uname -r)" ${LINUXDIR}/include/linux/version.h) != 0 ]
+if [ $(grep -c "$(uname -r)" ${LINUXDIR}/include/linux/version.h) == "0" ]
 then
 	cat <<EOF
  *****

@@ -1,0 +1,55 @@
+#!/bin/bash
+
+
+case "$RTOS" in
+
+	"RTAI")
+		if [ -z "$RTOSDIR" -o ! -f "$RTOSDIR/include/rtai.h" \
+			 -o ! -f "$RTOSDIR/posix/include/rtai_pthread.h" ]; then
+			 cat <<EOF
+ *****
+ *****    ERROR!!!
+ *****
+ *****    Directory '${RTOSDIR}' does not appear to be a valid ${RTOS}
+ *****    directory.
+EOF
+		exit 1
+		fi
+		;;
+	"RTLINUX")
+		if [ -z "$RTOSDIR" -o ! -f "$RTOSDIR/include/rtl.h" ]; then
+			 cat <<EOF
+ *****
+ *****    ERROR!!!
+ *****
+ *****    Directory '${RTOSDIR}' does not appear to be a valid
+ *****    ${RTOS} directory.
+EOF
+		exit 1
+ 		elif [ ! -f "${RTOSDIR}/rtl.mk" ]; then
+			 cat <<EOF
+ *****
+ *****    ERROR!!!
+ *****
+ *****    '${RTOSDIR}/rtl.mk' not found!
+ *****    While '${RTOSDIR}' appears to be a valid RTLinux directory,
+ *****    this error indicates that RTLinux has not been properly
+ *****    built/configured or rtl.mk was purposely removed.  The existance
+ *****    of rtl.mk is required to build RTLab.  Please run 'make config'
+ *****    in your RTLinux directory to re-create rtl.mk.
+EOF
+		exit 1
+		fi
+
+		;;
+	*)
+		cat <<EOF
+ *****
+ *****    ERROR!!!
+ *****
+ *****    Unknown RTOS '${RTOS}'
+EOF
+		exit 1
+
+		;;
+esac

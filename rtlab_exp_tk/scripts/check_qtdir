@@ -1,0 +1,31 @@
+#!/bin/bash
+
+qglobal="$QTDIR/include/qglobal.h"
+qtlib="$QTDIR/lib"
+
+if [ ! -f "$qglobal" -o ! -d "$qtlib" ]; then
+	cat <<EOF
+ *****    ERROR!!!
+ *****
+ *****    ${QTDIR} does not appear to be a valid Qt directory
+EOF
+	exit 1
+fi
+
+qt_version_str=`grep QT_VERSION_STR $qglobal | grep \^#define | cut -f 2 -d '"' | cut -f 1 -d '"' | grep ^3\\.`
+
+if [ -z "$qt_version_str" ]; then
+	cat <<EOF
+ *****    WARNING!!!
+ *****
+ *****    The version of Qt in ${QTDIR} appears to non-Qt-3.x.  RTLab
+ *****    requires Qt 3.x.  The software may or may not build correctly
+ *****    using this Qt version.
+ *****
+ *****    (Using this version of Qt may still work, and it may be what
+ *****    you want to do, however).
+EOF
+fi
+
+
+

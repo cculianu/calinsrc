@@ -1,0 +1,37 @@
+#!/bin/bash
+
+
+if [ ! -d "${COMEDI_DEVEL_INCLUDE}" -o ! -f "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" -o ! -f "${COMEDI_DEVEL_INCLUDE}/linux/comedi.h" ]; then
+	if [ -f "/usr/include/linux/comedilib.h" -a -f "/usr/include/linux/comedi.h" ]; then
+		cat <<EOF
+ *****    WARNING!!!
+ *****
+ *****    ${COMEDI_DEVEL_INCLUDE} does not appear to be a valid
+ *****    Comedi development header directory.
+ *****
+ *****    However, the kernel comedi headers were found in /usr/include,
+ *****    so we will use that.
+EOF
+		COMEDI_DEVEL_INCLUDE="/usr/include"
+	else
+		cat <<EOF
+ *****    ERROR!!!
+ *****
+ *****    ${COMEDI_DEVEL_INCLUDE} does not appear to be a valid
+ *****    Comedi development header directory.
+ *****
+ *****    The Comedi development header directory comes with the Comedi
+ *****    source tarball and contains various header files that don't get
+ *****    installed in /usr/include when you install Comedi.
+ *****
+ *****    linux/comedilib.h, the kcomedilib header is one such header.
+ *****
+ *****    Normally, the Comedi development headers are in the 'include/'
+ *****    subdirectory of the Comedi source .tar.gz, but if you installed
+ *****    Comedi from an RPM/DEB package, this may differ.
+EOF
+		exit 1
+	fi
+fi
+
+
