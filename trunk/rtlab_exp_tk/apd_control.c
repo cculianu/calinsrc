@@ -310,6 +310,25 @@ static void calculate_apd_and_control_perturbation(int which_ai_chan, MultiSampl
 	//   to nominal_pi - apd), plus the perturbation (which is negative).
 	stim_state[which_ao_chan].control_interval_counter = stim_state[which_ao_chan].pacing_interval_counter+stim_state[which_ao_chan].delta_pi;
 
+	//special case for AO1 ... the case where control of AO1 is linked to the stimulation
+	//at AO0, i.e., it's a certain time after (or before) AO1 stimulation
+	if ( (which_ao_chan==1)&&(shm->link_to_ao0) ) {
+	  //delta_pi cannot be larger than the conduction time (or less than -1 times cond. time)
+	  //otherwise one of the sites (whichever is stimulated last) will be refractory to its
+	  //own stimulus due to the previous arrival of the stimuls from the other site..
+	  if ( stim_state[which_ao_chan].delta_pi > shm->ao0_ao1_cond_time )
+	    stim_state[which_ao_chan].delta_pi = shm->ao0_ao1_cond_time - 1;
+	  if ( stim_state[which_ao_chan].delta_pi < (-1*(shm->ao0_ao1_cond_time)) )
+	    stim_state[which_ao_chan].delta_pi = 1 - shm->ao0_ao1_cond_time;
+
+	  if (stim_state[0].control_interval_counter) //if AO0 is being controlled, then the
+	    //stimulus time for AO1 is a perturbation of that time
+	    stim_state[which_ao_chan].control_interval_counter = stim_state[0].control_interval_counter+stim_state[which_ao_chan].delta_pi;
+	  else //otherwise the stimulus time for AO1 is a perturbation based on the pacing
+	    //interval time for AO1
+	stim_state[which_ao_chan].control_interval_counter = stim_state[0].pacing_interval_counter+stim_state[which_ao_chan].delta_pi;
+	}
+
 	//make pacing_interval_counter > control_interval_counter if this is a positive perturbation
 	//so that the natural pacing doesn't precede the control (unless we're continue_underlying)
 	if ( (stim_state[which_ao_chan].delta_pi>=1) && (!(shm->continue_underlying[which_ao_chan])) )
@@ -405,6 +424,8 @@ static void out_to_fifo(int which_ai_chan, int which_ao_chan) {
   working_snapshot.ap_tf = apd_state[which_ai_chan].ap_tf;  
   working_snapshot.apd = apd_state[which_ai_chan].apd;
   working_snapshot.di = apd_state[which_ai_chan].di;
+  working_snapshot.link_to_ao0 = shm->link_to_ao0;
+  working_snapshot.ao0_ao1_cond_time = shm->ao0_ao1_cond_time;
 
   working_snapshot.ao_chan=which_ao_chan;
   if (which_ao_chan >= 0) {
@@ -509,6 +530,8 @@ static int init_shared_mem(void)
     shm->target_shorter[i]=0;   //shm initialization you might want to change
   }
   shm->apd_xx=(1.0 - (0.01*INIT_APD_XX));      //shm initialization you might want to change
+  shm->ao0_ao1_cond_time=5;
+  shm->link_to_ao0=0;
 
   if ( (shm->ao_chan = 
         find_free_chan(rtp_shm->ao_chans_in_use, rtp_shm->n_ao_chans)) < 0) 
