@@ -31,19 +31,27 @@ kernel source tree, everything should build just fine.
 COMPILING
 ---------
 Now that the above is done, type 'make' and hope for the best.  The binary that
-will be built will be "daq_system" which is the user-level program for just
-displaying some graphs that come from your DAQ board.
+will be built will be "daq_system" which is the user-level program data
+acquisition.  Two kernel modules will also be built: rtlab.o and avn_stim.o.
 
 
 NOTE ABOUT COMPILERS:
 
-For best results, due to C++ idiocies in g++-2.95, you should use GNU g++-2.96
-as the C++ compiler.  The regular C compiler doesn't matter too much, but you 
-may have trouble with gcc-2.96 in building the rtlab.o kernel module _if_ you 
-are using RTAI. (Since RTAI requires gcc 2.95).  So if you are using RTAI, you
-*may* need to mix your gcc and g++ versions.  Use g++ 2.96 and gcc 2.95 with 
-RTAI.  (With RTLinux you should be find using version 2.96 of both g++ and
-gcc.)
+For best results, you should use GNU g++-2.96 as the C++ compiler.  If for 
+some reason all your C++ libraries were compiled with another C++ compiler
+(such as g++ 3.0), then use that.  Unfortunately the C++ Binary Interface has
+changed a lot over the years, and so C++ object files and libraries are very
+sensitive to compiler versions.
+
+The regular C compiler doesn't matter too much, but you may have trouble with 
+gcc-2.96 when building RTAI.  (Since RTAI requires gcc 2.95).  
+
+Note that some people that use RTAI need to mix their gcc and g++ versions, 
+since g++-2.95 is not 100% supported by RTLab.  If you want to use RTLab with
+RTAI, you should try using g++ 2.96 and gcc 2.95.  
+
+(On the other hand, with RTLinux you should be fine using version 2.96 of both
+ g++ and gcc.)
 
 If you end up using g++-2.95 as the C++ compiler, you may get weird SIGABRT 
 program terminations.  This is due to some strange behavior with respect to 
