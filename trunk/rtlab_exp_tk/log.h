@@ -37,18 +37,18 @@ class ExperimentLog: public QMultiLineEdit
   /* constructs an ExperimentLog with no open outfiles.. use
      the property methods to set a template and outfile */
   ExperimentLog (QWidget * parent = 0, const char * name = 0);
-
+  
   /* constructs an ExperimentLog with file as the output file and log_template
      as the log template file.  Attempts to open and/or read both files, and 
      may prompt the user to specify another file if it can't access
      one of the files passed in.  */
   ExperimentLog (const QString & file, 
-		 const QString & log_template = QString::null, 
-		 QWidget * parent = 0, 
-		 const char * name = 0);
+                 const QString & log_template = QString::null, 
+                 QWidget * parent = 0, 
+                 const char * name = 0);
 
   ~ExperimentLog();
-
+  
   const QString outFile() const; /* returns the outfile name */
 
   /* closes current output file and attempts to open a new one.  If it doesn't

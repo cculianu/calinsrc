@@ -26,8 +26,9 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     
 {  
   static const QString yAxisLabelFormat( "%1 V" );
+  QHBox *tmpBox;
   
-  this->setFrameStyle(StyledPanel | Raised);
+  this->setFrameStyle(StyledPanel);
   
   // this is the master layout for this widget
   layout = new QGridLayout (this, 2, 2, 1, 1);
@@ -36,8 +37,8 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   // the controls on top
   controlsBox = new QHBox(this);
   controlsBox->setFrameStyle(StyledPanel | Raised);
-  controlsBox->setMargin(2);
-  controlsBox->setSpacing(2);
+  controlsBox->setMargin(1);
+  controlsBox->setSpacing(6);
 
   // graph's name in the top left
   graphNameLabel = new QLabel((name ? name : ""), controlsBox);
@@ -46,8 +47,13 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
   // the range settings control
-  QLabel *tmpLabel = new QLabel ("Change Scale: ", controlsBox);  
-  rangeComboBox = new QComboBox(controlsBox, 
+  tmpBox = new QHBox(controlsBox);
+  tmpBox->setFrameStyle(StyledPanel | Raised);
+  tmpBox->setMargin(1);
+  tmpBox->setSpacing(2);
+
+  QLabel *tmpLabel = new QLabel ("Change Scale: ", tmpBox);  
+  rangeComboBox = new QComboBox(tmpBox, 
 				QString("%1 Scale Box").arg(graph->name()));
   QToolTip::add(rangeComboBox, "Use this to change graph scale (Y Axis Range).");
   QToolTip::add(tmpLabel, "Use this to change graph scale (Y Axis Range).");
@@ -56,18 +62,23 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   layout->addMultiCellWidget (controlsBox, 0, 0, 0, 1);
 
   connect(rangeComboBox,  
-	  SIGNAL(activated(const QString &)),
-	  this, 
-	  SLOT (rangeChange(const QString &))); 
+          SIGNAL(activated(const QString &)),
+          this, 
+          SLOT (rangeChange(const QString &))); 
 
   // add the current range setting (from the graph) to the combo box
   addRangeSetting(graph->rangeMin(), graph->rangeMax(), Volts);
 
   // the number of seconds visible spin box up top
+  tmpBox = new QHBox(controlsBox);
+  tmpBox->setFrameStyle(StyledPanel | Raised);
+  tmpBox->setMargin(1);
+  tmpBox->setSpacing(2);
+
   tmpLabel = 
-    new QLabel("Secs. Visible", controlsBox); 
+    new QLabel("Secs. Visible", tmpBox); 
   /* we can do the above because of qt's 'quasi-garbage collection'  */
-  secondsVisibleBox = new QSpinBox(0, 100000, 1, controlsBox);
+  secondsVisibleBox = new QSpinBox(0, 100, 1, tmpBox);
   secondsVisibleBox->setValue(graph->secondsVisible());
   QToolTip::add(tmpLabel, "Use this to change the number of seconds visible "
 		          "in your graph (X Axis Scale).");
@@ -77,6 +88,51 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 	  graph, SLOT(setSecondsVisible(int)));
   
 
+  // the spike polarity box
+  tmpBox = new QHBox(controlsBox); // we rely on auto-gc
+  tmpBox->setFrameStyle(StyledPanel | Raised);
+  tmpBox->setMargin(1);
+  tmpBox->setSpacing(2);
+
+  spikePolarityLabel = new QLabel("Spike 'Polarity': ", tmpBox);
+  spikePolarityButtons = new QButtonGroup();
+  spikePolarityButtons->setRadioButtonExclusive(true);
+  spikePolarityButtons->hide();
+  polarityPlusButton = new QRadioButton("Positive", tmpBox);
+  polarityMinusButton = new QRadioButton("Negative", tmpBox);
+  spikePolarityButtons->insert(polarityPlusButton, ECGGraph::Positive);
+  spikePolarityButtons->insert(polarityMinusButton, ECGGraph::Negative);
+
+  QToolTip::add(spikePolarityLabel, 
+		"Set the spike polarity by selecting either positive or "
+		"negative spike polarity.");
+  QToolTip::add(polarityPlusButton,
+		"A positive spike polarity means that a spike is detected if "
+		"the amplitude is greater than or equal to the spike "
+		"threshhold.");
+  QToolTip::add(polarityMinusButton,
+		"A negative spike polarity means that a spike is detected if "
+		"the amplitude is less than or equal to the spike "
+		"threshhold.");
+  spikePolarityButtons->setButton(graph->spikePolarity());
+  connect(spikePolarityButtons, SIGNAL(clicked(int)), 
+	  graph, SLOT(setSpikePolarity(int)));
+  
+  QString tmpStr("Set the spike blanking, which is defined as the number of\n"
+		 "samples to wait before detecting a new spike.  If this is\n"
+		 "set too low and you are constantly getting spikes, you may\n"
+		 "not be able to keep track of them as they will come in too\n"
+		 "fast.  If this is set too high you may lose some spikes\n"
+		 "you would have otherwise been interested in.");
+
+  tmpLabel = new QLabel("   Spike Blanking: ", tmpBox);
+  spikeBlanking = new QSpinBox(0, 100000, 1, tmpBox);
+  QToolTip::add(tmpLabel, tmpStr);
+  QToolTip::add(spikeBlanking, tmpStr);
+  spikeBlanking->setValue(graph->spikeBlanking());
+  connect(spikeBlanking, SIGNAL(valueChanged(int)), 
+	  graph, SLOT (setSpikeBlanking(int))); 
+  
   /* y axis labels -- these get auto-updated whenever the graph emits signal 
      rangeChanged */
   labelBox = new QVBox(this);
@@ -89,24 +145,38 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   topYLabel->setAlignment(AlignRight | AlignTop);
   middleYLabel->setAlignment(AlignRight | AlignVCenter);
   bottomYLabel->setAlignment(AlignRight | AlignBottom);
-  // so that labels are always truly reflecting what the graph is doing...
+
+  /* so that labels and things are always truly reflecting what the graph is 
+     doing... */
   connect(graph, 
-	  SIGNAL(rangeChanged(double, double)), 
-	  this, 
-	  SLOT(updateYAxisLabels(double, double)));
-  
+          SIGNAL(rangeChanged(double, double)), 
+          this, 
+          SLOT(updateYAxisLabels(double, double)));  
   connect (graph,
-	   SIGNAL(eitherClicked(void)),
-	   this,
-	   SLOT(mouseDownInGraph(void)));
+           SIGNAL(eitherClicked(void)),
+           this,
+           SLOT(mouseDownInGraph(void)));
   connect (graph,
-	   SIGNAL(eitherReleased(void)),
-	   this,
-	   SLOT(mouseUpInGraph(void)));
+           SIGNAL(eitherReleased(void)),
+           this,
+           SLOT(mouseUpInGraph(void)));
   connect (graph,
-	   SIGNAL(eitherClicked(void)),
-	   graph,
-	   SLOT(unsetSpikeThreshHold(void)));
+           SIGNAL(eitherClicked(void)),
+           graph,
+           SLOT(unsetSpikeThreshHold(void)));
+
+  connect (graph,
+           SIGNAL(spikeBlankingSet(int)),
+           spikeBlanking,
+           SLOT(setValue(int)));
+  connect (graph,
+           SIGNAL(spikePolaritySet(SpikePolarity)),
+           this,
+           SLOT(spikePolaritySet(SpikePolarity)));
+  connect (graph,
+           SIGNAL(secondsVisibleChanged(int)),
+           secondsVisibleBox,
+           SLOT(setValue(int)));
 
   graph->reparent(this, QPoint(0,0) );
 
@@ -125,6 +195,10 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   
 ECGGraphContainer::~ECGGraphContainer() {
   /* QObject::~QObject() will delete all member/child widgets here */
+  if (spikePolarityButtons) {  // this has no real parent
+    delete spikePolarityButtons; 
+    spikePolarityButtons = 0; 
+  }    
 }
 
 

@@ -73,8 +73,9 @@ class ReaderLoop: public QObject
   void loop();
 
  signals:
-  void scanIndexChanged(scan_index_t index); /* emitted whenever we
-						reach a new scan index */
+  void scanIndexChanged(scan_index_t index); /* emitted once per second,
+						whenever we reach a new scan 
+						index */
   
  protected:
 
@@ -94,6 +95,8 @@ class ReaderLoop: public QObject
      the channel number equal to its index in the vector 
      (ie 'channel_index') */
   vector<Producer<const SampleStruct *> > producers;
+
+  scan_index_t saved_curr_index;
 };
 
 class DAQSystem : public QMainWindow
@@ -114,7 +117,7 @@ class DAQSystem : public QMainWindow
  public slots:
   void addChannel(); 
   void openChannelWindow(uint chan, uint range, uint n_secs);
-  void saveGraphWindowPositions(const DAQECGGraphContainer *);
+  void saveGraphSettings(const DAQECGGraphContainer *);
   void about() { /* about the application */ };
 
  protected slots:

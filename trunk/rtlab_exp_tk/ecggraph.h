@@ -37,7 +37,7 @@
    Clean up this code! */
 struct ECGPoint {
   ECGPoint() : index(0), amplitude(0) {};
-  long long index; /* x */
+  int64 index; /* x */
   double amplitude; /* y */
 };
 
@@ -94,13 +94,22 @@ class ECGGraph : public QWidget {
       undefined behavior. */
   virtual double spikeThreshHold() const;
 
+  enum SpikePolarity { Positive = 0, Negative };
+
+  virtual SpikePolarity spikePolarity() const;
+
+  virtual int spikeBlanking() const;
+
   /*
     Method methods
   */
 
   /** plots the sample at the next position (keep calling this in a loop).
       X - value for this sample is determined by the current sample pos.
-      Y - value is determined by amplitude.  */
+      Y - value is determined by amplitude.  
+      FYI is just an arbitrary index that this class can use when
+      emitting spikeDetected() */
+  virtual void plot (double amplitude, uint64 fyi);
   virtual void plot (double amplitude);
 
   virtual void paintEvent (QPaintEvent *);
@@ -112,7 +121,7 @@ signals:
 
   void rangeChanged(double newRangeMin, double newRangeMax);
 
-  void spikeDetected(uint64 spikeSampleNumber, 
+  void spikeDetected(uint64 spikeSampleIndex, 
 		     double spikeAmplitude);
 
   void spikeDetected(ECGPoint p);
@@ -134,8 +143,11 @@ signals:
   void rightClicked();  void leftClicked(); void eitherClicked();
   void rightReleased(); void leftReleased(); void eitherReleased();
 
+  void secondsVisibleChanged(int seconds);
   void spikeThreshHoldSet(double amplitude);
   void spikeThreshHoldUnset(void);
+  void spikePolaritySet(SpikePolarity p);
+  void spikeBlankingSet(int sb);
 
  public slots:
  
@@ -150,7 +162,12 @@ signals:
   /* redraws the graph and resizes its internal data structures to fit
      a new number of seconds setting */
   virtual void setSecondsVisible(int seconds);
- 
+  
+  virtual void setSpikePolarity(SpikePolarity p);
+  virtual void setSpikePolarity(int p) 
+    { setSpikePolarity( (p == Positive) ? Positive : Negative); }
+
+  virtual void setSpikeBlanking(int sb);
 
  protected:
 
@@ -194,13 +211,17 @@ signals:
 
   QColor _gridColor, _backgroundColor;
 
+  uint64 outside_concept_of_a_sample_index;
+
   bool spikeTHoldEnabled;
   double spikeTHold;
 
   QPoint spikeTHoldPoints[2];
 
   ECGPoint lastSpike;
-  int spikeBlanking;
+  int _spikeBlanking;
+
+  SpikePolarity _spikePolarity;
 
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
@@ -241,10 +262,7 @@ signals:
   virtual void computeSpikeTHoldPoints();
 
  private:
-  /* internal stuff for spike detection */
-  short spikeStatus;
-  
-  void detectSpike();
+  void detectSpike(double amplitude);
 };
 
 

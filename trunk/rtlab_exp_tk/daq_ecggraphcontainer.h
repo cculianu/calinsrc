@@ -44,7 +44,8 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleConsumer
 		       uint channelId,
 		       QWidget *parent = 0, 
 		       const char *name = 0, 
-		       WFlags flags = 0);
+		       WFlags flags = 0,
+		       uint64 scanIndexStatusIncrement = 1000);
 
   /* as per the SampleConsumer 'interface' */
   void consume(const SampleStruct *);
@@ -92,6 +93,7 @@ class DAQECGGraphContainer : public ECGGraphContainer, public SampleConsumer
   QLabel *currentIndex, *mouseOverVector, *spikeThreshHold, *lastSpike;
 
  private:
+  const uint64 scan_index_threshhold; // internal
   uint64 last_scan_index;
 
 };

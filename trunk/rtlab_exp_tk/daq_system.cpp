@@ -142,7 +142,7 @@ DAQSystem::addChannel (void)
 
 bool
 DAQSystem::queryOpen(uint & chan, uint & range, 
-		     uint & n_secs)
+                     uint & n_secs)
 		     
 {
   static const uint n_seconds_options[] = { 5, 10, 15, 20, 25, 30 };
@@ -177,29 +177,29 @@ DAQSystem::queryOpen(uint & chan, uint & range,
     const ComediSubDevice & subdev 
       = currentDevice().find(ComediSubDevice::AnalogInput);
     for (uint i = 0, cboxid = 0; 
-	 i < (uint)subdev.n_channels ||
-	   i < subdev.ranges().size() ||
-	   i < sizeof(n_seconds_options) / sizeof(const int);
-	 i++) {
+         i < (uint)subdev.n_channels ||
+           i < subdev.ranges().size() ||
+           i < sizeof(n_seconds_options) / sizeof(const int);
+         i++) {
       
       if (i < (uint)subdev.n_channels 
-	  && ! readerLoop.producers[i].findByType((DAQECGGraphContainer *)0)) {
-	/* build channel id combo box inside here */
-	id.insertItem("Channel No. " + QString().setNum(i));
-	cbox2idMap [ cboxid ] = i;
-	id2cboxMap [ i ] = cboxid;
-	cboxid++;
+          && ! readerLoop.producers[i].findByType((DAQECGGraphContainer *)0)) {
+        /* build channel id combo box inside here */
+        id.insertItem("Channel No. " + QString().setNum(i));
+        cbox2idMap [ cboxid ] = i;
+        id2cboxMap [ i ] = cboxid;
+        cboxid++;
       }
       if (i < subdev.ranges().size() ) {
-	/* build range id combo box inside here */
-	const comedi_range & r = subdev.ranges()[i];
-	QString u( ( r.unit == UNIT_volt ? "V" : "mV" ) );
-	gain.insertItem(QString().setNum(r.min) + u + " - " 
-			+ QString().setNum(r.max) + u);
+        /* build range id combo box inside here */
+        const comedi_range & r = subdev.ranges()[i];
+        QString u( ( r.unit == UNIT_volt ? "V" : "mV" ) );
+        gain.insertItem(QString().setNum(r.min) + u + " - " 
+                        + QString().setNum(r.max) + u);
       }
       if (i < sizeof(n_seconds_options) / sizeof(const int)) {
-	/* build n_secs combo box here */
-	nSecs.insertItem(QString().setNum(n_seconds_options[i]) +" seconds");
+        /* build n_secs combo box here */
+        nSecs.insertItem(QString().setNum(n_seconds_options[i]) +" seconds");
       }
     }
     
@@ -210,8 +210,8 @@ DAQSystem::queryOpen(uint & chan, uint & range,
     /* barf our early with warning if they already have all windows
        open */
     QMessageBox::information(this, "Cannot open another channel window",
-			     "Cannot open another channel window "
-			     "as all channels are being graphed already!");
+                             "Cannot open another channel window "
+                             "as all channels are being graphed already!");
     return false;
   }
 
@@ -239,11 +239,13 @@ DAQSystem::queryOpen(uint & chan, uint & range,
 
 void
 DAQSystem::openChannelWindow(uint chan, uint range, 
-			     uint n_secs)
+                             uint n_secs)
 {
   
   QRect pos(settings.getWindowSetting(chan)); /* grab window pos from file */
-
+  
+  DAQSettings::ChannelParams chanParams(settings.getChannelParameters(chan));
+  
   /* leaky memory prevented by spaghetti-like destructive close
      on the DAQECGGraphContainer and a signal-emitting
      destructor in DAQECGGraph */
@@ -252,26 +254,26 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   /* todo: put the below in a deleteable place! */
   DAQECGGraphContainer *gcont =
     new DAQECGGraphContainer(graph, chan, &ws, 
-			     QString("Channel %1").arg(chan).latin1());
+                             QString("Channel %1").arg(chan).latin1());
 
   buildRangeSettings(gcont);
 
   windowMenuAddWindow(gcont); /* add this window to the 
-				 windowMenu QPopupMenu */
+                                 windowMenu QPopupMenu */
 
   gcont -> show(); /* will this help with window setting/geometry? */
   readerLoop.producers[chan].add(gcont);
   /* see about getting rid of these signal/slots and use natural signalling
      in producer/consumer classes.. -CC */
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
-	  this, SLOT(saveGraphWindowPositions(const DAQECGGraphContainer *)));
+          this, SLOT(saveGraphSettings(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
-	  this, SLOT(windowMenuRemoveWindow(const DAQECGGraphContainer *)));
+          this, SLOT(windowMenuRemoveWindow(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(rangeChanged(uint, int)),
-	  this, SLOT(graphChangedRange(uint, int)));
+          this, SLOT(graphChangedRange(uint, int)));
 
   gcont->rangeChange( range ); /* hopefully above slot will take effect 
-				  and update rt_process appropriately? */
+                                  and update rt_process appropriately? */
 
   /* ladies and gentlemen, start your samplings!! */
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, true);
@@ -280,6 +282,17 @@ DAQSystem::openChannelWindow(uint chan, uint range,
     gcont->show();
     gcont->setGeometry(pos);
     gcont->move(pos.x(), pos.y());
+  }
+
+  if (! chanParams.isNull() ) { /* means we had a default setting */
+    if (chanParams.spike_on) graph->setSpikeThreshHold(chanParams.spike_thold);
+    else graph->unsetSpikeThreshHold();
+    gcont->rangeChange(chanParams.range);
+    graph->setSpikePolarity( (chanParams.spike_polarity 
+                              ? ECGGraph::Positive 
+                              : ECGGraph::Negative) );
+    graph->setSpikeBlanking( chanParams.spike_blanking );
+    graph->setSecondsVisible( chanParams.n_secs );
   }
 
 }
@@ -292,7 +305,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
    or flush them from the settings file if they weren't open
    upon application close */
 void
-DAQSystem::saveGraphWindowPositions(const DAQECGGraphContainer * gcont)
+DAQSystem::saveGraphSettings(const DAQECGGraphContainer * gcont)
 {
   uint chan = gcont->channelId; 
 
@@ -301,10 +314,22 @@ DAQSystem::saveGraphWindowPositions(const DAQECGGraphContainer * gcont)
     QRect pos(gcont->geometry());
     pos.setX(gcont->pos().x()); pos.setY(gcont->pos().y());
     settings.setWindowSetting(chan, pos);
+    DAQSettings::ChannelParams cp;
+    const ECGGraph *graph = gcont->graph;
+    cp.n_secs = graph->secondsVisible();
+    cp.range = gcont->currentRange();
+    cp.spike_on = graph->spikeMode();
+    cp.spike_thold = graph->spikeThreshHold();
+    cp.spike_polarity = (graph->spikePolarity() == ECGGraph::Positive);
+    cp.spike_blanking = graph->spikeBlanking(); 
+    cp.setNull(false);
+    settings.setChannelParameters(chan, cp);
   } else {
     /* clear window settings to indicte this window should not be auto-opened
        the next time */
     settings.setWindowSetting(chan, QRect());
+    /* clear channel parameters */
+    settings.setChannelParameters(chan, DAQSettings::ChannelParams());
   }
 
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, false);
@@ -314,17 +339,17 @@ void
 DAQSystem::closeEvent (QCloseEvent * e)
 {
   daqSystemIsClosingMode = true; /* this changes the behavior of the
-				    saveGraphWindowPositions() method */
+                                    saveGraphWindowPositions() method */
   for (uint i = 0; i < readerLoop.producers.size(); i++) {
     const DAQECGGraphContainer *gc;
     if ( (gc = readerLoop.producers[i].findByType((DAQECGGraphContainer *)0)) )
-      saveGraphWindowPositions(gc);
+      saveGraphSettings(gc);
   }
   QMainWindow::closeEvent(e);
 }
 
 /* this slot does the necessary work to tell the rt-process that a 
-     channel's range/gain setting needs to be changed */
+   channel's range/gain setting needs to be changed */
 void
 DAQSystem::
 graphChangedRange(uint channel, int range)
@@ -398,7 +423,8 @@ ReaderLoop(DAQSystem *d) :
   daq_system(d), 
   pleaseStop(false), 
   n_channels(d->currentdevice.find(ComediSubDevice::AnalogInput).n_channels),
-  producers(n_channels)
+  producers(n_channels),
+  saved_curr_index(0)
 {
   switch (d->settings.getInputSource()) {
   case DAQSettings::RTProcess:
@@ -469,10 +495,8 @@ ReaderLoop::loop()
   }
   
   { /* emit scan index update */
-    static scan_index_t saved_curr_index = 0;
-    scan_index_t si = ShmMgr::scanIndex();
-    if (saved_curr_index != si) {
-      saved_curr_index = si;
+    if (ShmMgr::scanIndex() - saved_curr_index > ShmMgr::samplingRateHz()) {
+      saved_curr_index = ShmMgr::scanIndex();
       emit scanIndexChanged(saved_curr_index);
     }
   }

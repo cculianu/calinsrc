@@ -22,7 +22,6 @@
  */
 #include "daq_ecggraphcontainer.h"
 
-static const uint64 scan_index_threshhold = 25; // internal
 
 /* ugly non-class-specific static constants but this saves needing to duplicate this work in the .h file */
 static const QString 
@@ -37,9 +36,11 @@ DAQECGGraphContainer(ECGGraph *graph,
 		     uint chan,
 		     QWidget *parent = 0, 
 		     const char *name = 0, 
-		     WFlags flags = 0)
+		     WFlags flags = 0,
+		     uint64 scanIndexStatusIncrement = 1000)
   : ECGGraphContainer(graph, parent, name, flags | WDestructiveClose),
     channelId(chan), 
+    scan_index_threshhold(scanIndexStatusIncrement), 
     last_scan_index((uint64)-scan_index_threshhold)
 
 {
@@ -111,7 +112,7 @@ void
 DAQECGGraphContainer::
 consume(const SampleStruct *sample)
 {
-  graph->plot(sample->data);
+  graph->plot(sample->data, sample->scan_index);
   setCurrentIndexStatus(sample->scan_index);
 }
 
