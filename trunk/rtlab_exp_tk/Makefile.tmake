@@ -10,8 +10,8 @@ RTL_MK = /usr/src/rtlinux/rtl.mk
 TEMPLATE    =	daq_system.t
 CONFIG      =	qt warn_on debug #release thread
 INCLUDEPATH =   
-HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h daq_settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp producer_consumer.h sample_consumer.h sample_writer.h shm_mgr.h ecggraph.h ecggraphcontainer.h simple_text_editor.h profile.h dsdstream.h plugin.h spike_polarity.h layer_renderer.h tweaked_mbuff.h
-SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp daq_settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp sample_writer.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp simple_text_editor.cpp common.cpp profile.cpp dsdstream.cpp dsdstream_inner.cpp layer_renderer.cpp
+HEADERS     =	config.h common.h shared_stuff.h daq_system.h configuration.h settings.h daq_settings.h probe.h exception.h comedi_device.h sample_source.h sample_reader.cpp producer_consumer.h sample_consumer.h sample_writer.h shm_mgr.h ecggraph.h ecggraphcontainer.h simple_text_editor.h profile.h dsdstream.h plugin.h spike_polarity.h layer_renderer.h tweaked_mbuff.h tempfile.h
+SOURCES     =	main.cpp daq_system.cpp configuration.cpp settings.cpp daq_settings.cpp probe.cpp exception.cpp comedi_device.cpp sample_source.cpp sample_reader.cpp sample_writer.cpp shm_mgr.cpp ecggraph.cpp ecggraphcontainer.cpp simple_text_editor.cpp common.cpp profile.cpp dsdstream.cpp dsdstream_inner.cpp layer_renderer.cpp tempfile.cpp
 TARGET      =	daq_system
 DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\" #DAQ_SYSTEM_PROFILE_SLEEPTIME_CODE #QT_THREAD_SUPPORT
 LIBS        =   -lcomedi -ldl -export-dynamic

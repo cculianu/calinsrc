@@ -28,6 +28,7 @@ class DAQSystem;
 class ECGGraph;
 class QWidget;
 struct AVNShared;
+struct AVNLiebnitz;
 class QGridLayout;
 class QLabel;
 class SearchableComboBox;
@@ -36,6 +37,7 @@ class QSpinBox;
 class QLineEdit;
 class QScrollBar;
 class QCheckBox;
+class TempFile;
 
 class AVNStim: public QObject, public Plugin
 {
@@ -80,7 +82,7 @@ private:
   bool need_to_save;
   QString outFile;
 
-  void *__data; /* opaque type encapsulting the data to be saved to disk */
+  TempFile *tmpFile; /* the tempfile that spools read data to disk */
 
   /* Layout/UI related-stuff */
   QWidget *window;  /* this contains the whole shebang */
@@ -116,7 +118,10 @@ private:
   void moduleDetach(); /* closes the fifo fd and detached from shm */
   bool needFifo() const { return (fifo < 0); }
   void readInFifo(); /* reads in data off the fifo from the avn_stim module */
-  
+/* Spools data from the rt-process in fifo to the tempFile,
+   throws FileException if it encounters an OS error writing! */
+  void spoolToTemp(const AVNLiebnitz * avnl, int nmemb);
+
   /* static data that is generated at compile-time and goes into
      the output textfile as a header */
   static const char * fileheader;

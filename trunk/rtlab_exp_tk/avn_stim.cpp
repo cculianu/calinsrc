@@ -19,8 +19,6 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#include <vector>
-
 #include <qwidget.h>
 #include <qlayout.h>
 #include <qlabel.h>
@@ -50,6 +48,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 
 #include "common.h"
@@ -58,14 +57,12 @@
 #include "ecggraph.h"
 #include "plugin.h"
 #include "exception.h"
+#include "tempfile.h"
 
 #include "tweaked_mbuff.h"
 #include "avn_stim.h"
 
 #include "avn_stim_private.h"
-
-/* the AVNLiebnitz's get stored in a vector that maxes out at this size */
-static const int MAX_DATA_VECTOR_SIZE = 10000000;
 
 #define RCS_VERSION_STRING  "$Id$"
 
@@ -140,13 +137,12 @@ static const double rr_min   = 0.0,
                     g_min    = -15.0,
                     g_max    = 15.0;
 
-#define data (reinterpret_cast<vector<AVNLiebnitz> *>(this->__data))
 
 AVNStim::AVNStim(DAQSystem *daqSystem_parent) 
-  : QObject(daqSystem_parent, ::name), need_to_save(false), __data(NULL), 
+  : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
 {
-  data = new vector<AVNLiebnitz>;
+  tmpFile = new TempFile("avnstim");
 
   moduleAttach(); /* can throw exception here */
 
@@ -359,7 +355,7 @@ AVNStim::~AVNStim()
   if (shm)  shm->spike_channel = -1; // to 'turn off' avn stim...
   moduleDetach();  
   delete window;
-  delete data;
+  delete tmpFile;
 }
 
 const char *
@@ -483,6 +479,7 @@ void AVNStim::periodic()
   synchAOChan();    
 
 }
+
 void AVNStim::readInFifo()
 {
   static const int n2rd = 1000; /* number of AVNLiebnitz's to read at a time */
@@ -494,16 +491,13 @@ void AVNStim::readInFifo()
   n_bufs = n_read / sizeof(AVNLiebnitz);
 
   need_to_save = (n_bufs ? true : need_to_save);
-
-  if (data->size() + n_bufs > MAX_DATA_VECTOR_SIZE) 
-    data->erase(data->begin(), data->begin() + n_bufs); // free up some space 
   
   for (i = 0; i < n_bufs; i++) {
     /* todo: plot to graphs here... */
     rr_graph->plot(static_cast<double>(buf[i].rr_interval));
     stim_graph->plot(static_cast<double>(buf[i].stimuli));
     g_graph->plot(buf[i].g_val);
-    data->push_back(buf[i]);
+    spoolToTemp(buf, n_bufs);
   }
   /* now update the stats once per read() call (meaning we take the
      last AVNLiebnitz we got */
@@ -546,6 +540,21 @@ void AVNStim::readInFifo()
 
   /* incomplete... please finish! - Calin */
 #undef f_equal
+}
+
+/* Spools data from the rt-process in fifo to the tmpFile,
+   throws FileException if it encounters an OS error writing! */
+void AVNStim::spoolToTemp(const AVNLiebnitz * avnl, int nmemb)
+{
+  const int bytes = nmemb * sizeof(AVNLiebnitz);
+
+  lseek(*tmpFile, 0, SEEK_END); // ensures we append
+  if (write(*tmpFile, avnl, bytes) != bytes) {
+    const char *errmsg = strerror(errno);
+    throw FileException("Temp file error", 
+                        QString("Cannot spool AVN Stim data to temp file: ")
+                        + errmsg);
+  }  
 }
 
 /* Possible race conditions here but it's too much trouble to implement
@@ -719,9 +728,18 @@ void AVNStim::save()
   
   QString linebuf;
 
-  for (vector<AVNLiebnitz>::iterator i=data->begin(); i != data->end(); i++) 
-    out << strinfigy_liebnitz(linebuf, *i) << "\n";
   
+  lseek(*tmpFile, 0, SEEK_SET);
+  struct stat buf;
+  fstat(*tmpFile, &buf);
+  unsigned int nmemb = buf.st_size/sizeof(AVNLiebnitz);
+
+  char albuf[sizeof(AVNLiebnitz) / sizeof(char)];
+  for (uint i = 0; i < nmemb; i++) {
+    read(*tmpFile, albuf, sizeof(AVNLiebnitz)); // no need to check error?
+    out << strinfigy_liebnitz(linebuf, *reinterpret_cast<AVNLiebnitz *>(albuf)) << "\n";
+  }
+
   f.flush();
   if ( (f.status() & IO_Ok) != IO_Ok ) {
     Exception("Error writing to outfile", "There was an unspecified error "

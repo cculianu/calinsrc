@@ -185,6 +185,12 @@ public:
                   const QString & m2 = "There was an error with a plugin.") : Exception (m1, m2) {};
 };
 
+class FileCreationException : public Exception
+{
+public:
+  FileCreationException(const QString & m1 = "File creation error",
+                        const QString & m2 = "Could not create a needed file.") : Exception (m1, m2) {}
+};
 
 template<class X, class A>                   inline void Assert(A assertion)           { if (!assertion) throw X(); };
 template<class X, class A, class B>          inline void Assert(A assertion, B b)      { if (!assertion) throw X(b); };
