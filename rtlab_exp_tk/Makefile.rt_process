@@ -17,7 +17,7 @@ include ./.buildvars
 # subdirectory.
 COMEDI_MODBUILD_DIR  = ${COMEDI_DEVEL_INCLUDE}/modbuild
 
-all: rt_process.o rtos_middleman.o rtlab.o avn_stim.o
+all: rt_process.o rtos_middleman.o rtlab.o avn_stim.o map_control.o
 
 rt_process.o: rt_process.c rt_process.h shared_stuff.h rtos_middleman.h proc_macros.h .buildvars
 # Some checks are on the next line
@@ -53,6 +53,20 @@ avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h rtos_middleman.h p
 	@echo "              Compiling The AVN Stim Kernel Module"
 	@echo "***************************************************************************"
 	$(CC) ${MODULE_COMPILE_FLAGS} -I ${COMEDI_DEVEL_INCLUDE} -I ${COMEDI_MODBUILD_DIR} -c -o avn_stim.o avn_stim.c
+
+map_control.o: map_control.c map_control.h shared_stuff.h rt_process.h rtos_middleman.h proc_macros.h .buildvars
+	@( [ -d "${COMEDI_DEVEL_INCLUDE}" ] && [ -r "${COMEDI_DEVEL_INCLUDE}/linux/comedilib.h" ] || ( \
+	echo "***************************************************************************"; \
+	echo "ERROR: Cannot find the comedi kernel headers. "; \
+	echo "       These are usually in your comedi source dirctory in the include/ "; \
+	echo "       subdirectory. Please set these in Makefile.rt_process!"; \
+	echo "       (COMEDI_DEVEL_INCLUDE = /path/to/comedi/src/include)" ; \
+	echo "***************************************************************************"; \
+	exit 1 ) ) 
+	@echo "***************************************************************************"
+	@echo "              Compiling The Map Control Kernel Module"
+	@echo "***************************************************************************"
+	$(CC) ${MODULE_COMPILE_FLAGS} -I ${COMEDI_DEVEL_INCLUDE} -I ${COMEDI_MODBUILD_DIR} -c -o map_control.o map_control.c
 
 clean:
 	-rm -f *.o 

@@ -212,7 +212,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   pauseBox->setMaximumSize(pauseBox->sizeHint());
   QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
                 "actual data acquisition");
-  connect(pauseBox, SIGNAL(pressed()), this, SLOT(pause()));    
+  connect(pauseBox, SIGNAL(pressed()), this, SLOT(pauseUnpause()));    
 
   // the range settings control
   tmpBox = new QHBox(controlsBox);
@@ -730,7 +730,7 @@ void ECGGraphContainer::setXAxisLabels(const vector<uint64> &
   if (hidenshow) xaxis->show();
 }
 
-void ECGGraphContainer::pause()
+void ECGGraphContainer::pauseUnpause()
 {
   if (nothungry) //from pause to play
     {

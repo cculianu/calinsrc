@@ -60,29 +60,29 @@
 #include "tempspooler.h"
 
 #include "tweaked_mbuff.h"
-#include "avn_stim.h"
+#include "map_control.h"
 
-#include "avn_stim_private.h"
-
+#include "map_control_private.h"
 #include "searchable_combo_box.h"
 
 #define RCS_VERSION_STRING  "$Id$"
+
 
 extern "C" {
 
   /* Stuff needed by plugin engine... */
   int ds_plugin_ver = DS_PLUGIN_VER;
 
-  const char * name = "AV Node Control Experiment",
+  const char * name = "Map Control Experiment",
              * description =
-              "Some GUI controls for interfacing with the AV Node stimulation "
-              "real-time module named 'avn_stim.o'.  This rtl/rt_process "
+              "Some GUI controls for interfacing with the Map Control stimulation "
+              "real-time module named 'map_control.o'.  This rtl/rt_process "
               "addon was developed for an experiment in the Cardiac "
               "Electrodynamics Laboratory of  Cornell University.",
              * author =
               "David J. Christini, Ph.D and Calin A. Culianu.",
              * requires =
-              "avn_stim.o be installed into the kernel.  Analog output.";
+              "map_control.o be installed into the kernel.  Analog output.";
   
   Plugin * entry(QObject *o) 
   { 
@@ -90,10 +90,10 @@ extern "C" {
     /* Top-level widget.. parent is root */
     DAQSystem *d = dynamic_cast<DAQSystem *>(o);
 
-    Assert<PluginException>(d, "AVN Stim Plugin Load Error", 
-                            "The AVN Stim Plugin can only be used in "
+    Assert<PluginException>(d, "Map Control Plugin Load Error", 
+                            "The Map Control Plugin can only be used in "
                             "conjunction with daq_system!  Sorry!");    
-    return new AVNStim(d); ;
+    return new MapControl(d); ;
   } 
 
 };
@@ -109,13 +109,13 @@ static const double rr_min   = 0.0,
                     g_max    = 15.0;
 
 
-AVNStim::AVNStim(DAQSystem *daqSystem_parent) 
+MapControl::MapControl(DAQSystem *daqSystem_parent) 
   : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
 {
   daq_shmCtl = &daqSystem_parent->shmController();
 
-  spooler = new TempSpooler<AVNLiebnitz>("avnstim", true);
+  spooler = new TempSpooler<MCLiebnitz>("mapcontrol", true);
 
   determineRTOS(); /* can throw exception here */
   moduleAttach(); /* can throw exception here */
@@ -246,7 +246,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
     connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
        
     (void) new QLabel("Nominal Num. Stims:", tmphb);
-    QSpinBox *nomStimsSpinBox = new  QSpinBox (AVN_MIN_NUM_STIMS, AVN_MAX_NUM_STIMS, 1, tmphb);
+    QSpinBox *nomStimsSpinBox = new  QSpinBox (MC_MIN_NUM_STIMS, MC_MAX_NUM_STIMS, 1, tmphb);
     nomStimsSpinBox->setValue(shm->nom_num_stims);
 
     connect(nomStimsSpinBox, SIGNAL(valueChanged(int)), this, SLOT(changeNomNumStims(int)));
@@ -263,7 +263,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
     g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
 
-    g_adj_manual_only->setChecked(shm->g_adjustment_mode == AVN_G_ADJ_MANUAL);
+    g_adj_manual_only->setChecked(shm->g_adjustment_mode == MC_G_ADJ_MANUAL);
     g_adj_manual_only->setDisabled(!shm->stim_on);
     gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->stim_on);
     connect(g_adj_manual_only, SIGNAL(stateChanged(int)), this, SLOT(gAdjManualOnly(int)));
@@ -287,9 +287,9 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
    
     delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
     delta_g_bar = new QScrollBar
-      ( avn_delta_g_toint(AVN_DELTA_G_MIN), avn_delta_g_toint(AVN_DELTA_G_MAX),
-        1, avn_delta_g_toint((AVN_DELTA_G_MAX - AVN_DELTA_G_MIN) / 5.0), 
-        avn_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
+      ( mc_delta_g_toint(MC_DELTA_G_MIN), mc_delta_g_toint(MC_DELTA_G_MAX),
+        1, mc_delta_g_toint((MC_DELTA_G_MAX - MC_DELTA_G_MIN) / 5.0), 
+        mc_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
     
     tmphb->setStretchFactor(delta_g_bar, 1);
     
@@ -298,8 +298,8 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
 
     num_rr_avg_bar_value = new QLabel(QString::number(shm->num_rr_avg), tmphb);
     num_rr_avg_bar = new QScrollBar
-      ( AVN_NUM_RR_AVG_MIN, AVN_NUM_RR_AVG_MAX, 1, 
-        (AVN_NUM_RR_AVG_MAX - AVN_NUM_RR_AVG_MIN) / 10, shm->num_rr_avg,
+      ( MC_NUM_RR_AVG_MIN, MC_NUM_RR_AVG_MAX, 1, 
+        (MC_NUM_RR_AVG_MAX - MC_NUM_RR_AVG_MIN) / 10, shm->num_rr_avg,
         Qt::Horizontal, tmphb );  
 
     tmphb->setStretchFactor(num_rr_avg_bar, 1);
@@ -311,7 +311,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
   }
   
   controlslayout->addMultiCellWidget // footnote at the bottom
-    (new QLabel(QString("AVN Control Experiment Notes:\n"
+    (new QLabel(QString("MC Control Experiment Notes:\n"
                         "All graphs display %1 beats on the x-axis.\n"
                         "The vertical gridlines are %2 beats apart.")
                .arg(beats_per_gridline * num_gridlines)
@@ -328,7 +328,7 @@ AVNStim::AVNStim(DAQSystem *daqSystem_parent)
   timer->start(50);
 }
 
-AVNStim::~AVNStim() 
+MapControl::~MapControl() 
 {
   timer->stop();
   safelyQuit(); /* prompts the user to save, if necessary.. kinda sloppy to 
@@ -341,39 +341,39 @@ AVNStim::~AVNStim()
 }
 
 const char *
-AVNStim::name() const
+MapControl::name() const
 {
   return ::name;
 }
 
 const char *
-AVNStim::description() const
+MapControl::description() const
 {
   return ::description;
 }
 
 
-void AVNStim::determineRTOS()
+void MapControl::determineRTOS()
 {
   rtosUsed = Unknown;
   if (QFile::exists("/proc/rtai")) rtosUsed = RTAI;
   else if (QFile::exists("/dev/rtl_shm")) rtosUsed = RTLinux;// temp hack
 
   Assert<PluginException>(rtosUsed != Unknown,
-                          "AVN Stim Plugin Attach Error",
-                          "The AVN Stim plugin could not be attached "
+                          "Map Control Plugin Attach Error",
+                          "The Map Control plugin could not be attached "
                           "because it can't figure out which RTOS you are "
                           "running.  Are you running either RTLinux or RTAI?");
 }
 
-void AVNStim::moduleAttach()
+void MapControl::moduleAttach()
 {
   switch(rtosUsed) {
   case RTLinux:
-    shm = (AVNShared *)mbuff_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+    shm = (MCShared *)mbuff_attach(MC_SHM_NAME, sizeof(struct MCShared));
     break;
   case RTAI:
-    shm = (AVNShared *)rtai_shm_attach(AVN_SHM_NAME, sizeof(struct AVNShared));
+    shm = (MCShared *)rtai_shm_attach(MC_SHM_NAME, sizeof(struct MCShared));
     break;
   default:
     /* Should not be reached */
@@ -383,12 +383,12 @@ void AVNStim::moduleAttach()
     break;
   }
 
-  Assert<PluginException>(shm && shm->magic == AVN_SHM_MAGIC,
-                          "AVN Stim Plugin Attach Error", 
-                          "The AVN Stim Plugin can not find the shared "
-                          "memory buffer named \"" AVN_SHM_NAME "\".  "
+  Assert<PluginException>(shm && shm->magic == MC_SHM_MAGIC,
+                          "Map Control Plugin Attach Error", 
+                          "The Map Control Plugin can not find the shared "
+                          "memory buffer named \"" MC_SHM_NAME "\".  "
                           "(Or it is of the wrong version)\n\n"
-                          "Are you sure that module avn_stim.o is loaded?");
+                          "Are you sure that module map_control.o is loaded?");
   
 
   QString fname;
@@ -397,22 +397,22 @@ void AVNStim::moduleAttach()
   fifo = open(fname, O_RDONLY | O_NDELAY);
 
   Assert<PluginException>(!needFifo(),
-                          "AVN Stim Plugin Attach Error",
+                          "Map Control Plugin Attach Error",
                           QString 
-                          ( "Even though the AVN Stim Kernel Module is "
-                            "loaded, the AVN Stim plugin could not attach\n "
+                          ( "Even though the Map Control Kernel Module is "
+                            "loaded, the Map Control plugin could not attach\n "
                             "to the required fifo \"%1\".  Please make sure "
                             "this file exists and is read/write for the \n"
                             "current user."
                             ).arg(fname));
   
   /* empty the fifo to make sure we start with a clean slate */
-  char buf[AVN_FIFO_SZ];
-  ::read(fifo, &buf, AVN_FIFO_SZ);
+  char buf[MC_FIFO_SZ];
+  ::read(fifo, &buf, MC_FIFO_SZ);
     
 }
 
-void AVNStim::moduleDetach()
+void MapControl::moduleDetach()
 {
   if (!needFifo()) close(fifo); fifo = -1;
 
@@ -420,10 +420,10 @@ void AVNStim::moduleDetach()
 
     switch(rtosUsed) {
     case RTLinux:
-      mbuff_detach(AVN_SHM_NAME, shm);
+      mbuff_detach(MC_SHM_NAME, shm);
       break;
     case RTAI:
-      rtai_shm_detach(AVN_SHM_NAME, shm);
+      rtai_shm_detach(MC_SHM_NAME, shm);
       break;
     default:
       /* Should not be reached */
@@ -440,12 +440,12 @@ void AVNStim::moduleDetach()
 }
 
 /* returns parent() dynamic_cast to DAQSystem* */
-DAQSystem * AVNStim::daqSystem()  
+DAQSystem * MapControl::daqSystem()  
 { return dynamic_cast<DAQSystem *>(parent()); }
 
 
 /* Very long-winded code to build the graph axis labels... */
-void AVNStim::addAxisLabels()
+void MapControl::addAxisLabels()
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
@@ -500,7 +500,7 @@ void AVNStim::addAxisLabels()
 
 }
 
-void AVNStim::periodic()
+void MapControl::periodic()
 {
   /* check the in fifo for data, and act upon it if found... */
   readInFifo();
@@ -510,17 +510,17 @@ void AVNStim::periodic()
 
 }
 
-void AVNStim::readInFifo()
+void MapControl::readInFifo()
 {
-  static const int n2rd = 1000; /* number of AVNLiebnitz's to read at a time */
-  AVNLiebnitz buf[n2rd];
+  static const int n2rd = 1000; /* number of MCLiebnitz's to read at a time */
+  MCLiebnitz buf[n2rd];
   int n_read = 0, n_bufs = 0, i = 0;
 
   n_read = ::read(fifo, buf, sizeof(buf));
 
   n_read = ( n_read < 0 ? 0 : n_read ); // rtai fifos return -1 on failure
 
-  n_bufs = n_read / sizeof(AVNLiebnitz);
+  n_bufs = n_read / sizeof(MCLiebnitz);
 
   need_to_save = (n_bufs ? true : need_to_save);
   
@@ -532,10 +532,10 @@ void AVNStim::readInFifo()
     spooler->spool(buf, n_bufs);
   }
   /* now update the stats once per read() call (meaning we take the
-     last AVNLiebnitz we got */
+     last MCLiebnitz we got */
   if (!n_bufs) return;
   
-  AVNLiebnitz & last = buf[n_bufs-1];
+  MCLiebnitz & last = buf[n_bufs-1];
 
   current_rri->setText(QString::number(last.rr_interval));
   current_rrt->setText(QString::number(last.rr_target));
@@ -556,7 +556,7 @@ void AVNStim::readInFifo()
 #define f_equal(x, y) ( x > y ? x - y < smallf : y - x < smallf )
   if (!f_equal(last.delta_g, delta_g_bar_value->text().toFloat())) {
     disconnect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-    delta_g_bar->setValue(avn_delta_g_toint(last.delta_g));
+    delta_g_bar->setValue(mc_delta_g_toint(last.delta_g));
     delta_g_bar_value->setText(QString::number(last.delta_g, 'g', 3));
     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
   }
@@ -577,7 +577,7 @@ void AVNStim::readInFifo()
 
 /* Possible race conditions here but it's too much trouble to implement
    atomicity for the free channels list right now... */
-void AVNStim::populateAOComboBox()
+void MapControl::populateAOComboBox()
 {
   uint i;
 
@@ -592,7 +592,7 @@ void AVNStim::populateAOComboBox()
 
 /* possible race conditions here.. since channel free list access is
    non-atomic! */
-void AVNStim::changeAOChan(const QString & selected)
+void MapControl::changeAOChan(const QString & selected)
 {
   int selected_i = selected.toInt();
   
@@ -612,7 +612,7 @@ void AVNStim::changeAOChan(const QString & selected)
 }
 
 /* synch the ao_channels listbox with what is really in the kernel */
-void AVNStim::synchAOChan() 
+void MapControl::synchAOChan() 
 {
   QString ao_chan;
 
@@ -622,7 +622,7 @@ void AVNStim::synchAOChan()
     ao_channels->setSelected(ao_channels->findItem(ao_chan, CaseSensitive|ExactMatch), true); 
 }
 
-void AVNStim::changeAIChan(const QString &chan)
+void MapControl::changeAIChan(const QString &chan)
 {
   bool ok;
 
@@ -631,7 +631,7 @@ void AVNStim::changeAIChan(const QString &chan)
   if (!ok) shm->spike_channel = -1;
 }
 
-void AVNStim::synchAIChan()
+void MapControl::synchAIChan()
 {
   uint i;
   int sel;
@@ -655,44 +655,44 @@ void AVNStim::synchAIChan()
 
 }
 
-void AVNStim::toggleControl(bool on)
+void MapControl::toggleControl(bool on)
 {
   
   if (!on) {
     shm->stim_on = 0;
     g_adj_manual_only->setDisabled(true);
     gval->setDisabled(true);
-    shm->g_adjustment_mode = AVN_G_ADJ_MANUAL;
+    shm->g_adjustment_mode = MC_G_ADJ_MANUAL;
   } else {
     shm->stim_on = 1;
     g_adj_manual_only->setDisabled(false);
     gval->setDisabled(!g_adj_manual_only->isChecked());
     shm->g_adjustment_mode = (g_adj_manual_only->isChecked() 
-                              ? AVN_G_ADJ_MANUAL 
-                              : AVN_G_ADJ_AUTOMATIC);
+                              ? MC_G_ADJ_MANUAL 
+                              : MC_G_ADJ_AUTOMATIC);
   }
     
 }
 
 
 
-void AVNStim::changeRRTarget(int rrt_in_ms)
+void MapControl::changeRRTarget(int rrt_in_ms)
 {
   shm->rr_target = rrt_in_ms;
 }
 
-void AVNStim::changeNumRRAvg(int rra)
+void MapControl::changeNumRRAvg(int rra)
 {
   shm->num_rr_avg = rra;
 }
 
-void AVNStim::gAdjManualOnly(int yes)
+void MapControl::gAdjManualOnly(int yes)
 {
-  shm->g_adjustment_mode = (yes ? AVN_G_ADJ_MANUAL : AVN_G_ADJ_AUTOMATIC);
+  shm->g_adjustment_mode = (yes ? MC_G_ADJ_MANUAL : MC_G_ADJ_AUTOMATIC);
   gval->setDisabled(!yes);
 }
 
-void AVNStim::changeG(const QString &g)
+void MapControl::changeG(const QString &g)
 {  
   double newG;
   bool ok;
@@ -702,18 +702,18 @@ void AVNStim::changeG(const QString &g)
     shm->g_val = newG;
 }
 
-void AVNStim::changeDG(int new_dg_sliderval) 
+void MapControl::changeDG(int new_dg_sliderval) 
 {
-  shm->delta_g = avn_delta_g_fromint(new_dg_sliderval);
-  delta_g_bar_value->setNum(avn_delta_g_fromint(new_dg_sliderval));
+  shm->delta_g = mc_delta_g_fromint(new_dg_sliderval);
+  delta_g_bar_value->setNum(mc_delta_g_fromint(new_dg_sliderval));
 }
 
-void AVNStim::changeNomNumStims(int n)
+void MapControl::changeNomNumStims(int n)
 {
   shm->nom_num_stims = n;
 }
 
-const char * AVNStim::fileheader = 
+const char * MapControl::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
 "#Scan_Index RR_Interval Number_of_Stimuli G RR_Avg G_Too_Small_Count G_Too_Big_Count RR_Target Delta_G Num_RR_Avg Stim_On? G_Adj_Automatically?\n";
@@ -724,7 +724,7 @@ struct PVSaver
   PVSaver (QTextStream & o, QString header = "") 
     : out(o), header(header) { out << header; };
   
-  void operator()(AVNLiebnitz & l) 
+  void operator()(MCLiebnitz & l) 
   { 
     dummy.sprintf
       ("%s %d %d %g %d %d %d %d %g %d %d %d\n",     
@@ -738,7 +738,7 @@ struct PVSaver
   QString dummy, header;
 };
 
-void AVNStim::save()
+void MapControl::save()
 { 
   if (outFile.isNull()) { saveAs(); return; }
 
@@ -772,7 +772,7 @@ void AVNStim::save()
   need_to_save = false;
 }
 
-void AVNStim::saveAs()
+void MapControl::saveAs()
 {
   bool dont_overwrite;
 
@@ -781,7 +781,7 @@ void AVNStim::saveAs()
       QFileDialog::getSaveFileName(outFile, QString::null, window, 
                                    "save file dialog",
                                    "Choose a file to which to save the"
-                                   " AVN data" );
+                                   " MC data" );
 
     if (outFile.isNull()) return; // user aborted
 
@@ -796,11 +796,11 @@ void AVNStim::saveAs()
   save();
 }
 
-void AVNStim::safelyQuit()
+void MapControl::safelyQuit()
 {
   if (need_to_save) {
     int usersaid = 
-      QMessageBox::warning(window, "Data is unsaved", "The AVN Stim Plugin is terminating, and the data for the AVN Stim Control Experiment is unsaved.\nDo you wish to save or discard changes?", "Save Changes", "Discard Changes");
+      QMessageBox::warning(window, "Data is unsaved", "The Map Control Plugin is terminating, and the data for the Map Control Control Experiment is unsaved.\nDo you wish to save or discard changes?", "Save Changes", "Discard Changes");
     if (usersaid == 0)
       save(); /* this way even on file pick error
                  they will be prompted to save */
