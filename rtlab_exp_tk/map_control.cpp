@@ -115,7 +115,7 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
 {
   daq_shmCtl = &daqSystem_parent->shmController();
 
-  spooler = new TempSpooler<MCLiebnitz>("mapcontrol", true);
+  spooler = new TempSpooler<MCSnapShot>("mapcontrol", true);
 
   determineRTOS(); /* can throw exception here */
   moduleAttach(); /* can throw exception here */
@@ -512,15 +512,15 @@ void MapControl::periodic()
 
 void MapControl::readInFifo()
 {
-  static const int n2rd = 1000; /* number of MCLiebnitz's to read at a time */
-  MCLiebnitz buf[n2rd];
+  static const int n2rd = 1000; /* number of MCSnapShot's to read at a time */
+  MCSnapShot buf[n2rd];
   int n_read = 0, n_bufs = 0, i = 0;
 
   n_read = ::read(fifo, buf, sizeof(buf));
 
   n_read = ( n_read < 0 ? 0 : n_read ); // rtai fifos return -1 on failure
 
-  n_bufs = n_read / sizeof(MCLiebnitz);
+  n_bufs = n_read / sizeof(MCSnapShot);
 
   need_to_save = (n_bufs ? true : need_to_save);
   
@@ -532,10 +532,10 @@ void MapControl::readInFifo()
     spooler->spool(buf, n_bufs);
   }
   /* now update the stats once per read() call (meaning we take the
-     last MCLiebnitz we got */
+     last MCSnapShot we got */
   if (!n_bufs) return;
   
-  MCLiebnitz & last = buf[n_bufs-1];
+  MCSnapShot & last = buf[n_bufs-1];
 
   current_rri->setText(QString::number(last.rr_interval));
   current_rrt->setText(QString::number(last.rr_target));
@@ -724,7 +724,7 @@ struct PVSaver
   PVSaver (QTextStream & o, QString header = "") 
     : out(o), header(header) { out << header; };
   
-  void operator()(MCLiebnitz & l) 
+  void operator()(MCSnapShot & l) 
   { 
     dummy.sprintf
       ("%s %d %d %g %d %d %d %d %g %d %d %d\n",     

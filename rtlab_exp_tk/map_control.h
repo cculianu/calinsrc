@@ -41,12 +41,12 @@ extern "C" {
    for each spike interval (since UI task might miss some spikes if it doesn't
    get scheduled by Linux).
 */
-struct MCLiebnitz {
+struct MCSnapShot {
   int rr_interval; /* the time in ms for this beat */
   int stimuli; /* the number of stims delivered */
   double g_val; /* the value of our magic coefficient g */
   /* below is stuff that can be inferred from the structs in shared memory 
-     but is copied to the MCLiebnitz structs for historical purposes */
+     but is copied to the MCSnapShot structs for historical purposes */
   scan_index_t scan_index; /* copied from rt_process's rtp_shm */
   int rr_avg; /* computed momentary average rr, num_rr_avg plays into this */
   int g_too_small_count; /* computed */
@@ -64,7 +64,7 @@ struct MCLiebnitz {
 };
 
 #ifndef __cplusplus
-  typedef struct MCLiebnitz MCLiebnitz;
+  typedef struct MCSnapShot MCSnapShot;
 #endif
 
 
@@ -79,14 +79,14 @@ struct MCShared {
   volatile double g_val;  /* the ui can change this and it affects control */
   volatile float delta_g; /* the amount we modify g each time we do control */
   volatile int num_rr_avg; /* the number of recent beats we take into account 
-                              to reach rr_avg (see MCLiebnitz::rr_avg) */
+                              to reach rr_avg (see MCSnapShot::rr_avg) */
   volatile int nom_num_stims; /* the number of stims that we +/- around in our
                                  control algorithm */
   char stim_on;    /* if nonzero, do the actual stimulations */
   char g_adjustment_mode; /* see above #defines */
-  int fifo_minor; 
-  int spike_channel;
-  int ao_chan; /* specified by user interface */
+  int fifo_minor; /* Just informational for user side to know where the fifo is */
+  int spike_channel; /* The channel we are monitoring in the kernel */
+  int ao_chan; /* The channel that is doing the control, specified by user interface */
   unsigned int magic;   /* should always equal MC_SHM_MAGIC */
   int reserved[4]; /* just so i can look like i know what i am doing... */
 };
@@ -98,7 +98,7 @@ struct MCShared {
 #define MC_SHM_NAME "MC Stim Shared Memory"
 #define MC_SHM_MAGIC (0xf001edU)
 
-#define MC_FIFO_SZ (sizeof(struct MCLiebnitz) * 100)
+#define MC_FIFO_SZ (sizeof(struct MCSnapShot) * 100)
 
 /* Some sanity limits imposed by both UI and realtime thread */
 #define MC_NUM_RR_AVG_MAX 50
