@@ -26,6 +26,7 @@
 #include <string>
 #include "shared_stuff.h"
 #include "sample_source.h"
+#include "common.h"
 
 /* todo: rethink OO-ness of this -- ideally we want a generic 
    reader interface that can work with any data source -- including

@@ -96,7 +96,6 @@ class ReaderLoop: public QObject
   void scanIndexChanged(scan_index_t index); /* emitted once per second,
                                                 whenever we reach a new scan 
                                                 index */
-  void spikeDetected (const SampleStruct *);
 
  protected:
 
@@ -104,8 +103,8 @@ class ReaderLoop: public QObject
 
   bool graphListenerExists(uint channel_id);
 
-  SampleStructSource *source, *spike_source;
-  SampleStructReader *reader, *spike_reader;
+  SampleStructSource *source;
+  SampleStructReader *reader;
   SampleWriter *writer;
   
   bool pleaseStop;
@@ -144,10 +143,11 @@ private slots:
   void unloadAll();
 
 private:
-  void loadPlugin(const char *filename) throw (Exception);
-  void unloadPlugin(Plugin *p);
 
   Plugin *pluginFindByName(QString name);
+
+  void loadPlugin(const char *filename) throw (PluginException);
+  void unloadPlugin(Plugin *p);
 
   map <Plugin *, int *> plugins_and_handles;
   QListBox *plugin_box;
@@ -173,6 +173,10 @@ class DAQSystem : public QMainWindow
 
   static bool isValidDAQSettings(const DAQSettings & s);
 
+ signals:
+  void channelOpened(uint chan);
+  void channelClosed(uint chan);
+  
  public slots:
   void addChannel(); 
   void openChannelWindow(uint chan, uint range, uint n_secs);

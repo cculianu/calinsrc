@@ -42,7 +42,8 @@ static const QString
   CURRENT_INDEX_FORMAT("Scan Index: %1"),
   SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
   LAST_SPIKE_FORMAT("Last Spike %1 V at %2"),
-  SPIKE_FREQUENCY_FORMAT ("Spike Frequency: %1 BPM (%2 hz)");
+  SPIKE_FREQUENCY_FORMAT ("Spike Freq: %1 BPM (%2 hz or %3 ms/spike)");
+  
 
 /* used for string parsing and building in the combo box
    see also enum RangeUnit */
@@ -242,7 +243,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     mouseOverVector = new QLabel(MOUSE_POS_FORMAT.arg("-").arg("-"),statusBar);
     spikeThreshold = new QLabel(statusBar);       
     lastSpike = new QLabel(LAST_SPIKE_FORMAT.arg("-").arg("-"), statusBar);
-    spikeFrequency = new QLabel(SPIKE_FREQUENCY_FORMAT.arg("-"). arg("-"), 
+    spikeFrequency = new QLabel(SPIKE_FREQUENCY_FORMAT.arg("-").arg("-").arg("-"), 
                                 statusBar);
   
     if ( graph->spikeMode() ) {
@@ -280,7 +281,8 @@ ECGGraphContainer::
 consume(const SampleStruct *sample)
 {
   graph->plot(sample->data, sample->scan_index);
-  setCurrentIndexStatus(sample->scan_index);
+  detectSpike(sample);
+  setCurrentIndexStatus(sample->scan_index);  
 }
 
 /** RangeChange slot to be used in conjunction
@@ -409,17 +411,13 @@ ECGGraphContainer::setSecondsVisible(int secs)
 
 void
 ECGGraphContainer::
-spikeDetected(const SampleStruct *s)
+detectSpike(const SampleStruct *s)
 {
-  if (s->channel_id == channelId) {
-    /* compute instantaneous spike freq. */
-    float freq = ( graph->sampleRateHz()                    
-                   ? ( (s->scan_index - last_spike_index) 
-                       / ((float)graph->sampleRateHz()) ) * 1000.0
-                   : 0.0 ),
-          bpm  = (freq ? 60 / (freq / 1000.0) : 0.0);
-      
-    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm).arg(freq));
+  if (s->spike) {    
+    double freq_hz = 1000.0 / (s->spike_period != 0 ? s->spike_period : -1),
+           bpm     = freq_hz * 60;
+           
+    spikeFrequency->setText(SPIKE_FREQUENCY_FORMAT.arg(bpm).arg(freq_hz).arg(s->spike_period));
 
     /* update last spike label .. */
     lastSpike->setText(LAST_SPIKE_FORMAT.arg(s->data)

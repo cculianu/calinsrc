@@ -4,6 +4,7 @@
 #include <qdatetime.h>
 #include <string>
 #include "shared_stuff.h"
+#include "common.h"
 
 # define SAMPLE_SOURCE_BLOCK_SZ_BYTES SS_RT_QUEUE_BLOCK_SZ_BYTES
 

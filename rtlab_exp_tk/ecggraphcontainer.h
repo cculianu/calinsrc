@@ -132,7 +132,7 @@ public slots:
   void setSecondsVisible(int);
 
   /** needed to update labels */
-  void spikeDetected(const SampleStruct *);
+  void detectSpike(const SampleStruct *);
 
  /* so that the status bar can let the user know what scan index
     this channel is up to */

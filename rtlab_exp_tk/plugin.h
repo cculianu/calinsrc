@@ -24,24 +24,18 @@
 #ifndef __PLUGIN_H
 #define __PLUGIN_H
 
-#include <qobject.h>
+class QObject;
 
-class DAQSystem;
-
-/* The plugin interface is minimalist. Just so that we can say that all
-   plugins can/should be deleted by daq_system. */
+/* The plugin interface is minimalist. */
 class Plugin
 {
 public:
   virtual ~Plugin() {};
   virtual const char *name() const = 0; /* returns the plugin's name */
   virtual const char *description() const = 0; /* returns the description */
-
-private:
-  DAQSystem *daqSystem;
 };
 
 /* all entry functions throw an Exception if they cannot be started */
-typedef Plugin * (*plugin_entry_fn_t)(DAQSystem *);
+typedef Plugin * (*plugin_entry_fn_t)(QObject *);
 
 #endif

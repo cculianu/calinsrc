@@ -17,6 +17,8 @@ include ./Makefile.rtl_dir
 # subdirectory.
 COMEDI_DEVEL_HEADERS = /usr/src/comedi/include
 
+all: rt_process.o avn_stim.o
+
 rt_process.o: rt_process.c rt_process.h shared_stuff.h
 # Some checks are on the next line
 	@( [ -d "${COMEDI_DEVEL_HEADERS}" ] && [ -r "${COMEDI_DEVEL_HEADERS}/linux/comedilib.h" ] || ( \
@@ -31,6 +33,20 @@ rt_process.o: rt_process.c rt_process.h shared_stuff.h
 	@echo "              Compiling The RT-Process RealTime Kernel Module"
 	@echo "***************************************************************************"
 	$(CC) ${INCLUDE} ${CFLAGS} -I ${COMEDI_DEVEL_HEADERS} -c -o rt_process.o rt_process.c
+
+avn_stim.o: avn_stim.c avn_stim.h shared_stuff.h rt_process.h
+	@( [ -d "${COMEDI_DEVEL_HEADERS}" ] && [ -r "${COMEDI_DEVEL_HEADERS}/linux/comedilib.h" ] || ( \
+	echo "***************************************************************************"; \
+	echo "ERROR: Cannot find the comedi kernel headers. "; \
+	echo "       These are usually in your comedi source dirctory in the include/ "; \
+	echo "       subdirectory. Please set these in Makefile.rt_process!"; \
+	echo "       (COMEDI_DEVEL_HEADERS = /path/to/comedi/src/include)" ; \
+	echo "***************************************************************************"; \
+	exit 1 ) ) 
+	@echo "***************************************************************************"
+	@echo "              Compiling The AVN Stim Kernel Module"
+	@echo "***************************************************************************"
+	$(CC) ${INCLUDE} ${CFLAGS} -I ${COMEDI_DEVEL_HEADERS} -c -o avn_stim.o avn_stim.c
 
 clean:
 	-rm -f *.o 

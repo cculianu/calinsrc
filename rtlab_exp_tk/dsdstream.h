@@ -31,10 +31,10 @@
 #include <string.h>
 #include <time.h>
 
-#include "common.h"
 #include "exception.h"
 #include "shared_stuff.h"
 #include "settings.h"
+#include "common.h"
 
 /**
   *@author Calin Culianu

@@ -67,9 +67,6 @@ MODULE_PARM_DESC(ai_comedi_device, "The comedi device minor number to use for an
 MODULE_PARM(ao_comedi_device, "i");
 MODULE_PARM_DESC(ao_comedi_device, "The comedi device minor number to use for analog output. Defaults to 0.");
 
-MODULE_PARM(spike_fifo, "i");
-MODULE_PARM_DESC(spike_fifo, "The /dev/rtfXX device number to use for echoing spike detection information. Defaults to 2.");
-
 EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
 EXPORT_SYMBOL_NOVERS(rtp_deactivate_function);
@@ -137,12 +134,20 @@ DECLARE_MUTEX(rt_functions_sem);
 int ai_fifo = DEFAULT_AI_FIFO, 
     ao_fifo = DEFAULT_AO_FIFO, 
     ai_comedi_device = DEFAULT_COMEDI_MINOR,
-    ao_comedi_device = DEFAULT_COMEDI_MINOR,
-    spike_fifo = DEFAULT_SPIKE_FIFO;
+    ao_comedi_device = DEFAULT_COMEDI_MINOR;
 
 /* Exported globals below.. */
 SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
 struct spike_info spike_info;            /* Exported spike information     */
+
+
+/* some vars to keep track of the rt task period/rate */
+static hrtime_t task_period = 0;
+static sampling_rate_t last_sampling_rate = 0;
+/* readjusts the period of pthread_t daq_task based on changes in 
+   rtp_shm->sampling_rate_hz, changes: task_period and last_sampling_rate */
+inline int readjust_rt_task_period(void);
+
 
 /* this task reads data from the DAQ board, then calls 
    all of the functions registered in rt_functions linked list */
@@ -150,9 +155,9 @@ static void *daq_rt_task (void *arg)
 {
   static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
                                              modules */
+
   register hrtime_t loopstart = 0;    /* used to calibrate timing on
                                          sampling rate changes            */
-  register long nanos_to_sleep;
 
   /* below is used to put upper limit on the array in one_full_scan */
   struct rt_function_list *curr;
@@ -160,9 +165,22 @@ static void *daq_rt_task (void *arg)
   register hrtime_t looptime = 0, max = 0, min = HRTIME_INFINITY;
   uint avg_total_time = 0;
 #endif
+  
+  { /* initialize the one_full_scan struct */
+    uint i;
 
-  do {
+    one_full_scan.n_samples = 0;
+    
+    for (i = 0; i < SHD_MAX_CHANNELS; i++) 
+      one_full_scan.samples[i].magic_number = SAMPLE_STRUCT_MAGIC;      
+    
+  }
+
+  while (1) {
+
     loopstart = gethrtime();
+    
+    readjust_rt_task_period();
 
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
@@ -215,10 +233,9 @@ static void *daq_rt_task (void *arg)
     /* increment scan_index counter */
     ++rtp_shm->scan_index; 
 
-    nanos_to_sleep = 
-      (BILLION/rtp_shm->sampling_rate_hz) - 
-      (gethrtime() - loopstart);   
-  } while ( ! nanosleep(hrt2ts(nanos_to_sleep), NULL) );  /* periodic loop */
+    pthread_wait_np();
+  }
+
   return (void *)0;
 }
 
@@ -232,7 +249,10 @@ int  init_module(void)
 
 
   /* initialize the array of last spikes encountered */
-  for (i = 0; i < SHD_MAX_CHANNELS; i++)  spike_info.last_spike_time[i] = 0;
+  for (i = 0; i < SHD_MAX_CHANNELS; i++)  {
+    spike_info.last_spike_time[i] = 0;
+    spike_info.period[i] = 0xffffffff;
+  }
   memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
 
   /* initialize the function linked list */
@@ -241,8 +261,8 @@ int  init_module(void)
   /* note that order of registrations is important.. the function list is 
      FIFO ordered */
   if ( (error = __rtp_register_function(grabScanOffBoard)) ||
-       (error = __rtp_register_function(putFullScanIntoAIFifo)) ||
-       (error = __rtp_register_function(detectSpikes)) ) {
+       (error = __rtp_register_function(detectSpikes)) ||
+       (error = __rtp_register_function(putFullScanIntoAIFifo)) ) {
     errorMessage = "Internal error: Cannot register a required function onto the dynamic function list! Out of memory?";
     goto init_error;
   }
@@ -322,22 +342,22 @@ int  init_module(void)
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
-
-  if ( (error = rtf_create(rtp_shm->spike_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
-       (error != SS_RT_QUEUE_SZ_BYTES) ) {
-    errorMessage = "Cannot create a fifo for communicating spike detection to userland!";     
-    goto init_error;
-  }
-  
+ 
 
   /* create the realtime task */
   pthread_attr_init(&attr);
   pthread_attr_setfp_np(&attr, 1);
   sched_param.sched_priority = 1;
-  pthread_attr_setschedparam(&attr, &sched_param);
+  pthread_attr_setschedparam(&attr, &sched_param);  
   if ( (error = pthread_create(&daq_task, &attr, 
 			       daq_rt_task, (void *)0) ) ) {
     errorMessage = "Cannot create the daq pthread";
+    goto init_error;
+  }
+
+  /* assumption for readjust_rt_task_period () is rtp_shm is initialized.. */
+  if ( ( error = readjust_rt_task_period() ) ) {
+    errorMessage = "Cannot make DAQ RT Task periodic";
     goto init_error;
   }
 
@@ -377,10 +397,9 @@ init_shared_mem(int ai_subdev, int ao_subdev)
   rtp_shm->ao_subdev = ao_subdev;
   rtp_shm->ai_fifo_minor = ai_fifo;
   rtp_shm->ao_fifo_minor = ao_fifo;
-  rtp_shm->spike_fifo_minor = spike_fifo;
   /* num AI channels in use */
-  rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_shm->ai_minor, 0); 
-  rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_shm->ao_minor, 0);
+  rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_shm->ai_minor, ai_subdev); 
+  rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_shm->ao_minor, ao_subdev);
   rtp_shm->sampling_rate_hz = INITIAL_SAMPLING_RATE_HZ;
   rtp_shm->scan_index = 0;
 
@@ -496,11 +515,10 @@ static void cleanup_fifos (void)
   if (! rtp_shm) return;
 
   do {
-    int i, fifos[3] = {rtp_shm->ai_fifo_minor, 
-                       rtp_shm->ao_fifo_minor, 
-                       rtp_shm->spike_fifo_minor};
+    int i, fifos[2] = {rtp_shm->ai_fifo_minor, 
+                       rtp_shm->ao_fifo_minor};
     
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 2; i++)
       if (fifos[i] >= 0)
         rtf_destroy(fifos[i]);
   
@@ -579,8 +597,8 @@ static void grabScanOffBoard (MultiSampleStruct *m)
   (Note to self: Ok, it's not tough, but requires some probing in 
   init_module to determine some minimum values for the comedi_cmd struct)
 ---------------------------------------------------------------------------*/
-  m->acq_start = gethrtime();
   memcpy(m->channel_mask, rtp_shm->ai_chans_in_use, CHAN_MASK_SIZE);
+  m->acq_start = gethrtime();
   for (i = 0, m->n_samples = 0; i < rtp_shm->n_ai_chans; i++) {
     if (is_chan_on(i, m->channel_mask)) {
       packed_param = rtp_shm->ai_chan[i]; /* for shorter line length  below */
@@ -591,6 +609,7 @@ static void grabScanOffBoard (MultiSampleStruct *m)
         sampl_to_volts(AI,CR_CHAN(packed_param),CR_RANGE(packed_param), samp);
       m->samples[m->n_samples].scan_index = rtp_shm->scan_index;
       m->samples[m->n_samples].channel_id = i;
+      m->samples[m->n_samples].spike = 0;
       m->n_samples++;
     }
   }  
@@ -598,6 +617,47 @@ static void grabScanOffBoard (MultiSampleStruct *m)
 /*---------------------------------------------------------------------------
   /End data acquisition/
 ---------------------------------------------------------------------------*/
+}
+
+static void detectSpikes (MultiSampleStruct *m)
+{
+  register uint chan, i;
+  register const uint avg_chan_time =
+    ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
+  register hrtime_t this_chan_time;
+  
+  for (i = 0; i < m->n_samples; i++) {
+    chan = m->samples[i].channel_id;
+    this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
+    if (_test_bit(chan, rtp_shm->spike_params.enabled_mask) 
+        &&  (this_chan_time - spike_info.last_spike_time[chan]
+            >= rtp_shm->spike_params.blanking[chan] * MILLION) ) {
+      switch (_test_bit(chan, rtp_shm->spike_params.polarity_mask)) {
+      case Positive: /* from enum SpikePolarity */
+        m->samples[i].spike = 
+          rtp_shm->spike_params.threshold[chan] <= m->samples[i].data;
+        break;
+      case Negative: 
+        m->samples[i].spike = 
+          rtp_shm->spike_params.threshold[chan] >= m->samples[i].data;
+        break;
+      default:
+        /* this case is not reached, but defensive rtl_printf follows */
+        rtl_printf(MODULE_NAME ": Bug in rt_process.o, channel %u has an "
+                   "illegal spike polarity!\n", chan); 
+        break;
+      }
+
+      if (m->samples[i].spike) {
+        m->samples[i].spike_period = spike_info.period[chan] =
+          ((int)(this_chan_time - spike_info.last_spike_time[chan])) 
+          / (double)1000000.0;
+        spike_info.last_spike_time[chan] = this_chan_time;
+      }
+      
+    }
+    _set_bit(chan, spike_info.spikes_this_scan, m->samples[i].spike);
+  }
 }
 
 static void putFullScanIntoAIFifo (MultiSampleStruct *m) 
@@ -641,45 +701,6 @@ static void putFullScanIntoAIFifo (MultiSampleStruct *m)
 
 }
 
-static void detectSpikes (MultiSampleStruct *m)
-{
-  register char have_spike;
-  register uint chan, i;
-  register const uint avg_chan_time =
-    ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
-  register hrtime_t this_chan_time;
-  
-  for (i = 0; i < m->n_samples; i++) {
-    chan = m->samples[i].channel_id;
-    this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
-    have_spike = 0;
-    if (_test_bit(chan, rtp_shm->spike_params.enabled_mask) 
-        &&  (this_chan_time - spike_info.last_spike_time[chan]
-            >= rtp_shm->spike_params.blanking[chan] * MILLION) ) {
-      switch (_test_bit(chan, rtp_shm->spike_params.polarity_mask)) {
-      case Positive: /* from enum SpikePolarity */
-        have_spike = 
-          rtp_shm->spike_params.threshold[chan] <= m->samples[i].data;
-        break;
-      case Negative: 
-        have_spike = 
-          rtp_shm->spike_params.threshold[chan] >= m->samples[i].data;
-        break;
-      default:
-        /* this case is not reached, but defensive rtl_printf follows */
-        rtl_printf(MODULE_NAME ": Bug in rt_process.o, channel %u has an "
-                   "illegal spike polarity!\n", chan); 
-        break;
-      }
-      _set_bit(chan, spike_info.spikes_this_scan, have_spike);
-      if (have_spike) {
-        spike_info.last_spike_time[chan] = this_chan_time;
-        rtf_put(rtp_shm->spike_fifo_minor, m->samples + i, sizeof(SampleStruct));
-      }
-    }
-  }
-}
-
 /* registers a function to be run within the rtf loop
    returns 0 on succes, ENOMEM or EBUSY on error.  
    Specified function entry won't be run (activated)
@@ -708,7 +729,7 @@ static int __rtp_register_function(rtfunction_t function)
   new = kmalloc(sizeof(struct rt_function_list), GFP_KERNEL);
 
   if (!new) {
-    return ENOMEM;
+    return -ENOMEM;
   }
   new->active_flag = 0;
   new->function = function;
@@ -742,7 +763,7 @@ int rtp_unregister_function(rtfunction_t function)
 
   /* if the module isn't ready yet, abort */
   if (__I_AM_BUSY) {
-    return EBUSY;
+    return -EBUSY;
   }
   retval =  __rtp_unregister_function(function);
   if (!retval) MOD_DEC_USE_COUNT;
@@ -771,7 +792,7 @@ static int __rtp_unregister_function(rtfunction_t function)
   rt_functions = __end_of_func_list.next; /* re-establish head of list */
   up(&rt_functions_sem);
 
-  return (found_flg ? 0 : EINVAL);
+  return (found_flg ? 0 : -EINVAL);
 }
 
 
@@ -781,7 +802,7 @@ int rtp_activate_function(rtfunction_t function)
 {
   /* if the module isn't ready yet, abort */
   if (__I_AM_BUSY) {
-    return EBUSY;
+    return -EBUSY;
   }
 
   return __rtp_set_f_active(function, 1);
@@ -814,7 +835,7 @@ __find_func(rtfunction_t func, struct rt_function_list *start)
 static int __rtp_set_f_active(rtfunction_t f, char v) 
 {
   register struct rt_function_list *r = rt_functions;
-  register int retval = EINVAL;
+  register int retval = -EINVAL;
 
   down(&rt_functions_sem);
   while ((r = __find_func(f, r))) {    
@@ -852,6 +873,21 @@ inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
     ret *= 0.001;
   
   return ret;
+}
+
+
+inline int readjust_rt_task_period(void)
+{
+  if (rtp_shm->sampling_rate_hz != last_sampling_rate) {
+    /* user changed sampling rate -- DANGEROUS if set too high!!! */
+    last_sampling_rate = rtp_shm->sampling_rate_hz;
+    task_period = ((1000 / (double)last_sampling_rate) * MILLION);
+    /* now re-tune the period, note that this is dangerous if set too
+       fast, as the user task may never get to run! */
+    return pthread_make_periodic_np (daq_task, gethrtime() + task_period, 
+                                     task_period);
+  }
+  return 0;
 }
 
 #undef __I_AM_BUSY

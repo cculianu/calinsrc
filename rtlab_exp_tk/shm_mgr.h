@@ -114,7 +114,6 @@ namespace ShmMgr
   uint samplingRateHz();
   scan_index_t scanIndex();
   uint aiFifoMinor();
-  uint spikeFifoMinor();
 };
 
 inline 
@@ -265,6 +264,5 @@ ShmMgr::scanIndex()
 }
 
 inline uint ShmMgr::aiFifoMinor() { check(); return shm->ai_fifo_minor; };
-inline uint ShmMgr::spikeFifoMinor() { check(); return shm->spike_fifo_minor; };
 
 #endif
