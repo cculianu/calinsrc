@@ -28,9 +28,8 @@
 #include "exception.h"
 
 
-Exception::Exception (const QString & briefMsg = "An Exception Ocurred",
-		      const QString & fullMsg = "There was an internal error",
-		      ErrorReportingMode m = GUI) 
+Exception::Exception (const QString & briefMsg, const QString & fullMsg,
+                      ErrorReportingMode m)
   : _briefMsg(briefMsg), _fullMsg(fullMsg), _errorReportingMode(m) {}
 
 void 
@@ -42,7 +41,7 @@ Exception::showError() const
     /* try once to create some Qt resources so __showError() can display
        a critical message box */
     int argc = 1;
-    char *args = "";
+    char *args = (char *)"";
     QApplication a(argc, &args);
     __showError();
   }
@@ -60,29 +59,26 @@ Exception::__showError() const
 
 UnimplementedException::UnimplementedException 
 (
- const QString & brief = "Unimplemented Operation",
- const QString & full = "There was an internal error due to an unimplemented "
-                         "operation.",
- ErrorReportingMode m = GUI
+ const QString & brief,
+ const QString & full,
+ ErrorReportingMode m
 ) 
   : Exception(brief, full, m) {}
 
 
 NoComediDeviceException::NoComediDeviceException 
 (
- const QString & brief = "Comedi Device Not Found",
- const QString & full = "A required comedi device was missing or was " 
-                        "found in an inconsistent state.",
- ErrorReportingMode m = GUI 
+ const QString & brief,
+ const QString & full,
+ ErrorReportingMode m
 ) 
   : Exception(brief, full, m) {}
 
 RTPException::RTPException 
 (
- const QString & brief = "Error occurred with rt_process.o",
- const QString & full = "An operation upon/with the rt_process "
-                        "kernel module failed!",
- ErrorReportingMode m = GUI
+ const QString & brief,
+ const QString & full,
+ ErrorReportingMode m
 ) 
   : Exception  (brief, full, m) {}
 
@@ -90,7 +86,7 @@ RTPException::RTPException
 MBuffException::MBuffException
 (
  const QString & mbuff_file,
- ErrorReportingMode m = GUI
+ ErrorReportingMode m
 ) 
   : Exception  (QString ("Error occurred with %1").arg(mbuff_file), 
 		QString ("An operation upon/with the device file %1 failed! "

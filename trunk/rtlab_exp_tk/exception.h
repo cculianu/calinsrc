@@ -137,6 +137,14 @@ class FileException : public Exception
     : Exception(brief, full) {};
 };
 
+class FileFormatException : public FileException
+{
+ public:
+  FileFormatException ( const QString & brief = "The file is corrupt or invalid.",
+                  const QString & full = "A file is corrupt or has an invalid/unrecognized format." )
+    : FileException(brief, full) {};
+};
+
 class SampleOutputFileException : public FileException
 {
  public:
@@ -155,5 +163,27 @@ class FileNotFoundException : public FileException
 			  " was not found." )
     : FileException(brief, full) {};
 };
+
+class SerializationException : public Exception
+{
+public:
+  SerializationException(const QString & m1 = "Could not serialize an object",
+                         const QString & m2 = "Consistency checks and/or other errors") : Exception (m1, m2) {};
+};
+
+class IllegalStateException : public Exception
+{
+public:
+  IllegalStateException(const QString & m1 = "Internal Error",
+                         const QString & m2 = "Inconsisten/Illegal internal state encountered") : Exception (m1, m2) {};
+};
+
+
+template<class X, class A>                   inline void Assert(A assertion)           { if (!assertion) throw X(); };
+template<class X, class A, class B>          inline void Assert(A assertion, B b)      { if (!assertion) throw X(b); };
+template<class X, class A, class B, class C> inline void Assert(A assertion, B b, C c) { if (!assertion) throw X(b,c); };
+template<class A>                            inline void Assert(A assertion)           { Assert<Exception>(assertion); };
+template<class A, class B>                   inline void Assert(A assertion, B b)      { Assert<Exception>(assertion, b); };
+template<class A, class B, class C>          inline void Assert(A assertion, B b, C c) { Assert<Exception>(assertion, b, c); };
 
 #endif

@@ -30,8 +30,38 @@
 #include "common.h"
 #include "shared_stuff.h"
 #include "sample_consumer.h"
+#include "dsdstream.h"
 
-class SampleGZWriter: public QObject, public SampleConsumer
+class SampleWriter: public QObject, public SampleConsumer
+{
+  Q_OBJECT
+
+public:
+  SampleWriter() { _periodicFlush = flushPending = false; };
+  virtual ~SampleWriter() {};
+
+  // Pure Virtual
+  virtual void setFile(const char *filename) = 0;
+  virtual void consume(const SampleStruct *s) = 0;
+
+  virtual bool & periodicFlush() { return _periodicFlush; };
+  virtual void schedulePeriodicFlush(); // calls a timer on flushBuffer()
+
+public slots:
+
+  virtual void channelStateChanged(uint channel_id, bool on_or_off = true) = 0;
+
+  // Pure Virtual
+  virtual void flushBuffer() = 0; /* called by a QTimer from schedulePeriodicFlush */
+
+protected:
+  bool flushPending,   /* if this is false, we need to schedule a flush */
+       _periodicFlush; /* this needs to be true for the timed flushes to
+                          be enabled -- default is false */
+
+};
+
+class SampleGZWriter: public SampleWriter
 {
   Q_OBJECT
 
@@ -41,12 +71,11 @@ class SampleGZWriter: public QObject, public SampleConsumer
   ~SampleGZWriter();
   void setFile(const char *filename);
   void consume(const SampleStruct *s);
-  bool & periodicFlush() { return _periodicFlush; };
+
 
  public slots:
-    
-  void channelStateChanged(uint channel_id);
-  void flushBuffer(); /* should be called by a QTimer? */
+  void channelStateChanged(uint channel_id, bool on_or_off = true);
+  void flushBuffer(); /* called by a QTimer from schedulePeriodicFlush */
 
  private:
   void init();
@@ -65,11 +94,27 @@ class SampleGZWriter: public QObject, public SampleConsumer
     * const dataLineFormat = "C[%03u] SI[%020llu] D[%#.14g]\n";
   char buffer[BUFSIZE+1];
   uint bufEnd; /* index of the first free pos in buffer (always <= BUFSIZE) */
-  bool flushPending, /* if this is false, we need to schedule a flush */
-       _periodicFlush; /* this needs to be true for the timed flushes to 
-			  be enabled -- default is false */
 };
 
+
+class SampleBinWriter: public SampleWriter
+{
+  Q_OBJECT
+public:
+  SampleBinWriter ();
+  SampleBinWriter (const char * file);
+  ~SampleBinWriter();
+
+  void setFile(const char *filename);
+  void consume(const SampleStruct *s);
+
+public slots:
+  void channelStateChanged(uint channel_id, bool on_or_off = true);
+  void flushBuffer() { /* does nothing */ };
+
+private:
+  DSDOStream dsdostream;
+};
 #endif
 
 

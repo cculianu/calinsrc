@@ -21,38 +21,40 @@
  * http://www.gnu.org.
  */
 
-#ifndef _COMMON_H
-#  define _COMMON_H
-#  include "config.h"
-#  include <values.h>
-
-typedef unsigned int uint;
-
-typedef short int16;
-typedef unsigned short uint16;
-
-typedef char int8;
-typedef unsigned char uint8;
-
-typedef unsigned long long uint64;
-typedef long long int64;
-
-#include <string>
-#include <qstring.h>
-
-
-bool cstr_to_uint64(const char *in, uint64 & out);
-uint64 cstr_to_uint64(const char *in, bool *ok = 0);
+#include <stdio.h>
+#include "common.h"
 
 /* this function is non-reentrant! */
-const char *uint64_to_cstr(uint64 in);
-
-
-/* this function is non-reentrant! */
-string operator+(const string & s, uint64 in);
+string operator+(const string & s, uint64 in)
+{ return s + string(uint64_to_cstr(in)); };
 
 /* this function is non-reentrant! */
-QString operator+(const QString & s, uint64 in);
+QString operator+(const QString & s, uint64 in)
+{ return s + QString(uint64_to_cstr(in)); };
 
 
-#endif
+const char *uint64_to_cstr(uint64 in)
+{
+  static char buf[64]; // non-reentrant function!!
+
+  snprintf(buf, 64, "%llu", in);
+  buf[63] = 0;
+
+  return buf;
+}
+
+bool cstr_to_uint64(const char *in, uint64 & out)
+{
+  if (sscanf(in, "%llu",  &out) != 1) return false;
+
+  return true;
+}
+
+uint64 cstr_to_uint64(const char *in, bool * ok)
+{
+  bool k;
+  uint64 tmp = 0;
+  k = cstr_to_uint64(in, tmp);
+  if (ok) *ok = k;
+  return tmp;
+}

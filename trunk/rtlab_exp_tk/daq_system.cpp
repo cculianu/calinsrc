@@ -284,6 +284,8 @@ DAQSystem::openChannelWindow(uint chan, uint range,
           this, SLOT(saveGraphSettings(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
           this, SLOT(windowMenuRemoveWindow(const DAQECGGraphContainer *)));
+  connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
+          this, SLOT(graphOff(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(rangeChanged(uint, int)),
           this, SLOT(graphChangedRange(uint, int)));
 
@@ -294,9 +296,9 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, true);
 
   if (! pos.isNull() ) { /* means we had a default setting */
-    gcont->show();
-    gcont->setGeometry(pos);
+    gcont->resize(pos.size());
     gcont->move(pos.x(), pos.y());
+    gcont->show();
   }
 
   if (! chanParams.isNull() ) { /* means we had a default setting */
@@ -326,8 +328,8 @@ DAQSystem::saveGraphSettings(const DAQECGGraphContainer * gcont)
 
   if (daqSystemIsClosingMode) {
     /* save actual window settings */
-    QRect pos(gcont->geometry());
-    pos.setX(gcont->pos().x()); pos.setY(gcont->pos().y());
+    QRect pos(gcont->pos(), gcont->size());
+
     settings.setWindowSetting(chan, pos);
     DAQSettings::ChannelParams cp;
     const ECGGraph *graph = gcont->graph;
@@ -415,7 +417,7 @@ DAQSystem::windowMenuRemoveWindow(const QWidget *w)
   }
 }
 
-/* populates the graphcontianer with the correct range options for this 
+/* populates the graphcontianer with the correct range options for this
    channel */
 void 
 DAQSystem::buildRangeSettings(ECGGraphContainer *c) 
@@ -506,13 +508,24 @@ ReaderLoop(DAQSystem *d) :
     source->flush();
     /* build a non-blocking sample reader */
     reader = new SampleStructReader(source, 0);
-    writer = new SampleGZWriter(d->settings.getDataFile().latin1());
+
+    /* build the sample writer */
+    switch(d->settings.getDataFileFormat()) {
+    case DAQSettings::Binary:
+      writer = new SampleBinWriter(d->settings.getDataFile().latin1());
+      break;
+    case DAQSettings::Ascii:
+      writer = new SampleGZWriter(d->settings.getDataFile().latin1());
+      break;
+    default:
+      throw UnimplementedException("INTERNAL ERROR", "Unknown data file format specified in settings");
+      break;
+    }
     { /* setup the writer to listen */
       uint *tmp = new uint [n_channels];
       for (uint i = 0; i < n_channels; i++) {
 	tmp[i] = i;
       }
-      //writer->setChannelIds(tmp, n_channels);
       delete tmp;
 
     }
@@ -575,5 +588,23 @@ ReaderLoop::loop()
   }
 
   QTimer::singleShot(source->suggestPollWaitTime(), 
-		     this, SLOT(loop()));
+                     this, SLOT(loop()));
+}
+
+void
+ReaderLoop::turnOffChannel(uint chan_id)
+{
+  QTimer::singleShot(1000, this, SLOT(turnOffPending()));
+  pending_off.push_back(chan_id);
+}
+
+void
+ReaderLoop::turnOffPending()
+{
+  uint i;
+
+  for (i = 0; i < pending_off.size(); i++)
+    writer->channelStateChanged(pending_off[i], false);
+  pending_off.clear();
+
 }
