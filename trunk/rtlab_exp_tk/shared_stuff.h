@@ -135,7 +135,6 @@ struct SharedMemStruct {
   dconst int ao_subdev;                  /* comedi ao subdevice index        */
   dconst int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
   dconst int ao_fifo_minor;              /* (currently unused)               */
-  dconst int spike_fifo_minor;           /* /dev/rtfX where spike samples go */
   dconst unsigned int n_ai_chans;        /* the number of channels in subdev */
   dconst unsigned int n_ao_chans;        /* ditto                            */
 };
@@ -213,25 +212,30 @@ init_spike_params (SpikeParams *p)
                 scan it does
    data -       an element of lsample_t which contains the sample obtained 
                 from one particular channel at one particular time.
-   magic_number - sanity check on this struct should always be equal to
+   magic_number - sanity check on this should always be equal to
                   SAMPLE_STRUCT_MAGIC
 */
-//#define SAMPLE_STRUCT_MAGIC 0xbeeff00d
+#define SAMPLE_STRUCT_MAGIC ((int)0xbeeff00d)
 struct SampleStruct {  
+#ifdef __cplusplus
+  SampleStruct() : magic_number(SAMPLE_STRUCT_MAGIC) {};
+#endif
   unsigned char channel_id;
   scan_index_t scan_index;
-  double data;        /* the actual sample, in volts */
-  /*int magic_number; if this is wrong userland can throw out this 'sample'
-    this might not be necessary, since kernel will always 
-    do complete writes and userland should
-    be doing reads in sizeof(SampleStruct) chunks..
-    however a crashed (or maybe even pre-empted?)
-    user process can throw the whole thing off 
-    theoretically, and lead to bad data being accepted
-    (ergo the delimiter bytes [see above macro] 
-    is needed to re-align the stream...) :/
-    This magic number also is a sort of version check
-  */
+  double data;         /* the actual sample, in volts */
+  unsigned char spike; /* if nonzero, there is a spike this scan */
+  double spike_period; /* in milliseconds */
+  int magic_number;    /*if this is wrong userland can throw out this 'sample'
+                         this might not be necessary, since kernel will always 
+                         do complete writes and userland should
+                         be doing reads in sizeof(SampleStruct) chunks..
+                         however a crashed (or maybe even pre-empted?)
+                         user process can throw the whole thing off 
+                         theoretically, and lead to bad data being accepted
+                         (ergo the delimiter bytes [see above macro] 
+                         is needed to re-align the stream...) :/
+                         This magic number also is a sort of version check
+                       */
   
 }; 
 

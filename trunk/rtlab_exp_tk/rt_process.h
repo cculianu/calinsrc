@@ -27,16 +27,14 @@
 # include "shared_stuff.h" /* for SampleStruct type */
 
 
-# define BILLION ((long int)1000000000)
+# define BILLION (1000000000)
 # define MILLION (1000000)
 
 # define RT_PROCESS_MODULE_NAME "rt_process"
 
 # define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
-# define INITIAL_V_CHANNEL 0     //initial channel for V signal
-# define INITIAL_A_CHANNEL 1     //initial channel for A signal
 # define INITIAL_SAMPLING_RATE_HZ 1000
-# define INITIAL_SPIKE_BLANKING INITIAL_SAMPLING_RATE_HZ/20 
+# define INITIAL_SPIKE_BLANKING (INITIAL_SAMPLING_RATE_HZ/20) 
 /* initial interval for disabling
    v_spike detect ... i.e. 1/20 sec, 50ms */
 
@@ -52,10 +50,6 @@
                                         should some day come from a config 
                                         script and/or be more dynamic?       */
 
-# define DEFAULT_SPIKE_FIFO     2    /* the /dev/rtfX device to use: this
-                                        should some day be more dynamic, 
-                                        such as coming from a config
-                                        script.                              */
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
   hrtime_t acq_start; /* hrtime that data acquisition started for first chan.*/
@@ -70,6 +64,8 @@ typedef void (*rtfunction_t)(MultiSampleStruct *);
 struct spike_info {
   /* The last time a spike was encountered in each channel */
   hrtime_t last_spike_time[SHD_MAX_CHANNELS];
+  /* Same as SampleStruct.spike_period  */
+  double period[SHD_MAX_CHANNELS]; /* in mlliseconds */
   /* the set of channels that have spikes */
   char spikes_this_scan[CHAN_MASK_SIZE];
 };
@@ -116,5 +112,9 @@ extern SharedMemStruct *rtp_shm;
 
 /* Run-time spike information exported to the outside world. */
 extern struct spike_info spike_info;
+
+/* helper rounding function */
+inline int round (double d) { return (int)(d + (d >= 0 ? 0.5 : -0.5)); }
+
 
 #endif 

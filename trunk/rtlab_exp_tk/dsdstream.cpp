@@ -14,7 +14,7 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifdef DEBUG
+#ifdef DEBUGGG
 #include <string>
 #include <iostream>
 #endif
@@ -27,6 +27,7 @@
 
 #include <set>
 #include <algorithm>
+
 
 #include "dsdstream.h"
 
@@ -92,7 +93,7 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
     sampleData.clear();
     uint magic = 0, fdt = 0;
     *this >> magic >> fdt;
-#ifdef DEBUG
+#ifdef DEBUGGG
     cerr << "Read magic: " << magic << " Fdt: " << fdt << endl;
 #endif
     Assert<FileFormatException>( magic == MAGIC, "Bad file format", "This file is not a DSD file.");
@@ -480,7 +481,7 @@ void DSDStream::doInsn()
     *this >> maskState.mask;
     maskState.startIndex = currentIndex;
     maskChanged();
-#ifdef DEBUG
+#ifdef DEBUGGG
     cerr << (string("Found mask changed instruction in file. Changing mask for index ") + maskState.startIndex) << " total chans: "
          << maskState.mask.numOn() << endl;
 #endif
@@ -488,14 +489,14 @@ void DSDStream::doInsn()
   case RATE_CHANGED_INSN:
     *this >> rateState.rate;
     rateState.startIndex = currentIndex;
-#ifdef DEBUG
+#ifdef DEBUGGG
     cerr << (string("Found rate changed instruction in file. Changing rate to ") + rateState.rate) << (string(" for index ") + rateState.startIndex) << endl;
 #endif
     break;
   case INDEX_CHANGED_INSN:
      tmpVal = currentIndex;
     *this >> currentIndex;
-#ifdef DEBUG
+#ifdef DEBUGGG
     cerr << ((string("Found index changed instruction in file. Changing index from ") + tmpVal) + (string(" to ") + currentIndex)) << endl;
 #endif
     break;
@@ -585,7 +586,7 @@ void DSDStream::serializeHistory() //throw (FileException)
   *this << byte_arr << footerLength << MAGIC;
   device()->flush();
   footerOffset = device()->size() - (footerLength+sizeof(footerLength)+sizeof(MAGIC));
-#ifdef DEBUG
+#ifdef DEBUGGG
   cerr << "Footer offset: " << footerOffset << " Footer Length: " << footerLength << " File size: " << device()->size() << endl;
 #endif
 }
@@ -601,7 +602,7 @@ void DSDStream::unserializeHistory() //throw (FileException)
                                "File format bad",
                                "This file was not properly closed and is missing its metadata! Run the DSD repair tool!");
   footerOffset = device()->size() - (footerLength+sizeof(footerLength)+sizeof(MAGIC));
-#ifdef DEBUG
+#ifdef DEBUGGG
   cerr << "Footer offset: " << footerOffset << " Footer Length: " << footerLength << " File size: " << device()->size() << endl;
 #endif
   device()->at(footerOffset);

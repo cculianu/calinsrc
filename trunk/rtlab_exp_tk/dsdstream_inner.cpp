@@ -92,7 +92,7 @@ void DSDStream::StateHistory::computeMaxUniqueChannelsUsed()
       if (it->mask.isOn(i) && chans.find(i) == chans.end())
         chans.insert(i);
   max_unique_channels_used = chans.size();
-#ifdef DEBUG
+#ifdef DEBUGGG
   cerr << "Unique channels computed: " << max_unique_channels_used << endl;
 #endif
 }

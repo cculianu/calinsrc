@@ -28,6 +28,7 @@
 #include <comedi.h>
 #include <comedilib.h>
 #include "shared_stuff.h"
+#include "common.h"
 
 class ComediSubDevice
 {  

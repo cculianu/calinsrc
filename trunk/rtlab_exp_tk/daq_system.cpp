@@ -51,8 +51,11 @@
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
 #include "daq_system.h"
+#include "common.h"
 
 #include "plugin.h"
+
+
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
 		      const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
@@ -82,6 +85,7 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   ws.setScrollBarsEnabled(true);
   ws.show();
 
+  plugin_menu.setCaption(plugin_menu.name());
   
   statusBar.addWidget(&statusBarScanIndex);
 
@@ -215,9 +219,8 @@ DAQSystem::addChannel (void)
   uint chan, range, n_secs;
 
   ok = queryOpen(chan, range, n_secs);
-  if (ok) {
-    openChannelWindow(chan, range, n_secs);
-  }
+  if (ok)  openChannelWindow(chan, range, n_secs);
+  
 }
 
 
@@ -376,8 +379,6 @@ DAQSystem::openChannelWindow(uint chan, uint range,
           this, SLOT(spikeThresholdSet(double)));
   connect(graph, SIGNAL(spikeThresholdUnset(void)),
           this, SLOT(spikeThresholdOff(void)));
-  connect(&readerLoop, SIGNAL(spikeDetected(const SampleStruct *)),
-          gcont, SLOT(spikeDetected(const SampleStruct *)));
 
   gcont->rangeChange( range ); /* hopefully above slot will take effect 
                                   and update rt_process appropriately? */
@@ -416,6 +417,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
 
   /* ladies and gentlemen, start your samplings!! */
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, true);
+  emit channelOpened(chan);
 
 }
 
@@ -593,6 +595,7 @@ DAQSystem::graphOff(const ECGGraphContainer * gcont)
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, gcont->channelId, false);
   /* this is necessary so as to inform sample writer in some cases.. */
   readerLoop.turnOffChannel(gcont->channelId); 
+  emit channelClosed(gcont->channelId);
 }
 
 void
@@ -646,12 +649,8 @@ ReaderLoop(DAQSystem *d) :
     source = new SampleStructRTFSource(ShmMgr::aiFifoMinor());
     source->flush();
 
-    spike_source = new SampleStructRTFSource(ShmMgr::spikeFifoMinor());
-    spike_source->flush();
-
     /* build a non-blocking sample reader */
     reader = new SampleStructReader(source, 0);
-    spike_reader = new SampleStructReader(spike_source, 0);
 
     /* build the sample writer */
     switch(d->settings.getDataFileFormat()) {
@@ -689,21 +688,17 @@ ReaderLoop(DAQSystem *d) :
 ReaderLoop::~ReaderLoop()
 {
   pleaseStop = true;
-  /* fprintf here because streams seem to not handle long longs 
-     properly? */
-  fprintf (stderr,
-	   "Read: %llu samples without errors, dropped %llu samples.\n%s",
-	   reader->numRead(), reader->numDropped(),
-	   (reader->numDropped()
-	    ? "(Dropped samples can occur when the GUI task is too slow"
-	       " for the\nReal-Time task, or when channels are turned off"
-               " then back on, so\n that samples are skipped.)\n"
-	    : ""));
+  cerr << (string("Read: ") + reader->numRead()) 
+       << (string(" samples without errors, dropped ") + reader->numDropped())
+       << " samples." << endl 
+       << (reader->numDropped()
+           ? "(Dropped samples can occur when the GUI task is too slow"
+           " for the\nReal-Time task, or when channels are turned off"
+           " then back on, so\n that samples are skipped.)\n"
+           : "");
   delete reader; reader = 0;
   delete source; source = 0;
   delete writer; writer = 0;
-  delete spike_reader; spike_reader = 0;
-  delete spike_source; spike_source = 0;
 }
 
 void
@@ -721,18 +716,17 @@ ReaderLoop::loop()
   uint chan;
 
   for (i = 0; i < n_read; i++) {    
+
+    if ( sbuf[i].magic_number != SAMPLE_STRUCT_MAGIC ) {
+      throw  SerializationException ( "Sample struct magic check failed",
+                                      "The sample struct magic number is invalid! Argh!");
+    }
+
     if ( (chan = sbuf[i].channel_id) < producers.size() ) {
       producers[chan].produce(sbuf + i);
     }
   }
-
-  /* notify of spikes detected, if any... */
-  sbuf = spike_reader->readAll();
-  n_read = spike_reader->numLastRead();
-  for (i = 0; i < n_read; i++) 
-    emit spikeDetected(sbuf + i);
-  
-  
+    
   { /* emit scan index update every 1 second */
     if (ShmMgr::scanIndex() - saved_curr_index > ShmMgr::samplingRateHz()) {
       saved_curr_index = ShmMgr::scanIndex();
@@ -936,9 +930,9 @@ void PluginMenu::pluginMenuContextReq(QListBoxItem *item, const QPoint & point)
   plugin_cmenu->popup(point);
 }
 
-void PluginMenu::loadPlugin(const char *filename) throw (Exception)
+void PluginMenu::loadPlugin(const char *filename) throw (PluginException)
 {
-  void *handle = dlopen(filename, RTLD_NOW);
+  void *handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
   Plugin *plugin = NULL;
   plugin_entry_fn_t entry = NULL;
   const char *name = NULL;
@@ -962,14 +956,14 @@ void PluginMenu::loadPlugin(const char *filename) throw (Exception)
   if (entry == NULL) { 
     QString err = dlerror();
     dlclose(handle); 
-    throw PluginException ("Cannot find plugin entry", err); 
+    throw PluginException ("Cannot find plugin entry point", err); 
   }
   
 
   try {
     plugin = entry(daqSystem);      
     if (!plugin) { dlclose(handle); return; }
-  } catch (...) {
+  } catch (PluginException & e) {
     if (plugin) delete plugin;
     dlclose(handle);
     throw;

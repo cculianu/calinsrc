@@ -26,7 +26,6 @@
 #include "shared_stuff.h"
 #include <qobject.h>
 #include <qstring.h>
-#include <mbuff.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -34,6 +33,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/major.h>
+
+
+#include "tweaked_mbuff.h"
 
 SharedMemStruct *ShmMgr::shm = NULL;
 const char *ShmMgr::devFileName = MBUFF_DEV_NAME;

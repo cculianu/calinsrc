@@ -49,7 +49,8 @@ ECGGraph::ECGGraph (int sampleRateHz,
                     QWidget *parent, 
                     const char *name, 
                     WFlags f) : 
-  QWidget (parent, name, f), 
+  QWidget (parent, name, f | WRepaintNoErase | WResizeNoErase), 
+  plotFactor(10),
   numSamples(sampleRateHz * secsVisible),
   currentSampleIndex(0),
   _sampleRateHz(sampleRateHz), 
@@ -154,6 +155,38 @@ void ECGGraph::setRange(double newRangeMin, double newRangeMax) {
   emit rangeChanged(_rangeMin, _rangeMax);
 }
 
+void ECGGraph::push_back(double amplitude)
+{
+  static const int plotFactor = 125; /* actually draw to screen every 
+                                       plotFactor-th sample */
+  bool update_to_screen_flg = !(_totalSampleCount  % plotFactor);
+  int i;
+
+  if (update_to_screen_flg) deletePlotsBetween (0, currentSampleIndex);
+  
+  for (i = currentSampleIndex; i > 0; i--) {
+    makePoint(samples[i-1], i); // slide everything over 1
+    samples[i] = samples[i-1];
+  }
+  
+  makePoint(amplitude, 0);
+
+  if (update_to_screen_flg) {
+
+    /* plot the lines */
+    plotLines (0, currentSampleIndex);  
+
+    /* now draw the little blip */
+    drawLittleBlip(0);
+
+  }
+
+  if (currentSampleIndex < (numSamples - 1)) ++currentSampleIndex;
+
+  _totalSampleCount++;  
+  
+}
+
 // plots a sample at the next position
 void ECGGraph::plot (double amplitude, uint64 sample_index) {
   outside_concept_of_a_sample_index = sample_index;  
@@ -161,9 +194,6 @@ void ECGGraph::plot (double amplitude, uint64 sample_index) {
 }
 
 void ECGGraph::plot (double amplitude) {
-
-  static const int plotFactor = 10; /* actually draw to screen every 
-                                       plotFactor-th sample */
 
   if (currentSampleIndex && currentSampleIndex != _totalSampleCount
       && !(currentSampleIndex  % plotFactor)) {
@@ -224,8 +254,6 @@ void ECGGraph::plotLines (int firstIndex, int lastIndex) {
 
 void ECGGraph::resizeEvent (QResizeEvent *) {
   remakeAllPoints();
-  clearSpikeTHoldLine();
-  computeSpikeTHoldPoints();
 }
 
 void ECGGraph::mouseMoveEvent (QMouseEvent *event) {
@@ -326,12 +354,14 @@ void ECGGraph::initGrid (QPaintDevice & dev, int columns = 10, int rows = 4) {
   QPen pen(_gridColor, 1, DotLine);
 
   painter.setPen(pen);
-  int i, w = width(), h = height();
-  for (i = 0; i < w; i+=w/columns) {
-    painter.drawLine(i,0,i,h);
+  float i;
+  int w = width(), h = height();
+
+  for (i = 0.0; columns && i < w; i += w/(float)columns) {
+    painter.drawLine((int)i,0,(int)i,h);
   }
-  for (i = 0; i < h; i+=h/rows) {
-    painter.drawLine(0,i,w,i);
+  for (i = 0.0; rows && i < h; i += h/(float)rows) {
+    painter.drawLine(0,(int)i,w,(int)i);
   }
   painter.end();
 
@@ -347,10 +377,10 @@ void ECGGraph::remakeAllPoints () {
 
   computeSpikeTHoldPoints (); /* re-compute the spike threshold */
   initBuffer(); /* reset the background pixmap so that 
-                   we may procees with a fresh render */
+                   we may proceed with a fresh render */
   maxIndex = ( _totalSampleCount < numSamples 
-	       ? _totalSampleCount 
-	       : numSamples );
+               ? _totalSampleCount 
+               : numSamples );
 
   for (i = 0; i < maxIndex ; i++) {      
     makePoint(samples[i],i); /* re-calculate points */
@@ -478,10 +508,12 @@ ECGGraph::reset()
   remakeAllPoints();
 }
 
-void ECGGraph::drawLittleBlip () {
+void ECGGraph::drawLittleBlip (int index) {
   static const int blipsize = 4; /* in pixels */
 
-  QPoint here (points->at(currentSampleIndex));
+  if (index < 0) index = currentSampleIndex;
+
+  QPoint here (points->at(index));
   here.setY(here.y()-blipsize/2); // center  
   here.setX(here.x()-blipsize/2); //        it
   

@@ -5,12 +5,12 @@ NON_RT_PROGRAM = daq_system
 
 TMAKE_LOCATION = ./
 
-all:	Makefile.${NON_RT_PROGRAM} $NON_RT_PROGRAM rt_process plugins
+all:	Makefile.${NON_RT_PROGRAM} NON_RT_PROGRAM rt_process plugins
 
 Makefile.${NON_RT_PROGRAM}: 	Makefile.tmake
 	@${TMAKE_LOCATION}tmake Makefile.tmake -o Makefile.${NON_RT_PROGRAM}
 
-$NON_RT_PROGRAM: 	
+NON_RT_PROGRAM: 	
 	@${MAKE} -f  Makefile.${NON_RT_PROGRAM}
 
 rt_process: 

@@ -59,6 +59,9 @@ class ECGGraph : public QWidget {
   
   virtual ~ECGGraph();
 
+  unsigned int plotFactor; /* actually draw to screen every  plotFactor-th 
+                              sample -- defaults to 10 */
+
   /*
     Property Methods 
   */
@@ -105,6 +108,9 @@ class ECGGraph : public QWidget {
   /*
     Method methods
   */
+
+  /* slides everything over and redraws the screen...*/
+  virtual void push_back(double amplitude);
 
   /** plots the sample at the next position (keep calling this in a loop).
       X - value for this sample is determined by the current sample pos.
@@ -168,9 +174,9 @@ signals:
   virtual void makePoint (double amplitude, int sampleIndex = -1);
 
   virtual void plotLines (int firstIndex, 
-			  int lastIndex);
+                          int lastIndex);
 
-  virtual void resizeEvent (QResizeEvent *event);
+  void resizeEvent (QResizeEvent *event);
 
   /** used to trap mouse movement and send the mouseOverAmplitude()
       signal in this class */
@@ -249,7 +255,7 @@ signals:
   virtual void computeSpikeTHoldPoints();
 
   /** draws that little blip artifact at the current position */
-  virtual void drawLittleBlip ();
+  virtual void drawLittleBlip (int index = -1);
 
 };
 

@@ -26,6 +26,7 @@
 #  include "config.h"
 #  include <values.h>
 
+
 typedef unsigned int uint;
 
 typedef short int16;
@@ -39,6 +40,8 @@ typedef long long int64;
 
 #include <string>
 #include <qstring.h>
+
+using namespace std;
 
 
 bool cstr_to_uint64(const char *in, uint64 & out);
