@@ -307,9 +307,9 @@ static void calc_stim(void)
 
     /* there's no point in computing these if we aren't 
        doing any sort of control, so return early if
-       both stimulation is simulated AND g is being adjusted manually */
+       both stimulation is simulated AND g is being adjusted manually
     if (G_ADJ_CURR == AVN_G_ADJ_MANUAL && !STIM_ON_CURR) return;
-
+    */
     for (i = 0; i < N_AVG_CURR; i++) {
       sum += rr_intervals.intervals[index] * (N_AVG_CURR - i);
       factor += N_AVG_CURR - i;

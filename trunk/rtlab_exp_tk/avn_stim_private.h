@@ -115,9 +115,12 @@ private:
 
   /* Module-related stuff */
   AVNShared *shm;
+  enum RTOSUsed { RTAI, RTLinux, Unknown };
+  RTOSUsed rtosUsed;
   int fifo; /* fd's of the input fifo */
   QTimer *timer;
 
+  void determineRTOS();
   void moduleAttach(); /* attaches to avn_stim.o's fifo and shm */
   void moduleDetach(); /* closes the fifo fd and detached from shm */
   bool needFifo() const { return (fifo < 0); }
