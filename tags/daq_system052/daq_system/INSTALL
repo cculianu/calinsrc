@@ -1,0 +1,70 @@
+This rt_process.cc uses the COMEDI data acquisition package, RT Linux
+for A/D input. I use a National Instruments MIO16E board (works for AT
+or PCI), but you should be able to use any board supported by COMEDI.
+(See README_daq_system for other info)
+
+daq_system.cpp is a Qt graphical user interface program. You'll need
+Qt2.0x. You can download and install this free software from www.troll.no.
+
+This software runs on RT-Linux2.2 (download from www.rtlinux.com),
+linux 2.2.14, comedi-0.7.40, and comedilib-0.7.9 (download from
+http://stm.lbl.gov/comedi/). Earlier versions are mostly
+incompatible. Later versions ?
+
+(See http://cardiodyn.med.cornell.edu/~dchristi/rtlinux for links to
+RTLinux, COMEDI, and other relevant websites.)
+
+In order to use this software (I'm assuming that you have installed
+RT-Linux and COMEDI on your system and that they work):
+
+1. Enable shared memory in your lilo.conf, run lilo, and then reboot:
+
+   Details: rt_process and daq_system communicate via FIFOs and shared
+   memory.  Depending on the permissions on /dev/mem, daq_system may
+   have to be run as root. This uses the older approach to shared
+   memory, not the newer mbuff approach. If you get the newer mbuff 
+   approach working with this software, please send me the code!
+
+   To enable shared memory:
+   1. add the following line to /etc/lilo.conf
+	 append="mem=XXm"
+      where XX is 1 less than the number of MB of RAM on your computer.
+      For example, I use  append="mem=127m" b/c my computer has 128MB RAM.
+      This reserves 1MB of your RAM for shared memory.
+   2. run lilo (/sbin/lilo on my computer) to install this
+   3. edit the line in hardware_specific..h that starts with 
+	#define SHARED_MEM_ADDRESS 
+      according to the amount of RAM in your computer
+   4. reboot
+
+2. Edit paths in Makefile for your system (Makefile will call
+     Makefile.tmake and Makefile.rt_process). Note that if you don't have
+     tmake on your system, download it from www.troll.no ... needed for Qt
+
+3. Edit the header file hardware_specific.h so that it is appropriate
+   for your computer and data acquisition device.
+
+4. ensure that /dev/rtf0 through /dev/rtf<LAST_GET_FIFO> (where
+   LAST_GET_FIFO is defined in rt_process.h) have been properly
+   created as described by the RT Linux documentation
+
+5. make	
+   **note: there will be a few warnings ... you can ignore warnings)
+   **the main Makefile uses Qt's tmake to automatically generate the
+   ** Makefile for the non-rt-process based on your system configuration
+
+6. edit ./rt_init script for your system
+
+7. mkdir data
+
+8. ./rt_init (this configures comedi, and inserts RT-linux modules)
+
+9. ./daq_system <num_channels>
+
+10. when done, you can ./kill_rt to remove modules from kernel
+
+If you have problems, comments, or suggestions, please email me.
+
+David Christini
+dchristi@med.cornell.edu
+3/14/00

@@ -1,0 +1,8 @@
+TEMPLATE    =	app
+CONFIG      =	qt warn_on debug #release
+INCLUDEPATH =   /usr/src/rtl/ # you need this for the mbuff.h file in drivers/mbuff!
+HEADERS     =	daq_system.h hardware_specific.h configuration.h text_window.h help_text.h fifos.h
+SOURCES     =	main.cpp daq_system.cpp fifos.cpp configuration.cpp text_window.cpp
+TARGET      =	daq_system
+DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\"
+CFLAGS      =   -g
