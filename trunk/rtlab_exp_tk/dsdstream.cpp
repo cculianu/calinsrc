@@ -35,7 +35,7 @@
 const uint DSDStream::MAGIC;
 
 DSDStream::DSDStream() : QDataStream(), 
-                         user_data_callback(0), data_buf(0), data_buf_sz(0)
+                         data_buf(0), data_buf_sz(0)
                          
 {
   init(0);
@@ -283,16 +283,19 @@ template<class T> void DSDStream::flushTempl() //throw (FileException)
 {
   if (!(mode() & IO_WriteOnly) || !isOpen() || !flushPending) return;
 
+
+  /* below the order of things in the file is illustrated.. before EACH
+     scan you have (optionally) the following instructions */
   if (chanMaskChangedThisScan)
     putMaskChangedInsn();
   if (rateChangedThisScan)
     putRateChangedInsn();
   if (sampleSkippedThisScan)
     putIndexChangedInsn();
-  if (userDataThisScan)
+  if (user_data.size())
     putUserDataInsn();
 
-
+  /* now write one scan to the file */
   for (vector<double>::iterator it = sampleData.begin(); it < sampleData.end(); it++) {
     *this << (T)(*it);
     history.sampleCount++;
@@ -327,17 +330,17 @@ void DSDStream::writeSample ( const SampleStruct * s ) //throw (IllegalStateExce
   flushPending = true;
 }
 
-void DSDStream::writeUserData( const char *data, uint num ) 
+void DSDStream::writeUserData( QString name, const char *data, uint num ) 
 {
   QMemArray<char> d;
   d.duplicate(data, num);
-  writeUserData(d);
+  writeUserData(name, d);
 }
 
-void DSDStream::writeUserData( QMemArray<char> data ) 
+void DSDStream::writeUserData( QString name, QMemArray<char> data ) 
 {
-  user_data = data;
-  userDataThisScan = true;
+  if (!(mode() & (IO_WriteOnly | IO_Truncate)) ) return;
+  user_data[name] = data;
 }
 
 // this seems to be broken in that it always returns true!
@@ -356,7 +359,7 @@ template<class T> bool DSDStream::readNextSampleTempl ( SampleStruct * s) //thro
     chans_this_scan--;
     if (! chans_this_scan)  {
       maskState.endIndex = rateState.endIndex = ++currentIndex;
-      userDataThisScan = false;
+      user_data.clear();
     }
     return true;
   }
@@ -433,10 +436,23 @@ bool DSDStream::readNextSample ( SampleStruct * s ) //throw (IllegalStateExcepti
   }
 }
 
+/* returns true iff the user data for the specified name is found for the 
+   next scan, and .assign()s it to data.  Otherwise returns false */
+bool DSDStream::readNextUserData ( QString data_name, QMemArray<char> & data )
+{
+  map<QString, QMemArray<char> >::iterator it = user_data.find(data_name);
+
+  if (it != user_data.end() ) { /* found! */
+    data.assign(it->second);
+    return true;
+  }
+  return false;
+}
+
 void DSDStream::resetScanFlags() 
 { 
   flushPending = sampleSkippedThisScan = rateChangedThisScan = 
-    chanMaskChangedThisScan = userDataThisScan = false; 
+    chanMaskChangedThisScan = false; 
   chans_this_scan = 0; 
 }
 
@@ -515,6 +531,7 @@ void DSDStream::doInsn()
 {
   uint64 tmpVal;
   uint tmpInsn = UNKNOWN_INSN, dataSize = 0;
+  QString ud_name; /* name of user_data name/value pair */
   char *data;
 
   *this >> tmpInsn;
@@ -543,13 +560,14 @@ void DSDStream::doInsn()
 #endif
     break;
   case USER_DATA_INSN:
+    readBytes(data, dataSize);  // the name of this data block
+    ud_name = data;
+    delete data;
     readBytes(data, dataSize);      // data is new'd by this method
-    user_data.assign(data, dataSize); // data now 'owned' by user_data
-    userDataThisScan = true;
-    if (user_data_callback)
-      user_data_callback(user_data);
-    /* char *data not deleted here because user_data now 'owns' it, and
-       will auto-handle the deletion of that memory */    
+    user_data[ ud_name ].assign(data, dataSize); /* data now 'owned' by this 
+                                                    map entry */
+    /* NB: char *data not deleted here because above user_data entry now 
+       'owns' it, and will auto-handle the deletion of that memory */    
     break;
   default:
     throw FileFormatException("INTERNAL ERROR", "Unknown instruction encountered in data file!  Either the file is corrupt or you are using an old version of this software to read a newer file format.");
@@ -604,8 +622,14 @@ void DSDStream::putUserDataInsn()
 {
   static const Instruction ins = USER_DATA_INSN;
 
-  putInsn(ins);
-  writeBytes(user_data.data(), user_data.size());
+  map<QString, QMemArray<char> >::iterator i;
+
+  for(i = user_data.begin(); i != user_data.end(); i++) {
+    putInsn(ins);
+    writeBytes(i->first.latin1(), i->first.length());
+    writeBytes(i->second.data(), i->second.size());
+  }
+  user_data.clear(); // empty the map
 }
 
 QDataStream & DSDStream::writeRawBytes (const char * s, uint len) //throw (FileException)

@@ -122,13 +122,20 @@ public:
     bytes (useful if you want to write your own custom structs to the file)
     It is physically written just before the current scan in the file,
     and is internally 'escaped' using the Instruction mechanism
-  */
-  void writeUserData ( const char *data, uint num_bytes);
-  void writeUserData ( QMemArray<char> data );
 
-  /* the callback function to call whenever userdata is available */
-  typedef void (*userData_CB)(QMemArray<char> data);
-  
+    NOTE:
+      You should call this right before starting a new scan!  The userdata
+      passed here pertaints to the next scan!
+  */
+  void writeUserData ( QString name, const char *data, uint num_bytes);
+  void writeUserData ( QString name, QMemArray<char> data );
+
+ 
+
+/* returns true iff the user data for the specified name is found for the 
+   next scan, and .assign()s it to data.  Otherwise returns false */
+  bool readNextUserData ( QString data_name, QMemArray<char> & data );
+
   /*
      Reads a sample from the device
      Does nothing if d->mode() is not (IO_ReadOnly)
@@ -263,18 +270,15 @@ private:
     return UNKNOWN_DATA_TYPE;
   };
 
-  QMemArray<char> user_data; /* temporary storage of user data for this scan,
-                                until flush() flushes it to disk */
-
-  /* callback function whenever we receive user data in the read
-     stream */
-  userData_CB user_data_callback;
+/* temporary storage of user data for this scan,  until flush() flushes it to 
+   disk */
+  map<QString, QMemArray<char> > user_data; 
 
   StateHistory history;
   RateState rateState;
   MaskState maskState;
   FileDataType fileDataType;
-  bool alreadyBegan, chanMaskChangedThisScan, rateChangedThisScan, sampleSkippedThisScan, userDataThisScan, flushPending;
+  bool alreadyBegan, chanMaskChangedThisScan, rateChangedThisScan, sampleSkippedThisScan, flushPending;
   vector<double> sampleData;
   scan_index_t lastIndex, currentIndex; // the last index flushed to disk, and the current index being worked on
   static const uint MAGIC = 0xf117;
