@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <zlib.h>
+#include <string.h>
 #include "common.h"
 #include "tempfile.h"
 #include "exception.h"
@@ -136,9 +137,12 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
                                      sizeof(T) * nmemb)) 
            != static_cast<long>(sizeof(T) * nmemb) ) {
         int err;
+        const char *errmsg = gzerror(gzfile, &err);
+        if (err == Z_ERRNO) errmsg = strerror(errno);
+        
         throw FileException ("Could not write", 
                              QString("Error writing to a temporary gz file.  ")
-                             + gzerror(gzfile, &err));
+                             + errmsg);
       }
       num_spooled += nmemb;
     }
@@ -166,7 +170,9 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
         numLeft-=i;
       }
       
-      if (numLeft) BUG();
+      Assert<FileException>(!numLeft, "TempSpoolerGZ Error",
+                            "Could not fully unspool all data from temporary "
+                            ".gz file!");
 
       closeGZ();
       openGZ(Write);
