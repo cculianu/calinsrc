@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Configuration file that belongs in /etc/rtlab
+
+RTLAB_LOCATION=/home/nis-users/calin/src/rtlab_exp_tk
+COMEDI_DEVICE=/dev/comedi0
+COMEDI_DRIVER=comedi_test
+COMEDI_BOARD=comedi_test
+COMEDI_PARAMS=""
+RTOS="RTAI"
+LMODULES="rtlab avn_stim map_control" # rtlab modules to load, in order
+UMODULES="map_control avn_stim rtlab" # rtlab modules to unload, in order
+

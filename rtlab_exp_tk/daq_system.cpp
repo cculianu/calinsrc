@@ -1335,9 +1335,9 @@ PluginMenu::PluginMenu(DAQSystem * ds,
   { 
     /* build plugin search path */    
     plugin_search_path.push_back(QDir::currentDirPath());
-#ifdef DAQ_PLUGINS_PREFIX
-    if (QDir(DAQ_PLUGINS_PREFIX).isReadable())
-      plugin_search_path.push_back(DAQ_PLUGINS_PREFIX);
+#ifdef RTLAB_PLUGINS_PREFIX
+    if (QDir(RTLAB_PLUGINS_PREFIX).isReadable())
+      plugin_search_path.push_back(RTLAB_PLUGINS_PREFIX);
 #endif
     QString user_plugins_dir = DAQ_SYSTEM_USER_DIR + "/plugins";
     struct stat statbuf;
