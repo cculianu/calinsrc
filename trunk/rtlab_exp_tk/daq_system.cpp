@@ -606,7 +606,7 @@ DAQSystem::openChannelWindow(uint chan, int range, int n_secs)
   /* leaky memory prevented by spaghetti-like destructive close
      on the ECGGraphContainer and a signal-emitting
      destructor in ECGGraph */
-  ECGGraph *graph = new ECGGraph(1000, n_secs);
+  ECGGraph *graph = new ECGGraph(shmCtl.samplingRateHz(), n_secs);
 
   /* todo: put the below in a deleteable place! */
   ECGGraphContainer *gcont =
