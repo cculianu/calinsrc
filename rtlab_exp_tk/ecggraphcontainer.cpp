@@ -96,7 +96,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 
   pauseBox = new QCheckBox("Pause", controlsBox);
   QToolTip::add(pauseBox, "Pauses the graph of this channel, but not the "
-                             "actual data acquisition of data");
+                             "actual data acquisition");
   pauseBox->setChecked(false);
   pauseBox->setMaximumSize(pauseBox->sizeHint());
   connect(pauseBox, SIGNAL(toggled(bool)), this, SLOT(pause(bool)));    
