@@ -45,7 +45,7 @@
 #include <qlistview.h>
 #include <qtextview.h>
 #include <qlineedit.h>
-#include "settings.h"
+#include "daq_settings.h"
 #include "probe.h"
 #include "comedi_device.h"
 

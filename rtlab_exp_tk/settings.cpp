@@ -27,155 +27,238 @@
 #include <qfile.h>
 #include <qstring.h>
 #include <qregexp.h>
-#include <stdlib.h>
 #include "common.h"
 #include "config.h"
 #include "settings.h"
-#include "comedi_device.h"
 
-#ifdef TEST_SETTINGS
-int
-main (void)
+
+static const char   *lineRE    = "^\\s*([a-zA-Z0-9./_]+)\\s*=\\s*\"?([^\\n\\r\\f=\"]*)\"?",
+                    *sectionRE = "\\s*\\[\\s*([^\\]]+)\\]";
+
+Settings::Settings() : lineRE(::lineRE), sectionRE(::sectionRE)
+{ init(); };
+
+Settings::Settings(QIODevice *d) : lineRE(::lineRE), sectionRE(::sectionRE)
 {
-  Settings settings;  
-  cout << "device is " << settings.getDevice().filename << endl;
-  cout << "template file is " << settings.getTemplateFileName() << endl;
-  return 0;
+  init();
+  setConfigDevice(d);
+};
+
+void Settings::init()
+{
+  _currentSection = QString::null;
+  masterSettings = 0;
+  configFile = 0;
+  need_to_delete_configFile = false;
+
 }
-#endif
-
-
-
-const QString DAQSettings::defaultConfigFileName 
-  = DAQ_SYSTEM_USER_DIR + "/conf";
-
-const DAQSettings::DaqMasterDefaults DAQSettings::daqMasterSettings; 
-
-/* Constructs a map with daq_system specific default settings */
-DAQSettings::DaqMasterDefaults::DaqMasterDefaults()
+Settings::~Settings()
 {
-  DaqMasterDefaults & me = *this;
-  /* Daq Master Settings Constructor 
-     Setup the master settings map for the daq_system-specific class
-     this map also has default settings in case they aren't found in the 
-     config file */
-  me [ KEY_TEMPLATE_FILE_NAME ] 
-    = QString(DAQ_RESOURCES_PREFIX) + DAQ_DIRNAME + "/default.log";
-  me [ KEY_DEVICE ] = "/dev/comedi0";
-  me [ KEY_FILE_SOURCE_FILE_NAME ] = "/dev/null";
-  me [ KEY_DEFAULT_INPUT_SOURCE ] = QString().setNum((int)Comedi);
-  me [ KEY_SHOW_CONFIG_ON_STARTUP ] = QString().setNum((int)true);
-  me [ KEY_DATA_FILE ] = QString(DAQ_DATA_PREFIX) + "data.bin";
-  me [ KEY_DATA_FORMAT ] = QString().setNum((int)Binary);
+  maybeDeleteConfigFile();
+};
 
-  /* the following is a  'special' setting.  It is basically
-     a special-format list of the format: 
-     [channel-id:x,y,width,height[{;}...]] */
-  me [ KEY_CHAN_WIN_SETTINGS ] = "0:0,0,300,400;";
-
-  /* channel params settings */
-  me [ KEY_CHANNEL_PARAMS ] = "";
+void
+Settings::maybeDeleteConfigFile()
+{
+  if (need_to_delete_configFile) {
+    delete configFile;
+    configFile = 0;
+    need_to_delete_configFile = false;
+  }
 }
 
-
-
-Settings::Settings() 
-  :  valueRE ("\"[^\\s=\"]*\""),
-     lineRE ("^\\s*[a-zA-Z0-9./_]+\\s*=\\s*" + valueRE.pattern())
-{};
+QIODevice::Offset
+Settings::length() const
+{
+  QIODevice::Offset ret = 0;
+  if (getConfigDevice()) ret = getConfigDevice()->size();
+  return ret;
+}
 
 void
 Settings::setConfigFileName(const QString &fileName)
 {
-  configFile.setName(fileName);
+  maybeDeleteConfigFile();
+  configFile = new QFile(fileName);
+  need_to_delete_configFile = true;
 }
 
 QString 
 Settings::getConfigFileName() const
 {
-  return configFile.name();
+  QFile *f;
+  if ( (f = dynamic_cast<QFile *>(configFile)) ) {
+    return f->name();
+  }
+  return QString::null;
+}
+
+  // alternate usage, pass in a QIODevice
+void
+Settings::setConfigDevice(QIODevice * device)
+{
+  maybeDeleteConfigFile();
+  configFile = device;
+}
+
+QIODevice *
+Settings::getConfigDevice() const
+{
+  return configFile;
+}
+
+QString
+Settings::get(const QString & key) const
+{
+  return get(_currentSection, key);
 }
 
 void
-Settings::parseConfig()
+Settings::put(const QString & key, const QString & value)
 {
-  map<QString, QString>::const_iterator it;
-
-  // pick up the values
-  for (it = masterSettings->begin(); it != masterSettings->end(); it++) {
-    QString tmp(findValue(it->first));
-    settingsMap[it->first] = ( tmp.isNull() ? it->second : tmp );
-  }
-  dirtySettings.clear();
-
+  put(_currentSection, key, value);
 }
 
-/* 
-   Opens & searches the config file, finds a value for a given key, 
-   closes the config file and returns the value it found or QString::null
-*/
 QString
-Settings::findValue(const QString & key) 
+Settings::get(const QString & section, const QString & key) const
 {
+  SettingsMap::const_iterator sec_it = settingsMap.find(section);
 
-  QString line, ret;
-  
-  configFile.open(IO_ReadWrite); /* ReadWrite so that if it doesn't exist, 
-				    we can at leat create it as a 0-byter */
-  QTextStream fileContents(&configFile);
+  if (sec_it != settingsMap.end() && (sec_it->second.count(key) > 0) )
+    return sec_it->second.find(key)->second;
 
-  while (! (line = fileContents.readLine()).isNull() ) {
-    QString matchedLine(testLine(line)), thiskey, thisvalue;
-    if ( ! matchedLine.isNull() ) {      
-      parseMatchedLine(matchedLine, thiskey, thisvalue); 
-      if (thiskey == key) {
-	ret = thisvalue;
-	goto endmethod;
-      }
-      
-    }
-  }
- endmethod:
-  configFile.close();
-  return ret; // if nothing found, returns a null QString
+  return QString();
 }
 
-void 
+void
+Settings::put(const QString & section, const QString & key, const QString & value)
+{
+  settingsMap[section][key] = value;
+  dirtySettings[section].insert(key);
+}
+
+Settings::Section Settings::getSection(const QString & section_name) const
+{
+  if (settingsMap.count(section_name) > 0)
+    return settingsMap.find(section_name)->second;
+  return Section();
+}
+
+void Settings::putSection(const QString & section_name, const Section & section)
+{
+  settingsMap[section_name] = section;
+  for (Section::const_iterator it = section.begin(); it != section.end(); it++)
+    dirtySettings[section_name].insert(it->first);
+}
+
+void
+Settings::parseSettings()
+{
+  dirtySettings.clear();
+  settingsMap.clear();
+
+  if (masterSettings) {
+    SettingsMap allSettings = readAll();
+    SettingsMap::const_iterator master;
+    Section::const_iterator subMaster;
+    QString section, key, value;
+
+    // pick up the values
+    for (master = masterSettings->begin(); master != masterSettings->end(); master++) {
+      section = master->first;
+      for (subMaster = master->second.begin(); subMaster != master->second.end(); subMaster++) {
+          key = subMaster->first;
+          value = subMaster->second;
+          settingsMap[section][key] = allSettings[section][key];
+          if ( settingsMap[section][key].isNull() ) {
+            settingsMap[section][key] = value;
+            dirtySettings[section].insert(key);
+          }
+      }
+    }
+
+  } else {
+    settingsMap = readAll();
+  }
+
+
+}
+
+
+Settings::SettingsMap
+Settings::readAll()
+{
+    SettingsMap ret;
+    QString line, matchedLine, thisKey, thisValue;
+
+    configFile->open(IO_ReadWrite);  /* ReadWrite so that if it doesn't exist,
+                                        we can at leat create it as a 0-byter */
+    QTextStream fileContents(configFile);
+    while (! (line = fileContents.readLine()).isNull()) {
+      matchedLine = testSectionLine(line);
+      if ( !matchedLine.isNull()) {
+        _currentSection = matchedLine;
+        continue;
+      }
+      matchedLine = testLine(line);
+      if ( !matchedLine.isNull() ) {
+        parseMatchedLine(matchedLine, thisKey, thisValue);
+        ret[currentSection()][thisKey] = thisValue;
+      }
+    }
+
+    configFile->close();
+    return ret;
+}
+
+void
 Settings::saveSettings()
 {
-  QString line, matchedLine,  outBuf, key, value;
+  QString line, matchedLine, key, value, outBuf("");
+  set<QString>::iterator it;
 
-  configFile.open(IO_ReadOnly);
-  QString theWholeThing(QTextStream(&configFile).read());
-  configFile.close(); 
+  configFile->open(IO_ReadOnly);
+  QString theWholeThing(QTextStream(configFile).read());
+  configFile->close();
 
+  _currentSection = QString::null;
   QTextStream inFile(&theWholeThing, IO_ReadOnly);
-
   while (! (line = inFile.readLine()).isNull() ) {
-    
-    matchedLine = testLine(line);
+    if ( !(matchedLine = testSectionLine(line)).isNull() ) {
+      // we have a new section so append what's still 'dirty' for this section to the end of the section that is now ending
+      for (it = dirtySettings[currentSection()].begin(); it != dirtySettings[currentSection()].end(); it++) {
+        outBuf += *it + " = " + settingsMap[currentSection()][*it] + " \n";
+      }
+      dirtySettings[currentSection()].clear();
+      _currentSection = matchedLine;
 
-    // replace parameter in config file if they changed
-    if ( !matchedLine.isNull() ) {
+    } else if ( ! (matchedLine = testLine(line)).isNull()) {
       parseMatchedLine(matchedLine, key, value);
-      if (dirtySettings.count(key)) {
-	line = key + " = \"" + settingsMap[key] + "\"";
-	dirtySettings.erase(key);
+      if (dirtySettings[currentSection()].count(key)) {
+        line = key + " = " + settingsMap[currentSection()][key];
+        dirtySettings[currentSection()].erase(key);
       }      
     }
     outBuf += line + "\n";
   }
 
-  // now append what's left to the end of the file
-  set<QString>::iterator it;
-  for (it = dirtySettings.begin(); it != dirtySettings.end(); it++) {
-    outBuf += *it + " = \"" + settingsMap[*it] + "\" \n";    
+  // if there are still any dirty settings left, put what is left over at the end
+  DirtyMap::iterator ds_it;
+  for (ds_it = dirtySettings.begin(); ds_it != dirtySettings.end(); ds_it++) {
+    if (ds_it->second.size() == 0) continue;
+    QString section = ds_it->first;
+    if (section != currentSection()) outBuf += QString("[") + section.latin1() + "]\n";
+    for (it = ds_it->second.begin(); it != ds_it->second.end(); it++)
+      outBuf += *it + " = " + settingsMap[section][*it] + "\n";
+    _currentSection = section;
   }
 
+
   // now, commit changes, overwriting file
-  configFile.open(IO_WriteOnly);  
-  configFile.writeBlock(outBuf.latin1(), outBuf.length()); 
-  configFile.close();
+  configFile->open(IO_WriteOnly | IO_Truncate);
+  configFile->writeBlock(outBuf, outBuf.length());
+  configFile->close();
+  dirtySettings.clear();
 }
 
 /* returns a matched substring from line if line matches the lineRE, 
@@ -183,307 +266,36 @@ Settings::saveSettings()
 QString
 Settings::testLine(const QString & line) const
 {
-  int pos, len;
+  int pos;
 
-  if ( (pos = lineRE.match(line, 0, &len)) > -1) {
-    return line.mid(pos,len);
-  } 
+  if ( (pos = lineRE.search(line, 0)) > -1)
+    return QRegExp(lineRE).cap(0);
+  return QString();
+}
+
+QString
+Settings::testSectionLine(const QString & line) const
+{
+  if ( sectionRE.search(line, 0) > -1)
+    return QRegExp(sectionRE).cap(1); // need to avoid breaking const correctness...
   return QString();
 }
 
 void
 Settings::parseMatchedLine(const QString & matchedLine, 
-			   QString & key, QString & value) const
+                           QString & key, QString & value) const
 {
-  int eq_idx = matchedLine.find('='), pos, len;
-  key = matchedLine.left(eq_idx);
-  key.replace(QRegExp(" "),""); // strip/trim spaces
-  pos = valueRE.match(matchedLine, eq_idx, &len);
-  value = matchedLine.mid(pos,len);
-  value.replace(QRegExp("\""),""); // ok, get rid of the "
+  QRegExp lineRE_copy(lineRE); // need to avoid breaking const correctness...
+
+  lineRE_copy.search(matchedLine, 0);
+  key = lineRE_copy.cap(1);
+  key.replace(QRegExp("^\\s*"), "");
+  key.replace(QRegExp("\\s*$"), "");
+
+  key.stripWhiteSpace();
+  value = lineRE_copy.cap(2);
+  value.replace(QRegExp("^\\s*"), "");
+  value.replace(QRegExp("\\s*$"), "");
 }
 
 
-DAQSettings::DAQSettings(const char *filename = 0)
-{
-  masterSettings = &daqMasterSettings;
-
-  if (!filename)
-    filename = defaultConfigFileName.latin1();
-
-  setConfigFileName(filename);
-  parseConfig();
-  parseWindowSettings();
-  parseChannelParameters();
-}
-
-const QString &
-DAQSettings::getDevice() const
-{
-  return settingsMap.find(KEY_DEVICE)->second;
-}
-
-
-void
-DAQSettings::setDevice(const QString & dev)
-{
-  settingsMap[KEY_DEVICE] = dev;
-  dirtySettings.insert(KEY_DEVICE);
-}
-
-const QString &
-DAQSettings::getTemplateFileName() const
-{
-  return settingsMap.find(KEY_TEMPLATE_FILE_NAME)->second;  
-}
-
-void
-DAQSettings::setTemplateFileName(const QString & fileName) 
-{
-  settingsMap[KEY_TEMPLATE_FILE_NAME] = fileName;
-  dirtySettings.insert(KEY_TEMPLATE_FILE_NAME);
-}
-
-const QString & 
-DAQSettings::getFileSourceFileName() const
-{
-  return settingsMap.find(KEY_FILE_SOURCE_FILE_NAME)->second;
-}
-
-
-void 
-DAQSettings::setFileSourceFileName(const QString & fileName)
-{
-  settingsMap[KEY_FILE_SOURCE_FILE_NAME] = fileName;
-  dirtySettings.insert(KEY_FILE_SOURCE_FILE_NAME);
-}
-
-
-DAQSettings::InputSource 
-DAQSettings::getInputSource() const
-{
-  InputSource ret = Comedi;
-  bool ok;
-  int val = settingsMap.find(KEY_DEFAULT_INPUT_SOURCE)->second.toInt(&ok);
-
-  if (ok && val > invalid_source_low && val < invalid_source_high)
-    ret = (InputSource)val;
-
-  return ret;
-}
-
-void 
-DAQSettings::setInputSource(InputSource source)
-{  
-  settingsMap[KEY_DEFAULT_INPUT_SOURCE] = QString().setNum((int)source);
-  dirtySettings.insert(KEY_DEFAULT_INPUT_SOURCE);
-}
-
-bool
-DAQSettings::getShowConfigOnStartup() const
-{
-  return (settingsMap.find(KEY_SHOW_CONFIG_ON_STARTUP)->second.toShort() != 0);
-}
-
-void 
-DAQSettings::setShowConfigOnStartup(bool yesorno)
-{
-  settingsMap[KEY_SHOW_CONFIG_ON_STARTUP] = QString().setNum((short)yesorno);
-  dirtySettings.insert(KEY_SHOW_CONFIG_ON_STARTUP);
-}
-
-const QString &
-DAQSettings::getDataFile() const
-{
-  return settingsMap.find(KEY_DATA_FILE)->second;
-}
-
-void 
-DAQSettings::setDataFile(const QString & fileName)
-{
-  settingsMap[KEY_DATA_FILE] = fileName;
-  dirtySettings.insert(KEY_DATA_FILE);
-}
-
-DAQSettings::DataFileFormat
-DAQSettings::getDataFileFormat() const
-{
-  DataFileFormat ret = Binary;
-  bool ok;
-  int val = settingsMap.find(KEY_DATA_FORMAT)->second.toInt(&ok);
-
-  if (ok && val > invalid_format_low && val < invalid_format_high)
-    ret = (DataFileFormat)val;
-
-  return ret;
-}
-
-void 
-DAQSettings::setDataFileFormat(DataFileFormat format)
-{  
-  settingsMap[KEY_DATA_FORMAT] = QString().setNum((int)format);
-  dirtySettings.insert(KEY_DATA_FORMAT);
-}
-
-const
-QRect &
-DAQSettings::getWindowSetting(uint channel_number) const
-{
-  static QRect nullRect;
-  
-  if (windowSettings.find(channel_number) != windowSettings.end()) {
-    return windowSettings.find(channel_number)->second;
-  }
-
-  return nullRect;
-}
-
-void
-DAQSettings::setWindowSetting(uint channel_number, const QRect & rect)
-{
-  if (rect.isNull()) {
-    windowSettings.erase(channel_number);
-  } else {
-    windowSettings [ channel_number ] = rect;
-  }
-  generateWindowSettingsString();
-}
-
-set<uint>
-DAQSettings::windowSettingChannels() const
-{
-  set<uint> s;
-
-  for (map<uint, QRect>::const_iterator i = windowSettings.begin(); 
-       i != windowSettings.end(); i++) {
-    s.insert(i->first);
-  }
-  return s;
-}
-
-const
-DAQSettings::ChannelParams &
-DAQSettings::getChannelParameters(uint channel_number) const
-{
-  static const ChannelParams nullCP;
-
-  map<uint, ChannelParams>::const_iterator i = channelParams.find(channel_number);
-
-  if (i != channelParams.end()) {
-    return i->second;
-  }
-
-  return nullCP;
-}
-
-void
-DAQSettings::setChannelParameters(uint channel_number, 
-                                  const ChannelParams & cp)
-{
-  if (cp.isNull()) {
-    channelParams.erase(channel_number);
-  } else {
-    channelParams [ channel_number ] = cp;
-  }
-  generateChannelParametersString();
-}
-
-void
-DAQSettings::parseWindowSettings()
-{
-  windowSettings.clear(); /* empty it out */
-
-  const QString & ws(settingsMap [ KEY_CHAN_WIN_SETTINGS ]);
-  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,\\d+;");
-  int curr_match = 0, len = 0;
-  while ( (curr_match = winsetRE.match(ws, curr_match+len, &len)) > -1 ) {
-    int chan, x, y, w, h, tmp; chan = x = y = w = h = -1;
-    QString match = ws.mid(curr_match, len);
-    chan = match.left((tmp = match.find(':'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    x = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    y = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    w = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    h = match.left((tmp = match.find(';'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    windowSettings[ chan ] = QRect(x,y,w,h); // add channel to map
-  }
-}
-
-void
-DAQSettings::generateWindowSettingsString() 
-{
-  QString out;
-
-  map<uint, QRect>::iterator i;
-  for (i = windowSettings.begin(); i != windowSettings.end(); i++) {
-    uint chan = i->first;
-    QRect & r = i->second;
-    out += 
-      QString().setNum(chan) + ":"
-      + QString().setNum(r.x()) + "," 
-      + QString().setNum(r.y()) + ","
-      + QString().setNum(r.width()) + ","
-      + QString().setNum(r.height()) + ";";
-  }
-  settingsMap [ KEY_CHAN_WIN_SETTINGS ] = out;
-  dirtySettings.insert(KEY_CHAN_WIN_SETTINGS);
-  //cerr << "Settings string: " << out << endl;
-}
-
-void
-DAQSettings::parseChannelParameters()
-{
-  channelParams.clear(); /* empty it out */
-
-  const QString & cp(settingsMap [ KEY_CHANNEL_PARAMS ]);
-  QRegExp winsetRE("\\d+:\\d+,\\d+,\\d+,-?\\d+.?\\d*,\\d+,\\d+;");
-  int curr_match = 0, len = 0;
-  while ( (curr_match = winsetRE.match(cp, curr_match+len, &len)) > -1 ) {
-    ChannelParams c; 
-    int chan, tmp; chan = tmp = -1;
-    QString match = cp.mid(curr_match, len);
-    chan = match.left((tmp = match.find(':'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.n_secs = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.range = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spike_on = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spike_thold = match.left((tmp = match.find(','))).toDouble(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spike_polarity = match.left((tmp = match.find(','))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.spike_blanking = match.left((tmp = match.find(';'))).toInt(); // parse number
-    match = match.mid(tmp + 1); // consume number
-    c.setNull(false);
-    channelParams[ chan ] = c; // add channel params to map
-  }
-}
-
-void
-DAQSettings::generateChannelParametersString()
-{
-  QString out;
-
-  map<uint, ChannelParams>::iterator i;
-  for (i = channelParams.begin(); i != channelParams.end(); i++) {
-    uint chan = i->first;
-    ChannelParams & c = i->second;
-    out += 
-      QString().setNum(chan) + ":" +
-      QString().setNum(c.n_secs) + "," +
-      QString().setNum(c.range) + "," +
-      QString().setNum((short)c.spike_on) + "," +
-      QString().setNum(c.spike_thold) + "," +
-      QString().setNum((short)c.spike_polarity) + "," +
-      QString().setNum(c.spike_blanking) + ";";
-  }
-
-  settingsMap [ KEY_CHANNEL_PARAMS ] = out;
-  dirtySettings.insert(KEY_CHANNEL_PARAMS);
-}

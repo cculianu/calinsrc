@@ -53,11 +53,13 @@ extern "C" {
    allocated shared memory struct */
 # define SHD_MAX_CHANNELS 256
 
-# define CHAN_MASK_SIZE SHD_MAX_CHANNELS / 8
+# define CHAN_MASK_SIZE (SHD_MAX_CHANNELS / 8)
 
 
 /* Used in SharedMemStruct and SignalParams                                  */
-typedef unsigned long long scan_index_t; 
+typedef unsigned long long scan_index_t;
+typedef unsigned int sampling_rate_t;
+
 
 
 /*
@@ -94,7 +96,7 @@ struct SharedMemStruct {
 					  Use inline funcs set_chan() and 
 					  is_chan_on() to set this           */
   char ao_chans_in_use[CHAN_MASK_SIZE];  
-  unsigned int sampling_rate_hz; /* Use this to modify the period of the rt
+  sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
 				    loop (dangerous!).  Initialized to 1000  */
 
   scan_index_t scan_index; /*       index of current analog input scan --   
@@ -118,7 +120,7 @@ typedef struct SharedMemStruct SharedMemStruct;
 
 inline 
 int
-is_chan_on (unsigned int chan, char array[CHAN_MASK_SIZE])
+is_chan_on (unsigned int chan, const char array[CHAN_MASK_SIZE])
 {
   int elem_index = chan / 8, bitpos = chan % 8, i;
   char mask = 1;
@@ -181,7 +183,12 @@ typedef struct {
   
 } SampleStruct; 
 
-
+#ifdef __cplusplus
+inline bool operator==(const SampleStruct &s1, const SampleStruct &s2)
+{
+  return (s1.channel_id == s2.channel_id && s1.scan_index == s2.scan_index && s1.data == s2.data);
+}
+#endif
 # undef dconst
 
 #ifdef __cplusplus
