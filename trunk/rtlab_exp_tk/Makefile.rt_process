@@ -30,7 +30,7 @@ rt_process.o: rt_process.c rt_process.h shared_stuff.h
 	@echo "***************************************************************************"
 	@echo "              Compiling The RT-Process RealTime Kernel Module"
 	@echo "***************************************************************************"
-	$(CC) ${INCLUDE} ${CFLAGS} -DNO_AO -I ${COMEDI_DEVEL_HEADERS} -c -o rt_process.o rt_process.c
+	$(CC) ${INCLUDE} ${CFLAGS} -I ${COMEDI_DEVEL_HEADERS} -c -o rt_process.o rt_process.c
 
 clean:
 	-rm -f *.o 
