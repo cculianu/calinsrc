@@ -45,6 +45,11 @@ extern "C" {
 static void testAndMakeDaqSystemDirOrQuit(void);
 static void init(void);
 static void uninit();
+extern "C" {
+  /* safely closes all open daqSystems on SIGINT, SIGHUP, SIGTERM, etc.. */
+  static void killHandler(int); 
+}
+static void registerSignals(void);
 
 Probe *probe = 0;
 DAQSettings *settings = 0;
@@ -57,6 +62,9 @@ main(int argc, char *argv[])
   QApplication a(argc, argv);
   bool showConfigScreen;
   int retval = 0;
+
+  
+  registerSignals();
 
  try_again:
   try {
@@ -149,3 +157,23 @@ testAndMakeDaqSystemDirOrQuit(void)
   }
 }
 
+static void registerSignals(void)
+{
+  int i, kill_signals[] = { SIGHUP, SIGQUIT, SIGINT, SIGTERM, 0 };
+  
+  for (i = 0; kill_signals[i]; i++)
+    signal(kill_signals[i], killHandler);
+}
+
+static void killHandler(int signum) 
+{
+  (void)signum;
+
+  set<DAQSystem *> daqSystems = DAQSystem::daqSystems();
+  set<DAQSystem *>::iterator it, end;
+
+  /* now safely call close() on all of them to safely exit them.. */
+  for(it = daqSystems.begin(), end = daqSystems.end(); it != end; it++) 
+    (*it)->close();
+  
+}

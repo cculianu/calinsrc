@@ -37,6 +37,7 @@
 #include <qtextbrowser.h>
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string.h>
 #include "exception.h"
@@ -251,6 +252,9 @@ class DAQSystem : public QMainWindow
 
   const ShmController & shmController() const { return shmCtl; }
 
+  /* useful for implementing a killhandler in main.cpp?? */
+  static set<DAQSystem *> daqSystems() { return daq_systems; }
+
  signals:
   void channelOpened(uint chan);
   void channelClosed(uint chan);
@@ -368,6 +372,8 @@ class DAQSystem : public QMainWindow
 
   uint last_secs_vis_they_picked;
   uint last_range_they_picked;
+
+  static set<DAQSystem *> daq_systems;
 };
 
 #endif 

@@ -55,6 +55,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <set>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -112,6 +113,9 @@ void ExperimentLog::init()
   int id = accel->insertItem(CTRL + Key_T);
   accel->connectItem( id, &daqSystem, SLOT(logTimeStamp()) );
 }
+
+
+set<DAQSystem *> DAQSystem::daq_systems;
 
 DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0, 
                       const char * name = DAQ_SYSTEM_APPNAME_CSTRING, 
@@ -283,12 +287,17 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   /* now begin the main loop that grabs data and plots it */
   readerLoop.loop();
 
+  daq_systems.insert(this);
 }
 
 DAQSystem::~DAQSystem()
 {
   settings.saveSettings(); /* commit settings (usually just window setting
                               changes) */
+
+  daq_systems.erase(this);
+
+
   if (log)  delete log; 
 }
 
