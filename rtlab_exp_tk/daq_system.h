@@ -208,8 +208,10 @@ class WindowTemplateDialog: public QWidget
   void updateDetails();
   void contextRequest(QListBoxItem *, const QPoint & p);
   void createNew();
+  void useSelected();
+  void renameSelected();
   void deleteSelected();
-  void applySelected();
+  void overwriteSelected();
 
  private:
   DAQSystem *ds;
@@ -219,7 +221,7 @@ class WindowTemplateDialog: public QWidget
 
   QPopupMenu *cmenu;
 
-  int delete_id, apply_id;
+  int delete_id, use_id, rename_id, overwrite_id;
 
   void refreshContents();
   
@@ -256,7 +258,10 @@ class DAQSystem : public QMainWindow
   void changeAREF(ComediChannel::AnalogRef); /* applies the aref change 
                                                to all channels */
   void openChannelWindow(uint chan, uint range, uint n_secs);
-  void saveGraphSettings(const ECGGraphContainer *self);
+  /* if graph is null, save them all */
+  void saveGraphSettings(const ECGGraphContainer *graph = 0);
+  /* if graph is null, remove them all */
+  void removeGraphFromSettings(const ECGGraphContainer *graph = 0);
   void closeGraphWindow( int channel_id );
   void closeAllGraphWindows();
 
@@ -342,8 +347,6 @@ class DAQSystem : public QMainWindow
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
   ShmController & shmCtl; /* this comes directly from readerLoop */
-
-  bool daqSystemIsClosingMode;
 
   ExperimentLog * log; /* the experiment log window */
   Tyler tyler;

@@ -126,8 +126,6 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   statusBarScanIndex(&statusBar),
   readerLoop(this),
   shmCtl(*readerLoop.shmCtl),
-  daqSystemIsClosingMode(false), /* for now, this becomes true when
-                                    daq system is closing */
   log(0),
   tyler(&ws),
   plugin_menu(this, 0, QString(name) + " - Plugin Menu")
@@ -568,7 +566,7 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   /* see about getting rid of these signal/slots and use natural signalling
      in producer/consumer classes.. -CC */
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
-          this, SLOT(saveGraphSettings(const ECGGraphContainer *)));
+          this, SLOT(removeGraphFromSettings(const ECGGraphContainer *)));
   connect(gcont, SIGNAL(closing(const ECGGraphContainer *)),
           this, SLOT(windowMenuRemoveWindow(const ECGGraphContainer *)));
   connect(gcont, SIGNAL(rangeChanged(uint, int)),
@@ -622,21 +620,23 @@ DAQSystem::openChannelWindow(uint chan, uint range,
 
 }
 
-/* this slot can be called from either the closeEvent of
-   the ECGGraphContainers, or from the closeEvent of
-   the DAQSystem classes. It behaves slightly differently
-   depending on who calls it. (daqSystemIsClosingMode is different). 
-   Purpose is to commit graph container window settings to settings file, 
-   or flush them from the settings file if they weren't open
-   upon application close */
+/* this slot saves the settings for a specific opened graphcontainer,
+   gcont.  If gcont is NULL, then it does the above for ALL open
+   graphs. */
 void
 DAQSystem::saveGraphSettings(const ECGGraphContainer  *gcont)
 {
-  if (gcont == 0) return;
+  vector <const ECGGraphContainer *> graphs;
+  vector <const ECGGraphContainer *>::iterator it;
 
-  uint chan = gcont->channelId; 
+  if (!gcont) 
+    graphs = graphContainers();
+  else 
+    graphs.push_back(gcont);
+  
+  for (it = graphs.begin(); it != graphs.end() && (gcont = *it); it++) {
+    uint chan = gcont->channelId; 
 
-  if (daqSystemIsClosingMode) {
     /* save actual window settings */
     QRect pos(gcont->pos(), gcont->size());
     settings.setWindowSetting(chan, pos);
@@ -650,12 +650,28 @@ DAQSystem::saveGraphSettings(const ECGGraphContainer  *gcont)
     cp.spike_blanking = shmCtl.spikeBlanking(chan); 
     cp.setNull(false);
     settings.setChannelParameters(chan, cp);
-  } else {
+  }
+}
+
+void
+DAQSystem::removeGraphFromSettings(const ECGGraphContainer  *gcont)
+{
+  vector <const ECGGraphContainer *> graphs;
+  vector <const ECGGraphContainer *>::iterator it;
+ 
+  if (!gcont) 
+    graphs = graphContainers();
+  else
+    graphs.push_back(gcont);
+
+  for (it = graphs.begin(); it != graphs.end() && (gcont = *it); it++) {
+
     /* clear window settings to indicte this window should not be auto-opened
        the next time */
-    settings.setWindowSetting(chan, QRect());
+    settings.setWindowSetting(gcont->channelId, QRect());
     /* clear channel parameters */
-    settings.setChannelParameters(chan, DAQSettings::ChannelParams());
+    settings.setChannelParameters(gcont->channelId, 
+                                  DAQSettings::ChannelParams());
   }
 }
 
@@ -672,13 +688,7 @@ DAQSystem::closeEvent (QCloseEvent * e)
 {
   if (!log->checkUnsaved()) return;
 
-  daqSystemIsClosingMode = true; /* this changes the behavior of the
-                                    saveGraphSettings() method */
-  for (uint i = 0; i < readerLoop.producers.size(); i++) {
-    const ECGGraphContainer *gc;
-    if ( (gc = readerLoop.producers[i].findByType((ECGGraphContainer *)0)) )
-      saveGraphSettings(gc);
-  }
+  saveGraphSettings();
 
   QMainWindow::closeEvent(e);
 }
@@ -1620,8 +1630,12 @@ WindowTemplateDialog::WindowTemplateDialog(DAQSystem *parent,
 
   cmenu->insertItem("Create New...", this, SLOT(createNew()));
   cmenu->insertSeparator();
-  delete_id = cmenu->insertItem("Delete Selected", this, SLOT(deleteSelected()));
-  apply_id = cmenu->insertItem("Apply Selected", this, SLOT(applySelected()));
+  use_id = cmenu->insertItem("Use/Apply to Experiment", this, 
+                             SLOT(useSelected()));
+  overwrite_id = cmenu->insertItem("Overwrite from Experiment", this, 
+                                   SLOT(overwriteSelected()));
+  rename_id = cmenu->insertItem("Rename", this, SLOT(renameSelected()));
+  delete_id = cmenu->insertItem("Delete", this, SLOT(deleteSelected()));
 
   connect (templateNames, SIGNAL(contextMenuRequested ( QListBoxItem *, const QPoint & )), this, SLOT(contextRequest(QListBoxItem *, const QPoint &)));
 
@@ -1684,25 +1698,49 @@ void
 WindowTemplateDialog::contextRequest(QListBoxItem * lbi, const QPoint & p)
 {
   bool enabled = lbi && !ds->settings.getWindowSettingProfile(lbi->text()).isNull();
-  cmenu->setItemEnabled(apply_id, enabled);
+  cmenu->setItemEnabled(use_id, enabled);
   cmenu->setItemEnabled(delete_id, enabled);
+  cmenu->setItemEnabled(rename_id, enabled);
+  cmenu->setItemEnabled(overwrite_id, enabled);
     
   cmenu->popup(p);
 }
 
 void WindowTemplateDialog::createNew()
 {
-  QMessageBox::information(this, "Unimplemented", "Unimplemented Feature", QMessageBox::Ok);
+  bool ok;
+  QString name;
+  
+ try_again:
+    name
+      = QInputDialog::getText( "DAQSystem - New Window Profile",
+                               "Current experiment channel/window settings "
+                               "will be used in creating the profile. <b> </b>"
+                               "Please name the profile:",
+                               QLineEdit::Normal, QString::null, &ok, this );  
+    name = name.stripWhiteSpace();
+    if (ok) {
+      if (name.isNull() ) goto try_again;
+      if (!ds->settings.getWindowSettingProfile(name).isNull()) {
+        QMessageBox::critical(this, 
+                              QString("Profile named '")  + name + "' exists.",
+                              QString("A profile named '") + name + "' exists."
+                              "  Please choose another name.", 
+                              QMessageBox::Ok, QMessageBox::NoButton, 
+                              QMessageBox::NoButton);
+        goto try_again;
+      }
+      
+      /* Set current to a  profile */
+      ds->saveGraphSettings();
+      ds->settings.currentToProfile(name);
+      refreshContents();
+    }
 }
 
-void WindowTemplateDialog::deleteSelected()
+void WindowTemplateDialog::useSelected()
 {
-  QMessageBox::information(this, "Unimplemented", "Unimplemented Feature", QMessageBox::Ok);
-}
-
-void WindowTemplateDialog::applySelected()
-{
-  if (QMessageBox::warning(this, "Are you sure?", "Applying the selected profile will close all the current channels and open a new set of channels.  Are you sure you wish to continue?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+  if (QMessageBox::warning(this, "Are you sure?", "Applying the selected profile will close all the current channels and open a new set of channels.  Are you sure you wish to continue?<b> </b>", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
     return;
 
   ds->closeAllGraphWindows();
@@ -1726,4 +1764,53 @@ void WindowTemplateDialog::applySelected()
       ds->openChannelWindow(chan, cp.range, cp.n_secs);
     }
   
+}
+
+void WindowTemplateDialog::renameSelected()
+{
+
+  bool ok;
+  QString name, origName(templateNames->currentText());
+  
+ try_again:
+    name
+      = QInputDialog::getText( "DAQSystem - Rename Window Profile",
+                               "Renaming the profile, please enter the new "
+                               "name for this profile",
+                               QLineEdit::Normal, origName, &ok, this );  
+    name = name.stripWhiteSpace();
+    if (ok) {
+      if (name.isNull() ) goto try_again;
+      if (name == origName)  return; /* silently ignore same name */
+      if (!ds->settings.getWindowSettingProfile(name).isNull()) {
+        QMessageBox::critical(this, 
+                              QString("Profile named '")  + name + "' exists.",
+                              QString("A profile named '") + name + "' exists."
+                              "  Please choose another name.", 
+                              QMessageBox::Ok, QMessageBox::NoButton, 
+                              QMessageBox::NoButton);
+        goto try_again;
+      }
+    }
+
+    ds->settings.renameWindowSettingProfile(name, origName);
+    refreshContents();    
+}
+
+void WindowTemplateDialog::deleteSelected()
+{
+  if (QMessageBox::warning(this, "Are you sure?", "Deleting the selected profile will remove it from the profile list.  This operation cannot be undone.  Are you sure you wish to continue?<b> </b>", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+    return;
+
+  ds->settings.deleteWindowSettingProfile(templateNames->currentText());
+  refreshContents();
+}
+
+void WindowTemplateDialog::overwriteSelected()
+{
+  if (QMessageBox::warning(this, "Are you sure?", "Continuing will apply the current experiment's channel/window settings to this selected profile, thus overwriting its current settings.  Are you sure you wish to continue?<b> </b>", QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+    return;
+
+  ds->settings.currentToProfile(templateNames->currentText());
+  refreshContents();
 }
