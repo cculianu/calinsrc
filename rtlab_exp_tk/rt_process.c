@@ -318,8 +318,14 @@ int init_module(void)
   for (i = 0; i < SHD_MAX_CHANNELS; i++)  {
     spike_info.last_spike_time[i] = 0;
     spike_info.period[i] = 0xffffffff;
+    /* clear info for spike end */
+    spike_info.last_spike_ended_time[i] = 0;
   }
   memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
+  /* clear spike state info */
+  memset(spike_info.saved_polarity, 0, CHAN_MASK_SIZE);
+  memset(spike_info.in_spike, 0, CHAN_MASK_SIZE);
+
 
   /* initialize the function linked list */
   rt_functions = __end_of_func_list.next = &__end_of_func_list;
@@ -905,6 +911,84 @@ static void grabScanOffBoard (MultiSampleStruct *m)
 }
 
 static void detectSpikes (MultiSampleStruct *m)
+{
+  register uint chan, i, elapsed;
+  const uint avg_chan_time =
+    ( m->n_samples  ? ((uint)(m->acq_end - m->acq_start)) / m->n_samples : 1 );
+  hrtime_t this_chan_time;   
+  int polarity;
+  double thold;
+
+  /* clear our spikes_this_scan mask.. */
+  memset(spike_info.spikes_this_scan, 0, CHAN_MASK_SIZE);
+
+  for (i = 0; i < m->n_samples; i++) {
+    chan = m->samples[i].channel_id;
+    this_chan_time = m->acq_start + (hrtime_t)(avg_chan_time * i);
+    elapsed = (uint)(this_chan_time - spike_info.last_spike_ended_time[chan]);
+    polarity = test_bit(chan, rtp_shm->spike_params.polarity_mask);
+    thold = rtp_shm->spike_params.threshold[chan];
+
+    /* things are a bit different if we are inside a spike */
+    if (test_bit(chan, spike_info.in_spike)) {
+      /* IN SPIKE.. */
+
+      if ( 
+           /* if they swapped the spike polarity on us, we abort this spike! */
+           (polarity != test_bit(chan, spike_info.saved_polarity) )
+           /* OR if they modified the threshold, we abort this spike! */
+           || thold != spike_info.saved_thold[chan]
+           /* OR chan is positive polarity and sample dipped above thold */
+           || (polarity && m->samples[i].data <= thold) 
+           /* OR chan is negative polarity and sample dipped below thold */
+           || (!polarity && m->samples[i].data >= thold) 
+         )  {
+        /* THEN end the spike by unsetting spike_info.in_spike
+                and also recording when the spike ended */
+        spike_info.last_spike_ended_time[chan] = this_chan_time;
+        clear_bit(chan, spike_info.in_spike);
+      }
+      
+    } else if (test_bit(chan, rtp_shm->spike_params.enabled_mask) 
+               && elapsed >= rtp_shm->spike_params.blanking[chan] * MILLION ) {
+      /* if we get here it means that we were _not_ in a spike
+         and that spike detection is turned on.. thus we need to
+         actually test for the presence of a spike.. */         
+        switch (polarity) {
+        case Positive: /* from enum SpikePolarity */
+          if ( (m->samples[i].spike = thold <= m->samples[i].data) )
+            /* we have a spike, so save the polarity */
+            set_bit(chan, spike_info.saved_polarity); /* save the polarity */
+          break;
+        case Negative: 
+          if ( (m->samples[i].spike = thold >= m->samples[i].data) )
+            /* we have a spike, so save the polarity */
+            clear_bit(chan, spike_info.saved_polarity); /* save polarity */
+          break;
+        default:
+          /* this case is not reached, but defensive rtl_printf follows */
+          rtl_printf(MODULE_NAME ": Bug in " MODULE_NAME ".o, channel %u "
+                     "has an illegal spike polarity!\n", chan); 
+          break;
+        }
+
+        if (m->samples[i].spike) {
+          /* we just had a spike this scan, so do some bookkeeping */
+          m->samples[i].spike_period =  /* calculate period.. */
+            spike_info.period[chan] = elapsed * ((double)0.000001);
+          /* save spike time... */
+          spike_info.last_spike_time[chan] = this_chan_time;
+          /* set some flags... */
+          set_bit(chan, spike_info.spikes_this_scan);
+          set_bit(chan, spike_info.in_spike);
+          /* save spike threshold so we can detect changes while in_spike */
+          spike_info.saved_thold[chan] = thold;
+        }
+    }
+  }
+}
+
+void detectSpikes_old (MultiSampleStruct *m)
 {
   register uint chan, i, elapsed;
   register const uint avg_chan_time =
