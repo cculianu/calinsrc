@@ -60,8 +60,9 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   statusBarScanIndex(&statusBar),
   readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
 	     settings),
-  daqSystemIsClosingMode(false) /* for now, this becomes true when
-				   daq system is closing */
+  daqSystemIsClosingMode(false), /* for now, this becomes true when
+				    daq system is closing */
+  log(&ws, "Experiment Log")
 {
   this->setCentralWidget(&ws);
   ws.setScrollBarsEnabled(true);
@@ -89,6 +90,10 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     _menuBar.insertSeparator();
     _menuBar.insertItem("&Help", &helpMenu);
   }
+
+  /* add the log window */
+  log.useTemplate(settings.getTemplateFileName());
+  windowMenuAddWindow(&log); /* add this window to the windowMenu QPopupMenu */
 
   { /* add toolbar */
     addChannelB.setText("Add Channel...");
@@ -333,6 +338,9 @@ void
 DAQSystem::windowMenuFocusWindow(int id)
 {
   if (menuIdToWindowMap.find(id) != menuIdToWindowMap.end()) {
+    menuIdToWindowMap[ id ]->show();     /* just in case its hidden */
+					   
+
     menuIdToWindowMap[ id ]->setFocus(); /* is this how we 
 					    activate it? */
   }
