@@ -94,6 +94,24 @@ class Convert
    an error message otherwise. */
 string fileErrorMsg ( const char *file_name, char mode ); 
 
+
+#include <qstringlist.h>
+/* For a given filename and a set of possible extensions, 
+   returns filename with a new suffix/extension set to newSuffix.
+
+   If the filename lacks the extention, returns filename + newSuffix */
+QString forceFilenameExt(QString filename, 
+                         QStringList suffixSet, 
+                         QString newSuffix);
+
+/* Just like the above function but provided for convenience */
+QString forceFilenameExt(QString filename, 
+                         QString suffix, 
+                         QString newSuffix);
+
+/* Simply removes whatever filename extention filename 
+   may or may not have and replaces it with newSuffix */
+QString forceFilenameExt(QString filename, QString newSuffix);
 #endif
 
 #endif

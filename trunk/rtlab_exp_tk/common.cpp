@@ -31,6 +31,7 @@
 #include <iostream.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <qregexp.h>
 
 /* this function is non-reentrant! */
 string operator+(const string & s, uint64 in)
@@ -155,4 +156,47 @@ string fileErrorMsg ( const char *file_name, char mode = 'r' )
         }
     }
   return message;
+}
+
+
+QString forceFilenameExt(QString filename, QString suffix, 
+                         QString newSuffix)
+{
+  return forceFilenameExt(filename, QStringList(suffix), newSuffix);
+}
+
+QString forceFilenameExt(QString filename, 
+                         QStringList suffixSet, QString newSuffix)
+{
+
+  if (newSuffix[0] != (QChar('.'))) newSuffix = QString(".") + newSuffix; 
+
+  QStringList::iterator it;
+
+  QString regExpString = "(";
+
+  for (it = suffixSet.begin(); it != suffixSet.end(); it++) {
+    if (it != suffixSet.begin()) regExpString += "|";
+    regExpString += (*it).replace(QRegExp("\\."), "\\.");
+  }
+  regExpString += ")$";
+  
+  QRegExp re (regExpString);
+
+  if (re.search(filename) > -1)
+    return filename.replace(re, newSuffix);
+
+  return filename + newSuffix;
+}
+
+/* Simply removes whatever filename extention filename 
+   may or may not have and replaces it with newSuffix */
+QString forceFilenameExt(QString filename, QString newSuffix)
+{
+  QRegExp re ("\\..*$");
+
+  if (newSuffix[0] != (QChar('.'))) newSuffix = QString(".") + newSuffix; 
+
+  return filename.replace(re, QString("")) + newSuffix;
+
 }

@@ -48,7 +48,6 @@
 #include <qfontmetrics.h>
 #include <qpixmap.h>
 #include <qtextbrowser.h>
-#include <qregexp.h>
 
 #include <iostream>
 #include <map>
@@ -193,18 +192,13 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
 
 
   { /* log window stuff */    
-    log->loadTemplate(settings.getTemplateFileName());
-    
+
+    log->loadTemplate(settings.getTemplateFileName()); // load the template
+
     /* set the default log savefile name -- which is datafile, minus 
        extension, plus .log */
-    QString logfile = settings.getDataFile();
-    
-    QRegExp re("(\\.nds|\\.nds-ascii.gz)$"); // match the extension
-
-    if (re.search(logfile) > -1)
-      logfile = logfile.replace(re, ".log"); // replace the extension
-    else
-      logfile = logfile + ".log";
+    QString logfile 
+      = forceFilenameExt(settings.getDataFile(), QString(".log"));   
 
     log->setOutFile(logfile);
     windowMenuAddWindow(log); /* add this window to the windowMenu 

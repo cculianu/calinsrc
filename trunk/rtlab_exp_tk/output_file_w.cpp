@@ -36,10 +36,6 @@
 #include <qmessagebox.h> 
 #include <qlabel.h>
 
-const char * const OutputFileW::NDS_ASCII_SUFFIX = ".nds-ascii.gz",
-           * const OutputFileW::NDS_BIN_SUFFIX   = ".nds";
-
-
 
 OutputFileW::OutputFileW(DAQSettings *s, QWidget * parent, const char * name, WFlags f)
   : QWidget(parent, name, f), settings(s)
@@ -77,7 +73,7 @@ OutputFileW::~OutputFileW()
   delete outputFileRadioGroup; outputFileRadioGroup = 0;  
 }
 
-QString OutputFileW::fileName() const { return outputFile->text(); }
+QString OutputFileW::fileName() const { return outputFile->text().stripWhiteSpace(); }
 
 DAQSettings::DataFileFormat OutputFileW::fileFormat() const 
 { 
@@ -85,7 +81,8 @@ DAQSettings::DataFileFormat OutputFileW::fileFormat() const
           ?  DAQSettings::Ascii : DAQSettings::Binary); 
 }
 
-void OutputFileW::setFileName(const QString & fn) { outputFile->setText(fn); }
+void OutputFileW::setFileName(const QString & fn) 
+{ outputFile->setText(fn.stripWhiteSpace()); }
 
 void OutputFileW::setFileFormat(DAQSettings::DataFileFormat fmt) 
 {  
@@ -98,7 +95,11 @@ void OutputFileW::setFileFormat(DAQSettings::DataFileFormat fmt)
 void
 OutputFileW::askUserForOutputFilename()
 {
-  QString filter = QString ("DAQ System Data Files (*%1 *%2)").arg(NDS_BIN_SUFFIX).arg(NDS_ASCII_SUFFIX);
+  QString filter = 
+    QString ("DAQ System Data Files (*%1 *%2)")
+    .arg(DAQSettings::fileFormatExts[DAQSettings::Binary])
+    .arg(DAQSettings::fileFormatExts[DAQSettings::Ascii]);
+
   QFileDialog fileDialog(this, 0, true);
 
   fileDialog.setMode(QFileDialog::AnyFile);
@@ -115,16 +116,16 @@ OutputFileW::askUserForOutputFilename()
 
 void OutputFileW::resuffixIze()
 {
-    QString s(outputFile->text()), desired_suffix( ( asciiRadio->isOn() ? NDS_ASCII_SUFFIX : NDS_BIN_SUFFIX ) );
-    if (s.endsWith(NDS_ASCII_SUFFIX)) s.remove(s.length() - QString(NDS_ASCII_SUFFIX).length(), s.length());
-    else if (s.endsWith(NDS_BIN_SUFFIX)) s.remove(s.length() - QString(NDS_BIN_SUFFIX).length(), s.length());
-    s += desired_suffix;
-    outputFile->setText(s);
+  QString desired_suffix ( DAQSettings::fileFormatExts[fileFormat()] );
+  
+  outputFile->setText(forceFilenameExt(outputFile->text(), desired_suffix));
 }
 
 void OutputFileW::toSettings()
 {
   if (settings) {
+    resuffixIze(); /* as per Dave's request.. everything is forced the right
+                      suffix! */
     settings->setDataFileFormat(fileFormat());
     settings->setDataFile(fileName());    
   }
