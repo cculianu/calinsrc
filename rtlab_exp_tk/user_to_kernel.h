@@ -24,6 +24,9 @@
   -------------------
   Defines all the shared parameters and structures  that are used for 
   user to kernel communication  in the DAQ System
+
+  All communication is _synchronous_.. meaning user process doesn't
+  resume until kernel process replied to command!
 */
 #ifndef _USER_TO_KERNEL_H
 #define _USER_TO_KERNEL_H 1
@@ -106,7 +109,7 @@ struct rtfifo_cmd {
 class RTLabKernelNotifier
 {
  public:
-   RTLabKernelNotifier(int control_fifo);
+   RTLabKernelNotifier(int control_fifo, int reply_fifo);
   ~RTLabKernelNotifier();
 
   /* channel on/off */
@@ -147,7 +150,7 @@ class RTLabKernelNotifier
 
  private:
   rtfifo_cmd cmd;
-  int fd;
+  int fd, replyfd;
 
   int do_cmd();
 };

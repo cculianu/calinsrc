@@ -64,11 +64,16 @@ class APDInterleaver: public QObject
                  DAQSystem *ds = 0);
   
  public slots:
-  void spikeSet(uint, double);
-  void spikeOff(uint); 
   void gotAPD(MCSnapShot *);
-  
+
+ private slots:
+  void calculateChannels();
+  void graphAPDs(); /* draws them all to graph */
+  void newBeat(uint b);
+ 
  private:
+  void spikeSet(uint);
+
   DAQSystem *ds;
   ECGGraph *graph;
   const APDMonitor *monitor;
@@ -76,14 +81,14 @@ class APDInterleaver: public QObject
   struct APDPair {
     APDPair() : ct(0) {};
     int apd[2]; /* 0 even, 1 odd */
+    QColor color[2];
     unsigned char ct; // count -- 0 even 1 odd
   };
 
   typedef map<unsigned int, APDPair> ChannelAPDs;
   ChannelAPDs channelAPDs;
-
+  uint lastBeatGraphed;
   void reset(); // resets the state of everything..
-  void graphAPDs(); /* draws them all to graph */
 };
 
 #include <vector>
@@ -105,23 +110,21 @@ class APDMonitor : public QObject
   int orderFirst() const { return first; }
   int orderLast() const { return last; }
   vector<uint> orderVector() const;
-
+  QString orderString() const;
   QString masterOrder() const;
 
  public slots:
   void gotAPD(MCSnapShot *m);
-  void spikeSet(uint, double);
-  void spikeOff(uint);
   /* Warning! Pass a valid, comma-delimited string */
   void setMasterOrder(const QString & order);
 
  signals:
   void beatNumberChanged(uint beat);
   void masterOrderChanged(const QString &);
-
- private: 
+  void orderChanged(const QString &);
+ private slots: 
   void rebuildOrder();
-
+ private:
   DAQSystem *ds;
  /* maps channel-id -> electrode number/order */
   typedef map<uint, uint> Order;
@@ -162,7 +165,8 @@ public:
   APDMonitor     *apd_monitor;
 
 private slots:
-  void ffwdGraph(uint); // fast forwards a particular channel graph
+  void ffwdGraph(uint); // synchs a particular channel graph to current beat
+  void ffwdAllGraphs(); // synchs all channel graphs to current beatnum
   void periodic(); /* does stuff periodically.. called by the timer */
   void changeAIChan(int); /* applies combo box change to 
                                          rt process avn_stim.o */
