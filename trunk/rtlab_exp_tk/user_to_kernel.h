@@ -42,8 +42,10 @@ extern "C" {
 typedef enum {
   RTLAB_SET_CHAN = 0,
   RTLAB_SET_CHAN_ALL,
-  RTLAB_SET_CHANSPEC,
-  RTLAB_SET_CHANSPEC_ALL,
+  RTLAB_SET_GAIN,
+  RTLAB_SET_GAIN_ALL,
+  RTLAB_SET_AREF,
+  RTLAB_SET_AREF_ALL,
   RTLAB_SET_SPIKE,
   RTLAB_SET_SPIKE_ALL,
   RTLAB_SET_SPIKE_POLARITY,
@@ -85,7 +87,8 @@ struct rtfifo_cmd {
   rtlab_user_cmd command;
   unsigned int chan; /* Not used for every command */
   union {
-    unsigned int chanspec; /* for RTLAB_SET_CHANSPEC */
+    unsigned int gain; /* for RTLAB_SET_GAIN* */
+    unsigned int aref; /* for RTLAB_SET_AREF* */
     SpikePolarity polarity; /* for RTLAB_SET_SPIKE_POLARITY */
     char enabled;  /* for RTLAB_SET_CHAN and RTLAB_SET_SPIKE */
     unsigned int blanking; /* for RTLAB_SET_SPIKE_BLANKING */
@@ -111,10 +114,10 @@ class RTLabKernelNotifier
   int setAllChans(bool on);
 
   /* chanspecs (gain, aref) */
-  int setChanspec(uint chanspec);
-  int setChanspec(uint chan, uint range, uint aref);
-  int setAllChanspecs(uint chanspec);
-  int setAllChanspecs(uint range, uint aref);
+  int setGain(uint chan, uint range);
+  int setAllGains(uint range);
+  int setAREF(uint chan, uint aref);
+  int setAllAREFs(uint aref);
   
   /* spike on/off */
   int setSpike(uint chan, bool on);

@@ -103,17 +103,25 @@ static void dispatch_command(const struct rtfifo_cmd *cmd,
       else
 	clear_bit(i, rtp_shm->ai_chans_in_use);
     break;
-  case RTLAB_SET_CHANSPEC:
+  case RTLAB_SET_GAIN:
     CHKCHAN;
-    rtp_shm->ai_chan[cmd->chan] = CR_PACK(cmd->chan, 
-					  CR_RANGE(cmd->u.chanspec),
-					  CR_AREF(cmd->u.chanspec));
+    rtp_shm->ai_chan[cmd->chan] = 
+      CR_PACK(cmd->chan, cmd->u.gain, CR_AREF(rtp_shm->ai_chan[cmd->chan]));
     break;
-  case RTLAB_SET_CHANSPEC_ALL:
-    for (i = 0; i < rtp_shm->n_ai_chans; i++) 
-      rtp_shm->ai_chan[i] = CR_PACK(i, 
-				    CR_RANGE(cmd->u.chanspec),
-				    CR_AREF(cmd->u.chanspec));
+  case RTLAB_SET_GAIN_ALL:
+    for (i = 0; i < rtp_shm->n_ai_chans; i++)     
+      rtp_shm->ai_chan[i] = 
+        CR_PACK(i, cmd->u.gain, CR_AREF(rtp_shm->ai_chan[i]));
+    break;
+  case RTLAB_SET_AREF:
+    CHKCHAN;
+    rtp_shm->ai_chan[cmd->chan] = 
+      CR_PACK(cmd->chan, CR_RANGE(rtp_shm->ai_chan[cmd->chan]), cmd->u.aref);
+    break;
+  case RTLAB_SET_AREF_ALL:
+    for (i = 0; i < rtp_shm->n_ai_chans; i++)     
+      rtp_shm->ai_chan[i] = 
+        CR_PACK(i, CR_RANGE(rtp_shm->ai_chan[i]), cmd->u.aref);
     break;
   case RTLAB_SET_SPIKE:
     CHKCHAN;

@@ -98,7 +98,7 @@ class ShmController
 			      uint aref);
   virtual void setChannelAREF(int subdevtype, uint chan, uint aref) = 0;
   virtual void setAREFAll(ComediSubDevice::SubdevType s, uint aref);
-  virtual void setAREFAll(int subdevtype, uint aref);
+  virtual void setAREFAll(int subdevtype, uint aref) = 0;
 
   /* Spikes.. */
   virtual void clearSpikeSettings() = 0;
@@ -157,6 +157,7 @@ class ShmControllerWithFifo : public ShmController
   
   /* AREF values should come from comedi.h as the AREF_* set of #defines */
   void setChannelAREF(int subdevtype, uint chan, uint aref);
+  void setAREFAll(int subdevtype, uint aref);
 
   /* Spikes.. */
   void clearSpikeSettings();
@@ -252,17 +253,6 @@ ShmController::setAREFAll(ComediSubDevice::SubdevType s, uint a)
 {
   setAREFAll(ComediSubDevice::sd2int(s), a);
 }
-
-inline
-void 
-ShmController::setAREFAll(int s, uint a)
-{
-  int i, nc = numChannels(s);
-
-  for (i = 0; i < nc; i++) 
-    setChannelAREF(s, i, a);
-}
-
 
 inline
 bool

@@ -26,10 +26,9 @@
 #include <qpixmap.h>
 #include <qpoint.h>
 #include <qsize.h>
-#include <qrect.h>
+#include <qregion.h>
 #include <qpainter.h>
 
-#include <map>
 #include <vector>
 
 
@@ -38,12 +37,15 @@ using namespace std;
 class LayerGenerator : public QObject 
 {
 public:  
+  typedef QRegion Area;
+  typedef vector<Area> Areas;
+
   virtual ~LayerGenerator(){ };
 
   virtual void setSize(const QSize & size) { pm.resize(size); generate(); }
   QPixmap & layer()  { return pm; };
 
-  const vector<QRect> & changedAreas() const { return changed_rects; }
+  const Areas & changedAreas() const { return changed_rects; }
   void clearChanges() { changed_rects.clear(); }
 
   int layerNumber() const { return layer_number; };
@@ -58,7 +60,7 @@ protected:
     { pm.setOptimization(QPixmap::BestOptim); };
 
   QPixmap pm;
-  vector<QRect> changed_rects;
+  Areas changed_rects;
   QPainter painter;
 
 private:
@@ -69,18 +71,22 @@ private:
 class LayerRenderer : public QWidget 
 {
 public:
+  typedef LayerGenerator::Area Area;
+  typedef LayerGenerator::Areas Areas;
+
   LayerRenderer(QWidget * parent = 0, const char * name = 0, WFlags f = 0);
   virtual ~LayerRenderer();
   void render();
   void renderAll();
+  void refresh();
 
   /* Reimplemented... from QObject: */
   virtual void insertChild(QObject *);
   virtual void removeChild(QObject *);
 
 protected:
-  typedef map<int, LayerGenerator *> Layers_map;
-  typedef map<int, LayerGenerator *>::iterator Layers_it;
+  typedef vector<LayerGenerator *> Layers_map;
+  typedef vector<LayerGenerator *>::iterator Layers_it;
 
   QPixmap back_buffer;
   Layers_map layers;
@@ -98,7 +104,7 @@ private:
   void addLayer(LayerGenerator * g);
   void removeLayer(int layer); 
 
-  vector<QRect> refresh_rects;
+  Area refresh_area;
   int n_pixels_in_rects;
   void buildRefreshRects();
 

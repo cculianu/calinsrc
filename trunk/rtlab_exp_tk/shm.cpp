@@ -323,12 +323,22 @@ void ShmControllerWithFifo::setChannel(int t, uint chan, bool onoroff)
 
 void ShmControllerWithFifo::setChannelRange(int subdevtype, uint chan, uint r)
 {
-  rtlab->setChanspec(CR_PACK(chan, r, channelAREF(subdevtype, chan)));
+  (void)subdevtype;
+  rtlab->setGain(chan, r);
 }
+
+void 
+ShmControllerWithFifo::setAREFAll(int s, uint a)
+{
+  (void)s;
+  rtlab->setAllAREFs(a);
+}
+
 
 void ShmControllerWithFifo::setChannelAREF(int subdevtype, uint chan, uint a)
 {
-  rtlab->setChanspec(CR_PACK(chan, channelRange(subdevtype,chan), a));
+  (void)subdevtype;
+  rtlab->setAREF(chan, a);
 }
 
 void ShmControllerWithFifo::clearSpikeSettings()
