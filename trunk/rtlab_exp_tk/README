@@ -6,39 +6,39 @@ BEFORE YOU COMPILE
 Currently the makefiles build the "daq_system" application.  In order to get
 this to compile properly you must do the following:
 
-1. Make sure RT-Linux (http://www.rtlinux.com) v 3.1 is installed.  Earlier versions should probably work too, but your mileage may vary.
+1. Make sure you have a Realtime Linux variant.  Either RT-Linux (http://www.rtlinux.com) v 3.1 or RTAI 2.4.19 needs to be installed.  Earlier versions should probably work too, but your mileage may vary.
 
 2. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
 
-3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  I have tried Qt 2.3.0 and it doesn't work. Make sure the environment variable QTDIR is set before you run 'make' and that it points to your Qt installed directory. (On Redhat it has been known to be /usr/lib/qt-3.0.1/ or /usr/lib/qt3).
+3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  Be sure you know WHERE Qt is installed as the configure script asks you for this information.
 
 
-Next, you must edit the following files:
+Next, you must run the following command from WITHIN the source tree to configure the build system:
 
-1. Edit Makefile.tmake and change the RTL_MK = line to point to the place where your rtl.mk file is.  This file was generated when you installed and compiled RT-Linux.
+	sh configure (or just ./configure)
 
-2. Edit Makefile.rt_process and modify the line that begins with COMEDI_DEVEL_HEADERS=.  These are the headers that go with comedi.  They are kernel headers for kcomedilib stuff and don't get installed in the usual /usr/include. Please point this define to your comedi source directory in the include/ subdirectory.
-
-For example, 
-
-COMEDI_DEVEL_HEADERS = /usr/src/comedi/include
-
-would be one possible place you put these headers.  Actually since comedi doesn't do it for you, you can put the headers anywhere you want.
-
+Follow the on-screen prompts and input the required information.  If you installed comedi, kcomedilib, RTAI/RTLinux, and you have a valid kernel source tree, everything should build just fine.
 
 COMPILING
 ---------
-Now that the above is done, type 'make' and hope for the best.  The binary that will be built will be "daq_system" which is the user-level program for just displaying some graphs that come from your DAQ board.  
+Now that the above is done, type 'make' and hope for the best.  The binary that will be built will be "daq_system" which is the user-level program for just displaying some graphs that come from your DAQ board.
 
 
 RUNNING
 -------
-In order for this sample program to even run, you need to insmod the real-time part of this application, "rt_process.o", which is also built into the current directory.  Before rt_process.o will work, however, you have to make sure the following criteria are met:
+In order for this sample program to even run, you need to insmod the real-time part of this application, "rlab.o", which is also built into the current directory.  Before rlab.o will work, however, you have to make sure the following criteria are met:
 
 1) You have the following modules installed:
-	kcomedilib, mbuff, rtl_fifo, rtl_sched, rtl_posixio, rtl_time, comedi, rtl
 
-2) Also make sure your comedi device is /dev/comedi0 and that its driver is loaded and working.
+	- RTLinux
+
+			kcomedilib, comedi, mbuff, rtl_fifo, rtl_sched, rtl_posixio, rtl_time, rtl
+
+	- RTAI
+			rtai rtai_sched rtai_pthread rtai_fifos rtai_shm comedi kcomedilib
+
+
+2) Also make sure your comedi device is /dev/comedi0 and that its driver is loaded and correctly configured/working.
 
 
 COMING SOON
@@ -46,9 +46,9 @@ COMING SOON
 More in the way of an actual toolkit.  Including documentation, more C++ classes and templates, and more development to the core architecture. Also more applications will be built as reference implementations of software that uses the toolkit.
 
 
-Please come back to http://www.rtlab.org soon to check for changes.  Also if you are interested in updates, please email me and I may get around to creating a mailing list for this software.  We hope this software will grow very much in the coming months!
+Please come back to http://www.rtlab.org soon to check for changes.  Also if you are interested in updates, please suubscribe to the mailing list.  We hope this software will grow very much in the coming months!
 
 
 Calin A. Culianu
 calin@rtlab.org
-November, 2001
+August, 2002
