@@ -58,8 +58,10 @@ static const char * const rtfDeviceFilePrefix = "/dev/rtf";
        whould be of pre-allocated size writeOnlyArrSize
 
        This auto-dies with a message on error.
+  RETURNS
+    0 on success, an errno value on error.
 ----------------------------------------------------------------------------*/
-void 
+int
 openFifos
 (
  const unsigned int readOnlyDevNumbers[],
@@ -115,22 +117,21 @@ openFifos
 	       "%d", 
 	       currentDevNums[j]
 	      );
-#ifdef DAQ_DEBUG_FLAG
-      // DEBUG: log what we are trying to do
-      fprintf (stderr, "opening %s read-only\n", filenameBuffer);
-      // END DEBUG.
-#endif
       if ( ( currentDescs[j] = open(filenameBuffer, currentMode) ) < 0 ) {
-	fprintf(
-		stderr, 
+	char tmpErrStr[512];
+	int tmp_errno = errno;
+	
+	sprintf(
+		tmpErrStr, 
 		"read-only fifo_index %d: Error opening %s", 
 		j, 
 		filenameBuffer
 	       );
 	/* get the error message from errno */
-	perror ("");
-	exit(1);
+	perror (tmpErrStr);
+	return tmp_errno;
       }   
     }
   }
+  return 0;
 }

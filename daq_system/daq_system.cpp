@@ -134,9 +134,9 @@ DAQSystem::DAQSystem(GraphingOptions &options, SharedMemStruct *sh_mem_param, QW
     sh_mem->signal_params[signal].spike_threshold=SCAN_UNITS;
     sh_mem->signal_params[signal].spike_blanking=InitSpikeBlanking;
     sh_mem->signal_params[signal].spike_index=0;
-    sh_mem->signal_params[signal].channel_gain=INITIAL_CHANNEL_GAIN;
+    sh_mem->signal_params[signal].channel_gain = INITIAL_CHANNEL_GAIN;
     sh_mem->ai_chan[signal]=       //send gain to the board via COMEDI
-      CR_PACK(signal,sh_mem->signal_params[signal].channel_gain,AREF_GROUND);
+      CR_PACK(signal,INITIAL_CHANNEL_GAIN,AREF_GROUND);
  
 
      //set up properties for each graph
