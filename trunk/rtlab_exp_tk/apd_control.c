@@ -316,21 +316,19 @@ static void calculate_apd_and_control_perturbation(int which_ai_chan, MultiSampl
 	  //delta_pi cannot be larger than the conduction time (or less than -1 times cond. time)
 	  //otherwise one of the sites (whichever is stimulated last) will be refractory to its
 	  //own stimulus due to the previous arrival of the stimuls from the other site..
-	  if ( stim_state[which_ao_chan].delta_pi > shm->ao0_ao1_cond_time )
-	    stim_state[which_ao_chan].delta_pi = shm->ao0_ao1_cond_time - 1;
-	  if ( stim_state[which_ao_chan].delta_pi < (-1*(shm->ao0_ao1_cond_time)) )
-	    stim_state[which_ao_chan].delta_pi = 1 - shm->ao0_ao1_cond_time;
+	  if ( stim_state[1].delta_pi > shm->ao0_ao1_cond_time )
+	    stim_state[1].delta_pi = shm->ao0_ao1_cond_time - 1;
+	  if ( stim_state[1].delta_pi < (-1*(shm->ao0_ao1_cond_time)) )
+	    stim_state[1].delta_pi = 1 - shm->ao0_ao1_cond_time;
 
-	  if (stim_state[0].control_interval_counter) //if AO0 is being controlled, then the
-	    //stimulus time for AO1 is a perturbation of that time
-	    stim_state[which_ao_chan].control_interval_counter = stim_state[0].control_interval_counter+stim_state[which_ao_chan].delta_pi;
-	  else //otherwise the stimulus time for AO1 is a perturbation based on the pacing
-	    //interval time for AO1
-	stim_state[which_ao_chan].control_interval_counter = stim_state[0].pacing_interval_counter+stim_state[which_ao_chan].delta_pi;
+	  //control interval is the pacing interval for AO0 plus the perturbation to AO0 pacing
+	  //(if there is  a perturbation, that is), plus this perturbation
+	  stim_state[1].control_interval_counter = stim_state[0].pacing_interval_counter+stim_state[0].delta_pi+stim_state[1].delta_pi;
+
 	}
 
-	//make pacing_interval_counter > control_interval_counter if this is a positive perturbation
-	//so that the natural pacing doesn't precede the control (unless we're continue_underlying)
+	//make pacing_interval_counter > control_interval_counter if this is a pos. perturbation
+	//so that the natural pacing doesn't precede control (unless we're continue_underlying)
 	if ( (stim_state[which_ao_chan].delta_pi>=1) && (!(shm->continue_underlying[which_ao_chan])) )
 	  stim_state[which_ao_chan].pacing_interval_counter = stim_state[which_ao_chan].control_interval_counter + 1;
 
