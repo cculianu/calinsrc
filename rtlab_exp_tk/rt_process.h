@@ -57,7 +57,7 @@ typedef comedi_t* COMEDI_T;
 
 # define INITIAL_CHANNEL_GAIN 0  //initial channel gain (COMEDI)
 # define INITIAL_SAMPLING_RATE_HZ 1000
-# define INITIAL_SPIKE_BLANKING (INITIAL_SAMPLING_RATE_HZ/100) 
+# define INITIAL_SPIKE_BLANKING (10) 
 /* initial interval for disabling
    v_spike detect ... i.e. 1/20 sec, 50ms */
 
