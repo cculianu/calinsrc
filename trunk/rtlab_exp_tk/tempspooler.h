@@ -161,9 +161,12 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
       char buf[sizeof(T) * num_at_a_time / sizeof(char)];
       int n_read;
       while((n_read = ::gzread(gzfile, buf, sizeof(T) * num_at_a_time)) != 0){
-        Assert<FileException>(n_read > 0, 
-                              "Read error in "__FILE__, 
-                              gzerror(gzfile, &errno));
+        if (n_read > 0) {
+          int err;
+          const char *errmsg = gzerror(gzfile, &err);
+          if (err == Z_ERRNO) errmsg = strerror(errno);
+          throw FileException("Read error in "__FILE__, errmsg);
+        }
         int i;
         for (i = 0; i < static_cast<int>(n_read / sizeof(T)); i++) 
           operation(reinterpret_cast<T *>(buf)[i]);        
