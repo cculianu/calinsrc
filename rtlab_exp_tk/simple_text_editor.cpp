@@ -224,6 +224,7 @@ SimpleTextEditor::insertAtCursor (const QString & text)
   int row, col;
   mle.getCursorPosition(&row, &col);
   mle.insertAt(text, row, col);
+  mle.setCursorPosition(row, col + text.length());
 }
 
 bool
