@@ -243,7 +243,7 @@ int SplitOp::doIt()
     DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
 
     scan_index_t 
-      i, 
+      i = 0, 
       real_start = ( v.size() ? v[0].scan_index : in.scanIndex() );
 
     in.setInFile(state()->infile); // reopen it now that we know the real start
