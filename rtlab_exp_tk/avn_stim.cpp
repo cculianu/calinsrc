@@ -100,15 +100,23 @@ int SearchableComboBox::findItem(const QString & str, int criteria)
 
 extern "C" {
 
+  /* Stuff needed by plugin engine... */
+  int ds_plugin_ver = DS_PLUGIN_VER;
+
   const char * name = "AV Node Control Experiment",
              * description =
-              "Some gui controls for interfacing with the AV Node stimulation "
-              "real-time module 'avn_stim.o' addon developed for a custom "
-              "scientific experiment at Cornell University.  Authors are "
-              "David J. Christini, Ph.D and Calin A. Culianu.";
-
+              "Some GUI controls for interfacing with the AV Node stimulation "
+              "real-time module named 'avn_stim.o'.  This rtl/rt_process "
+              "addon was developed for an experiment in the Cardiac "
+              "Electrodynamics Laboratory of  Cornell University.",
+             * author =
+              "David J. Christini, Ph.D and Calin A. Culianu.",
+             * requires =
+              "avn_stim.o be installed into the kernel.  Analog output.";
+  
   Plugin * entry(QObject *o) 
   { 
+
     /* Top-level widget.. parent is root */
     DAQSystem *d = dynamic_cast<DAQSystem *>(o);
 

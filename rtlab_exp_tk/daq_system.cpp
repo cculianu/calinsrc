@@ -20,7 +20,6 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-
 #include <qapplication.h>
 #include <qmainwindow.h>
 #include <qworkspace.h>
@@ -33,6 +32,9 @@
 #include <qmessagebox.h>
 #include <qtimer.h>
 #include <qfile.h>
+#include <qdir.h>
+#include <qstringlist.h>
+#include <qtextedit.h>
 
 #include <iostream>
 #include <map>
@@ -844,29 +846,82 @@ PluginMenu::PluginMenu(DAQSystem * ds,
     daqSystem(ds)
 
 {
+   
   plugin_cmenu = new QPopupMenu(0, QString(name) + " - Plugin Menu Context");
   plugin_cmenu->insertItem("Show Window", this, SLOT(showSelectedWindow()));
+  plugin_cmenu->insertItem("Load", this, SLOT(carefullyLoadSelected()));
   plugin_cmenu->insertItem("Unload", this, SLOT(removeSelectedPlugin()));
   plugin_cmenu->insertSeparator();
   plugin_cmenu->insertItem("Unload All", this, SLOT(unloadAll()));
   
-  QGridLayout *layout = new QGridLayout(this, 3, 2);
-  QLabel *label = new QLabel("Currently Loaded Plugins:", this);
-  plugin_box = new QListBox(this, "Plugin Box");
-  QPushButton *load_button = new QPushButton("Load a plugin...", this);    
+  QGridLayout *layout = new QGridLayout(this, 4, 2);
+  QLabel *label = new QLabel("All Scanned Plugins:", this);
+  plugin_box = new QListView(this, "Plugin Box");
+  plugin_box->addColumn("Plugin Name");
+  plugin_box->addColumn("Is Loaded?");
+  plugin_box->addColumn("Shared object");
+
+  details = new QTextEdit(this);
+  details->setTextFormat(Qt::RichText);
+  details->setReadOnly(true);
+
+  QPushButton *load_button = new QPushButton("Load Selected", this);    
   QPushButton *remove_button = new QPushButton("Unload selected", this);
+
   layout->addMultiCellWidget(label, 0, 0, 0, 1);
   layout->addMultiCellWidget(plugin_box, 1, 1, 0, 1);
   layout->setRowStretch(1, 1);
-  layout->addWidget(load_button, 2, 0);
-  layout->addWidget(remove_button, 2, 1);
+  layout->addMultiCellWidget(details, 2, 2, 0, 1);
+  layout->addWidget(load_button, 3, 0);
+  layout->addWidget(remove_button, 3, 1);
 
 
-  connect(load_button, SIGNAL(clicked()), this, SLOT(queryLoadPlugin()));
+  vector<QString> plugin_search_path;
+
+  { 
+    /* build plugin search path */    
+    plugin_search_path.push_back(QDir::currentDirPath());
+#ifdef DAQ_PLUGINS_PREFIX
+    if (QDir(DAQ_PLUGINS_PREFIX).isReadable())
+      plugin_search_path.push_back(DAQ_PLUGINS_PREFIX);
+#endif
+    QString user_plugins_dir = DAQ_SYSTEM_USER_DIR + "/plugins";
+    struct stat statbuf;
+    if (!stat(user_plugins_dir.latin1(), &statbuf) && S_ISDIR(statbuf.st_mode))
+      plugin_search_path.push_back(user_plugins_dir);           
+  }
+
+  {
+    /* search for plugins and populate the listview */
+    vector<QString>::iterator it;
+
+    for (it = plugin_search_path.begin(); it!=plugin_search_path.end(); it++) {
+      QDir dir (*it, "*.so", QDir::Name | QDir::IgnoreCase, QDir::Files | QDir::Readable);
+      uint i;
+      for (i = 0; i < dir.count(); i++) {
+        PluginInfo info;
+        if (inspectPlugin(*it + "/" + dir[i], info) && 
+            findScannedByName(info.name) == scanned_plugins.end() ) { 
+          (void)new QListViewItem(plugin_box, info.name, "No", info.short_filename);
+          scanned_plugins.push_back(info);          
+        }
+      }
+    }
+  }
+
+  if (!scanned_plugins.size()) details->setText("No Plugins were found.");
+  
+
+  connect(load_button, SIGNAL(clicked()), this, SLOT(carefullyLoadSelected()));
   connect(remove_button, SIGNAL(clicked()), this, SLOT(removeSelectedPlugin()));
   connect(plugin_box, 
-          SIGNAL(contextMenuRequested (QListBoxItem *, const QPoint &)), 
-          this, SLOT(pluginMenuContextReq(QListBoxItem *, const QPoint &)));  
+          SIGNAL(contextMenuRequested (QListViewItem *, const QPoint &,int)), 
+          this, 
+          SLOT(pluginMenuContextReq(QListViewItem *, const QPoint &, int)));
+  connect(plugin_box, SIGNAL(currentChanged(QListViewItem *)),
+          this, SLOT(showDetails(QListViewItem *)));
+  connect(plugin_box, SIGNAL(selectionChanged(QListViewItem *)),
+          this, SLOT(showDetails(QListViewItem *)));
 }
 
 PluginMenu::~PluginMenu()
@@ -883,57 +938,115 @@ void PluginMenu::raisenShow()
   setFocus(); 
 }
 
-bool PluginMenu::queryLoadPlugin()
+void PluginMenu::showDetails(QListViewItem *item)
 {
-  bool ret = false;
+  scanned_plugins_it_t sp_it;
 
-  QString plugin_file  
-    = QFileDialog::getOpenFileName ( QString::null, "Plugins (*.so)", 0, 0, 
-                                     "Select a DAQ System plugin to load");
+  if (!item) goto clear; 
 
-  if (plugin_file.isNull()) return ret;
+  sp_it = findScannedByName(item->text(0));
+
+  if (sp_it == scanned_plugins.end()) goto clear;
+
+  details->setTextFormat(Qt::RichText);
+  details->setText(QString("<h3>Plugin Details</h3><br>"
+                           "<b>Plugin Name:</b> %1 (%2)<br>"
+                           "<b>Filename:</b> %3<br>"
+                           "<b>Description:</b> %4<br>"
+                           "<b>Requires:</b> %5<br>"
+                           "<b>Author(s):</b> %6</br>")
+                   .arg(sp_it->name)
+                   .arg(sp_it->short_filename)
+                   .arg(sp_it->filename)
+                   .arg(sp_it->description)
+                   .arg(sp_it->requires)
+                   .arg(sp_it->author));
+  return;
+ clear:
+  details->setText(""); 
+}
+
+void PluginMenu::carefullyLoadSelected()
+{
+  QListViewItem *item = plugin_box->currentItem();
+  scanned_plugins_it_t sp_it;
+
+  if (!item 
+      || (sp_it = findScannedByName(item->text(0))) == scanned_plugins.end() )
+    return;
+  
+  QString plugin_file  = sp_it->filename;
+  
+  if (plugin_file.isNull() || pluginFindByName(sp_it->name)) 
+    return; // already loaded
 
   try {
-    loadPlugin(plugin_file);
-    ret = true;
+    Plugin * plugin;
+    void * handle;
+    loadPlugin(plugin_file, plugin, handle);
+    plugins_and_handles[plugin] = (int *)handle;
+    item->setText(1, "Yes");
+#ifdef DEBUG
+    cerr << "Plugin '" << plugin->name() << "' loaded with address " << reinterpret_cast<void *>(plugin) << endl;
+#endif
   } catch (Exception & e) {
     e.showError();   
   }
-  return ret;
 }
 
 void PluginMenu::showSelectedWindow()
 {
-  Plugin *p = pluginFindByName(plugin_box->currentText());
-  QWidget *w = ( p ? dynamic_cast<QWidget *>(p) : 0);
+  QListViewItem *item = plugin_box->currentItem();
 
-  if (w) daqSystem->windowMenuFocusWindow(w);
+  if (!item) return;
+
+  Plugin *p = pluginFindByName(item->text(0));
+  QWidget *w = ( p ? dynamic_cast<QWidget *>(p) : 0);
+    
+  if (w) {
+    daqSystem->windowMenuFocusWindow(w); // just in case it is a child of ds
+    w->setFocus(); w->raise(); // in case it is not a child of ds
+  }  
+
 }
+
 void PluginMenu::removeSelectedPlugin()
 {    
-  Plugin *p = pluginFindByName(plugin_box->currentText());
-  
-  if (p) unloadPlugin(p);     
+  QListViewItem *item = plugin_box->currentItem();
+
+  if (!item) return;
+
+  Plugin *p = pluginFindByName(item->text(0));  
+  if (p) {
+    unloadPlugin(p);     
+    item->setText(1, "No");
+  }
 }
 
-void PluginMenu::pluginMenuContextReq(QListBoxItem *item, const QPoint & point)
+void PluginMenu::pluginMenuContextReq(QListViewItem *item, 
+                                      const QPoint & point,
+                                      int col)
 {  
-  Plugin *p = (item ? pluginFindByName(item->text()) : 0 );
+  Plugin *p = (item ? pluginFindByName(item->text(0)) : 0 );
   QWidget *w = (p ? dynamic_cast<QWidget *>(p) : 0);
 
   plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(0), /* show window */
-                               w && plugin_box->currentItem() != -1 );
-  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(1), /* unload */
+                               w && plugin_box->currentItem());
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(1), /* load */
+                               !p);
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(2), /* unload */
                                p);
-  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(3), /* unload all */
-                               plugin_box->count());
+  plugin_cmenu->setItemEnabled(plugin_cmenu->idAt(4), /* unload all */
+                               plugins_and_handles.size());
   plugin_cmenu->popup(point);
+  col++; // keep compiler happy..
 }
 
-void PluginMenu::loadPlugin(const char *filename) throw (PluginException)
+void PluginMenu::loadPlugin(const char *filename, Plugin * & plugin, 
+                            void * & handle) throw (PluginException)
 {
-  void *handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
-  Plugin *plugin = NULL;
+  handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
+  plugin = NULL;
   plugin_entry_fn_t entry = NULL;
   const char *name = NULL;
   map<Plugin *, int *>::iterator i;
@@ -969,14 +1082,54 @@ void PluginMenu::loadPlugin(const char *filename) throw (PluginException)
     throw;
   }
 
-  plugins_and_handles[plugin] = (int *)handle;
-  plugin_box->insertItem(plugin->name());
-  
-  
+}
 
-#ifdef DEBUG
-  cerr << "Plugin '" << plugin->name() << "' loaded with address " << reinterpret_cast<void *>(this) << endl;
-#endif
+bool PluginMenu::inspectPlugin(const char *filename, PluginInfo & info) const
+{
+  void *handle = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
+  const char **n, **d, **a, **r;
+  const int *v; 
+  
+  bool ret = false;
+  
+  if (handle && 
+      dlsym(handle, "entry") && 
+      (v = (const int *)dlsym(handle, "ds_plugin_ver")) &&
+      *v == DS_PLUGIN_VER &&
+      (n = (const char **)dlsym(handle, "name"))) {
+
+    info.name = *n;
+    
+    d = reinterpret_cast<const char **>(dlsym(handle, "description"));
+    if (d) info.description = *d; else info.description = QString::null; 
+    a = reinterpret_cast<const char **>(dlsym(handle, "author"));
+    if (a) info.author = *a; else info.author = QString::null;
+    r = reinterpret_cast<const char **>(dlsym(handle, "requires"));
+    if (r) info.requires = *r; else info.requires = QString::null;
+
+    info.filename = filename;
+    info.short_filename = info.filename;
+
+    info.short_filename = QStringList::split("/", info.short_filename).back();
+
+    ret = true;
+  }
+
+  if (handle) dlclose(handle);
+
+  return ret;    
+}
+
+PluginMenu::scanned_plugins_it_t 
+PluginMenu::findScannedByName(const QString & name) 
+{
+  scanned_plugins_it_t it;
+  
+  for (it = scanned_plugins.begin(); it != scanned_plugins.end(); it++) {
+    if (it->name == name) break;
+  }
+
+  return it;
 }
 
 void PluginMenu::unloadPlugin(Plugin *p) 
@@ -992,8 +1145,8 @@ void PluginMenu::unloadPlugin(Plugin *p)
       plugins_and_handles.erase(i--);
     }
   
-  QListBoxItem *item = plugin_box->findItem(name);
-  if ( item )  delete item;
+  QListViewItem *item = plugin_box->findItem(name, 0);
+  item->setText(1, "No");
   
 }
 
@@ -1003,11 +1156,11 @@ void PluginMenu::unloadAll()
     unloadPlugin( plugins_and_handles.begin()->first );  
 }
 
-Plugin * PluginMenu::pluginFindByName(QString name)
+Plugin * PluginMenu::pluginFindByName(QString name) 
 {
   map<Plugin *, int *>::iterator i;
   for (i = plugins_and_handles.begin(); i != plugins_and_handles.end(); i++) 
     if (name == i->first->name()) 
-      return i->first;; /* all plugins call unloadPlugin internally */ 
+      return i->first; /* all plugins call unloadPlugin internally */ 
   return 0;
 }
