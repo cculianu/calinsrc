@@ -55,6 +55,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   mainToolBar("DAQ System Toolbar", this, Top),
   addChannel(&mainToolBar),
   toolBarButtonGroup(this),
+  statusBar(this),
+  statusBarScanIndex(&statusBar),
   readerLoop(currentdevice.find(ComediSubDevice::AnalogInput).n_channels, 
 	     settings),
   daqSystemIsClosingMode(false) /* for now, this becomes true when
@@ -75,7 +77,9 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   setToolBarsMovable(true);
   addToolBar(&mainToolBar);
 
-
+  connect(&readerLoop, SIGNAL(scanIndexChanged(scan_index_t)),
+	  this, SLOT(setStatusBarScanIndex(scan_index_t)));
+  
   /* empty menubar on the fly? */
   menuBar();
 
@@ -323,6 +327,13 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 
 }
 
+
+void
+DAQSystem::setStatusBarScanIndex(scan_index_t index)
+{
+  statusBarScanIndex.setText(QString("Scan Index: %1").arg((ulong)index));
+}
+
 ButtonOpGroup::ButtonOpGroup(QWidget *parent = 0, const char *name = 0)
   : QButtonGroup(parent, name) 
 {
@@ -412,7 +423,16 @@ ReaderLoop::loop()
       }
     }
   }
-  
+
+  { /* emit scan index update */
+    static scan_index_t saved_curr_index = 0;
+    scan_index_t si = ShmMgr::scanIndex();
+    if (saved_curr_index != si) {
+      saved_curr_index = si;
+      emit scanIndexChanged(saved_curr_index);
+    }
+  }
+
   QTimer::singleShot(source->suggestPollWaitTime(), 
 		     this, SLOT(loop()));
 }

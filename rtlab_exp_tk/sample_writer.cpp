@@ -54,7 +54,7 @@ SampleGZWriter::init()
   bufEnd = 0;
   buffer[0] = 0;
   channel_ids_that_have_a_committed_state.clear();
-  flushPending = false;
+  _periodicFlush = flushPending = false;
 }
 
 void
@@ -107,7 +107,7 @@ SampleGZWriter::newSample(const SampleStruct *s)
   
   bufEnd += n;
 
-  if (false && !flushPending) {
+  if (_periodicFlush && !flushPending) {
     /* wait an arbitrary 100 milliseconds before invoking the buffer flusher */
     QTimer::singleShot( 100, this, SLOT(flushBuffer()) );
     flushPending = true;
@@ -154,7 +154,8 @@ SampleGZWriter::putStateChangeInfo(const SampleStruct *s)
 { 
   int n =      
     snprintf(buffer + bufEnd, BUFSIZE - (int) bufEnd,
-	     stateChangeFormat, s->channel_id, ShmMgr::samplingRateHz());
+	     stateChangeFormat, s->channel_id, ShmMgr::samplingRateHz(), 
+	     s->scan_index);
   if (n < 0) {
     throw Exception ("Internal error.", "Buffer overflow...");
   }

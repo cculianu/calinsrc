@@ -29,6 +29,8 @@
 #include <qtoolbar.h>
 #include <qtoolbutton.h>
 #include <qbuttongroup.h>
+#include <qstatusbar.h> 
+
 #include <map>
 #include <vector>
 #include "string.h"
@@ -85,6 +87,8 @@ class ReaderLoop: public QObject
 
   friend class DAQSystem;
 
+ protected:
+  
   ReaderLoop(uint n_channels, const DAQSettings & settings);
   ~ReaderLoop();
   
@@ -100,7 +104,10 @@ class ReaderLoop: public QObject
   /* this should be the target of a singleshot timer */
   void loop();
 
-
+ signals:
+  void scanIndexChanged(scan_index_t index); /* emitted whenever we
+						reach a new scan index */
+  
  protected:
 
   bool isGraphListener(uint channel_id, uint index)
@@ -148,6 +155,8 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
      channel's range/gain setting needs to be changed */
   void graphChangedRange(uint channel, int range); 
 
+  void setStatusBarScanIndex(scan_index_t index);
+
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
@@ -164,6 +173,8 @@ class DAQSystem : public QMainWindow, public DAQSystemGUIObject
   QToolBar mainToolBar;
   QToolButton addChannel;
   ButtonOpGroup toolBarButtonGroup; /* invisible, pretty trivial widget */
+  QStatusBar statusBar;
+  QLabel statusBarScanIndex;
   ReaderLoop readerLoop;
 
   /* keep track of the mdi windows we have */

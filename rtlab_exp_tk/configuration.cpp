@@ -243,7 +243,7 @@ ConfigurationWindow::askUserForOutputFilename()
   static const char *filters[2] = {"All files (*)", 0};
   QFileDialog fileDialog(this, 0, true);
 
-  fileDialog.setMode(QFileDialog::ExistingFile);
+  fileDialog.setMode(QFileDialog::AnyFile);
   fileDialog.setViewMode(QFileDialog::Detail);
   fileDialog.setFilters(filters);
 
