@@ -250,8 +250,9 @@ uint ShmController::spikeBlanking(uint chan) const
   return shm->spike_params.blanking[chan];
 }
 
+/* cheap hack */
+#define QM_INFO 5 
 
-#include <linux/module.h> 
 extern "C" {
 /* I have to declare this prototype for this system call here by hand, 
    since gnu libc has it but linux/module.h doesn't define the prototype. */
