@@ -32,7 +32,7 @@
 
 #include "rt_process.h"
 #include "rtos_middleman.h"
-#include "map_control.h"
+#include "apd_control.h"
 
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL"); 
@@ -43,13 +43,13 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time stimulation and control add-on for daq system and rtlab.o.\n$Id$");
 
-int map_control_init(void); 
-void map_control_cleanup(void);
+int apd_control_init(void); 
+void apd_control_cleanup(void);
 
 static int init_shared_mem(void);
 static int init_ao_chan(void);
 
-static void do_map_control_stuff(MultiSampleStruct *);
+static void do_apd_control_stuff(MultiSampleStruct *);
 
 /* 'inner' helper functions... */
 static void setup_analog_output(void);
@@ -60,8 +60,8 @@ static void automatically_adapt_g(void);
 static void out_to_fifo(void);
 static int find_free_chan(volatile char *, unsigned int);
 
-module_init(map_control_init);
-module_exit(map_control_cleanup);
+module_init(apd_control_init);
+module_exit(apd_control_cleanup);
 
 static MCShared *shm = 0;  //pointer to the shared memory ... communicates between real-time
                                               // process and non-real-time GUI
@@ -72,19 +72,20 @@ static unsigned int ao_range = 0;
 static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
                     ao_rest_level = 0; /* either ao_stim_level / 2 or 0 */
 
-/*-------------------------------------------------------------------------- 
+/*-------------------------------------------------------------------- 
   Some initial parameters or otherwise private constants...                 
   Tweak these to suit your taste...
----------------------------------------------------------------------------*/
-static const  int STIM_PULSE_WIDTH       = 2;   /* in milliseconds              */
-static const float STIM_VOLTAGE       = 5.0; /* Preferred stim voltage       */
-static const float INITIAL_DELTA_G    = 0.1; /* for MCShared init.           */
-static const float INITIAL_G_VAL      = 1.0;    /* "   "         "           */
-static const int MAX_PEAK_TIME_AFTER_THRESHOLD = 25; // max time to look for AP peak after
+---------------------------------------------------------------------*/
+static const  int STIM_PULSE_WIDTH = 2;      /* in milliseconds              */
+static const float STIM_VOLTAGE       = 5.0;   /* Preferred stim voltage       */
+static const float INITIAL_DELTA_G     = 0.01; /* for MCShared init.           */
+static const float INITIAL_G_VAL          = 0.5;   /* "   "         "           */
+static const int MS_AFTER_THRESH_TO_LOOK_FOR_PEAK = 25; // time (ms) to look for AP peak after threshold crossing
+static const int INIT_APD_XX=90;
 static const int INITIAL_PI=500;
-static const float RESET_VMIN = 999.0;
-static const float RESET_VMAX = -999.0;
-/*---------------------------------------------------------------------------*/
+static const float RESET_V_BASELINE = 999.0;      //set v_baseline to very large value 
+static const float RESET_V_APA = -999.0;   //set v_apa to very small value
+/*-------------------------------------------------------------------*/
 
 /* NB: This module needs at least a 1000 hz sampling rate!
    It will fail if that is not the case at module initialization, 
@@ -95,49 +96,62 @@ static const int REQUIRED_SAMPLING_RATE = 1000;
 
 //structure storing the state of the system so that one scan knows the
 //state from the previous scan
-struct StimState {    //look in map_control.h and map_control.cpp for comments on these variables
+struct StimState {    //look in apd_control.h and apd_control.cpp for comments on these variables
+  scan_index_t scan_index;
   int pacing_pulse_width_counter;
   int pacing_interval_counter;
+  int control_stimulus_called;
+  int control_interval_counter;
+  int control_pulse_width_counter;
+  int pi;
+  int delta_pi;
   int find_peak;
-  scan_index_t ap_ti;
-  scan_index_t ap_t90;
-  double vmin_since_last_detected_thresh_crossing;
-  double vmin_previous;
-  double vmin_previous_previous;
-  double vmax_since_last_detected_thresh_crossing;
+  double v_baseline_since_last_detected_thresh_crossing;
+  double v_baseline_n_minus_1;   //v_baseline for the previous AP
+  double v_baseline_n_minus_2;   //v_baseline for the (n-2) AP
+  double v_apa;                              //action potential amplitude
   double v90;
+  scan_index_t ap_ti;
+  scan_index_t ap_tf;
   int apd;
   int previous_apd;
   int di;
   int previous_di;
-  int control_stimulus_called;
-  int control_interval_counter;
-  int control_pulse_width_counter;
-  int scan_index;
   int consec_alternating;
-  int pi;
-  int delta_pi;
-  int past_perturb_sign[4];
+  int previous_perturbation_signs[4];
 };
 
-struct StimState state = {pacing_pulse_width_counter:0, pacing_interval_counter:0, find_peak:0, ap_ti:0, ap_t90:0, 
-			  vmin_since_last_detected_thresh_crossing:999.0,   //should use RESET_VMIN !!!
-			  vmin_previous:999.0, vmin_previous_previous:999.0,
-			  vmax_since_last_detected_thresh_crossing:-999.0, //should use RESET_VMAX,
-                                          v90:0, apd:0, previous_apd:0, di:0, previous_di:0,
-		          control_stimulus_called:0, control_interval_counter:0, control_pulse_width_counter:-1,
-		          scan_index:0, consec_alternating:0,
-		          pi:0, delta_pi:0, 
-		          past_perturb_sign:{1,0,1,0} /*init to alternating*/
+struct StimState state = {scan_index:0, 
+			  pacing_pulse_width_counter:0, 
+			  pacing_interval_counter:0, 
+			  control_stimulus_called:0, 
+			  control_interval_counter:0, 
+			  control_pulse_width_counter:-1,
+			  pi:0, 
+			  delta_pi:0, 
+			  find_peak:0, 
+			  v_baseline_since_last_detected_thresh_crossing:999.0, //RESET_V_BASELINE,
+			  v_baseline_n_minus_1:999.0, 
+			  v_baseline_n_minus_2:999.0,
+			  v_apa:-999.0, //should use RESET_V_APA,
+			  v90:0, 
+			  ap_ti:0, 
+			  ap_tf:0, 
+			  apd:0, 
+			  previous_apd:0, 
+			  di:0, 
+			  previous_di:0,
+			  consec_alternating:0,
+			  previous_perturbation_signs:{1,0,1,0} /*init to alternating*/
 };
 
 /****************************************************************************************/
-/* do_map_control_stuff is the main "brain" of the pacing and control system. 
+/* do_apd_control_stuff is the main "brain" of the pacing and control system. 
    this function gets run once every analog acquisition scan ...
    so it, and its sub-functions, are  where most algorithmic changes will need 
     to be made. */
 /****************************************************************************************/
-static void do_map_control_stuff (MultiSampleStruct * m)
+static void do_apd_control_stuff (MultiSampleStruct * m)
 {
 
   /* Note that do_pacing assumes that rt_process.o is running at precisely 1000 hz! */
@@ -149,7 +163,7 @@ static void do_map_control_stuff (MultiSampleStruct * m)
 
   if (state.control_stimulus_called) do_control();
 
-  m = 0; /* to avoid compiler errors... ??? */
+  m = 0; /* to avoid compiler errors ... not sure what this does ... Calin put it here */
 }
 
 // this function does periodic pacing at the PI controlled by the user in the GUI
@@ -167,7 +181,6 @@ static void do_pacing(void)
                       ao_stim_level);
     state.pacing_interval_counter = shm->nominal_pi;
     state.pacing_pulse_width_counter = STIM_PULSE_WIDTH;
-    //state.last_stim_given = rtp_shm->scan_index;
   }
 
   if ( state.pacing_pulse_width_counter == 0 ) {
@@ -177,8 +190,7 @@ static void do_pacing(void)
                       shm->ao_chan, 
                       ao_range, 
                       AREF_GROUND,
-                      ao_rest_level);
-    
+                      ao_rest_level);    
   }
 
   if (state.pacing_interval_counter > 0)  state.pacing_interval_counter--;
@@ -191,47 +203,40 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
 {
 
   //voltage_at used MultiSampleStruct * m to return the voltage of the requested channel.
-  double this_voltage=voltage_at(shm->map_channel,m);
+  double this_voltage=voltage_at(shm->apd_channel,m);
 
-  //look for vmin on every scan ... this may be overkill, but it's safest in case signal drifts
+  //look for v_baseline on every scan ... this may be overkill, but it's safest in case signal drifts
   //and we miss an AP (i.e., if we only looked during part of the AP cycle and we miss an AP
-  //then we may stop looking for vmin)
-  if (this_voltage < state.vmin_since_last_detected_thresh_crossing)
-    state.vmin_since_last_detected_thresh_crossing = this_voltage;
+  //then we may stop looking for v_baseline)
+  if (this_voltage < state.v_baseline_since_last_detected_thresh_crossing)
+    state.v_baseline_since_last_detected_thresh_crossing = this_voltage;
 
-  // is there a threshold crossing occuring at this scan?
-  if ( (shm->map_channel > -1 && _test_bit((int)shm->map_channel, spike_info.spikes_this_scan))) {
-    state.find_peak=1;                        //if so, set find_peak so we start looking for the peak
-    state.ap_ti=rtp_shm->scan_index; //this scan is the beginning of the action potential    
+  // is there a threshold crossing occuring at this scan? ... the conditional statement  is Calin's code
+  if ( (shm->apd_channel > -1 && _test_bit((int)shm->apd_channel, spike_info.spikes_this_scan))) {
+    state.find_peak=1;                           //if so, set find_peak so that we know to start looking for peak amplitude
+    state.ap_ti=rtp_shm->scan_index; //this scan is the beginning of the action potential, so set ap_ti    
 
-    state.vmin_previous_previous = state.vmin_previous; //store
-    state.vmin_previous = state.vmin_since_last_detected_thresh_crossing; //store
-    state.vmin_since_last_detected_thresh_crossing = RESET_VMIN; //reset
-    state.vmax_since_last_detected_thresh_crossing=RESET_VMAX; //reset
+    state.v_baseline_n_minus_2 = state.v_baseline_n_minus_1; //store previous as n_minus_2
+    state.v_baseline_n_minus_1 = state.v_baseline_since_last_detected_thresh_crossing; //store
+    state.v_baseline_since_last_detected_thresh_crossing = RESET_V_BASELINE; //reset
+    state.v_apa=RESET_V_APA; //reset
   }
 
   //check this scan to see if it is the peak AP voltage ... this search will be run for each scan
-  //after threshold crossing occurred until MAX_PEAK_TIME_AFTER_THRESHOLD ms 
+  //after threshold crossing occurred until MS_AFTER_THRESH_TO_LOOK_FOR_PEAK ms 
   //after the threshold  crossing occurred
-  while (state.find_peak && state.find_peak<MAX_PEAK_TIME_AFTER_THRESHOLD) { 
-    if (this_voltage > state.vmax_since_last_detected_thresh_crossing)
-      state.vmax_since_last_detected_thresh_crossing = this_voltage; 
+  while (state.find_peak && state.find_peak<MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
+    if (this_voltage > state.v_apa)
+      state.v_apa = this_voltage; 
     state.find_peak++;
     //now that we've found peak voltage, compute the voltage for apd90
-    if (state.find_peak==MAX_PEAK_TIME_AFTER_THRESHOLD) { 
-      double which_min=state.vmin_previous;
-      //**** this really should be using < which_min, but until the user can control APD90,80,70, etc.
-      //**** this will have to do ... change this!!!
-      if (state.vmin_previous_previous > which_min) which_min = state.vmin_previous_previous;
-      state.v90 = 0.1*(state.vmax_since_last_detected_thresh_crossing - which_min)
-	+ which_min;
-
-      /* used to debug
-	 shm->g_val = state.v90;
-	 state.consec_alternating+=5; //TEMP: remove this !!!!!!
-	 state.consec_alternating++; //TEMP: remove this !!!!!!
-	 out_to_fifo();    // write snapshot to fifo at the end of every action potential
-      */
+    if (state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
+      double which_baseline_to_use=state.v_baseline_n_minus_1;
+      // ******* NOTE: should the next conditional be using < instead of > ?
+      // ******* currently baseline is set at the larger of the 2 previous baselines.
+      if (state.v_baseline_n_minus_2 > which_baseline_to_use) 
+	which_baseline_to_use = state.v_baseline_n_minus_2;
+      state.v90 = (shm->apd_xx)*(state.v_apa - which_baseline_to_use) + which_baseline_to_use;
 
     }
   }
@@ -239,68 +244,67 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
   // is this scan the first time we cross back below apd90 ... if so, determine apd and do other
   // stuff, including compute control perturbation
   // obviously, this process can only occur after the peak voltage was found in the previous section
-  if ((state.find_peak==MAX_PEAK_TIME_AFTER_THRESHOLD) && (this_voltage<state.v90)) {
+  if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && (this_voltage<state.v90)) {
     state.find_peak=0;
     //set previous_apd and previous_di before we make changes to new di and new apd
     state.previous_apd = state.apd;
     state.previous_di=state.di;
-    //set new di before we change ap_t90 (because we need to use previous ap_t90)
-    state.di=state.ap_ti-state.ap_t90; //this DI is time since last AP_t90;
+    //set new di before we change ap_tf (because we need to use previous ap_tf)
+    state.di=state.ap_ti-state.ap_tf; //this DI is time since last AP_tf;
     //for new apd
-    state.ap_t90=rtp_shm->scan_index;
-    state.apd = state.ap_t90-state.ap_ti;
+    state.ap_tf=rtp_shm->scan_index;
+    state.apd = state.ap_tf-state.ap_ti;
 
     // compute control perturbation
     if (shm->control_on) { 
 
-      //shift past perturbation values ... for automatic g adaptation
-      state.past_perturb_sign[0]= state.past_perturb_sign[1];
-      state.past_perturb_sign[1]= state.past_perturb_sign[2];
-      state.past_perturb_sign[2]= state.past_perturb_sign[3];
+      //this is for automatic g adaptation .. shift array of previous perturbation sign values 
+      state.previous_perturbation_signs[0] = state.previous_perturbation_signs[1];
+      state.previous_perturbation_signs[1] = state.previous_perturbation_signs[2];
+      state.previous_perturbation_signs[2] = state.previous_perturbation_signs[3];
 
       // ****** note minus sign inserted in  front of g_val!!!  djc: 9/25/02
       state.delta_pi = -(int)(shm->g_val*(state.previous_apd - state.apd));
-      //only perturb if delta_pi negative and larger than stimulus duration
-      //if (state.delta_pi<=(-1)) {
-      if (1) {
+
+      if (  (!( shm->only_negative_perturbations)) ||  //if positive perturbs allowed 
+            ( (shm->only_negative_perturbations)&&(state.delta_pi<=(-1)) ) ) { //or if only negative allowed and this perturb <0
 	state.control_stimulus_called=1;
 	// control stimulus must occur at the time expected for the next pacing stimulus
 	// (which is given by state.pacing_interval_counter ... which at the current scan should be equal
 	//   to nominal_pi - apd), plus the perturbation (which is negative).
 	state.control_interval_counter = state.pacing_interval_counter+state.delta_pi;
-	state.past_perturb_sign[3]=0;
+	state.previous_perturbation_signs[3]=0;
       }
-      else  state.past_perturb_sign[3]=1;
+      else  state.previous_perturbation_signs[3]=1;
 
       if ((shm->g_adjustment_mode) == MC_G_ADJ_AUTOMATIC) automatically_adapt_g(); 
 
     }
-    //write to fifo, which in map_control.cpp will be saved to disk
+    //write to fifo, which in apd_control.cpp will be saved to disk
     out_to_fifo();    // write snapshot to fifo at the end of every action potential
                              // note that end of ap was chosen arbitrarily .. could have been beginning
                              // may make more sense to do it whenever a stimulus is delivered
 
-  }  //end of   if ((state.find_peak==MAX_PEAK_TIME_AFTER_THRESHOLD) && ...
+  }  //end of   if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && ...
 
 }
 
 // this function performs automatic adaptation of g (control proportionality constant)
 // according to the algorithm in Hall&Christini, PRE, vol. 63, article 06204, 2001
-static void automatically_adapt_g(void)
-{
+static void automatically_adapt_g(void) {
 
   //if perturbation sign has not alternated 4 times in a row, then we are overperturbing,
   //meaning our g is too large, so we should decrease g.
-  if ( (state.past_perturb_sign[3] == state.past_perturb_sign[2]) ||
-       (state.past_perturb_sign[2] == state.past_perturb_sign[1]) ||
-       (state.past_perturb_sign[1] == state.past_perturb_sign[0]) ) {
-    shm->g_val -= shm->delta_g;   // decrease g if perturb sign not alternating
+  if ( (state.previous_perturbation_signs[3] == state.previous_perturbation_signs[2]) ||
+       (state.previous_perturbation_signs[2] == state.previous_perturbation_signs[1]) ||
+       (state.previous_perturbation_signs[1] == state.previous_perturbation_signs[0]) ) {
+    shm->g_val -= shm->delta_g;      // decrease g if perturbation sign did not alternating 4 times in a row
                                                             // i.e., decrease the size of perturbations
     state.consec_alternating = 0; 
   }
   else {
     shm->g_val += shm->delta_g; // else perturbation sign has alternated 4 times in  a row,
-                                                      // meaning we are underperturbing, so we increase g
+                                                       // meaning we are underperturbing, so we increase g
     state.consec_alternating = 4;
   }
 
@@ -310,8 +314,7 @@ static void automatically_adapt_g(void)
 }
 
 // this function does alternans control
-static void do_control(void)
-{ 
+static void do_control(void) { 
 
   if ( (state.control_interval_counter == 0) ) { 
     /* polarization (begin stimulation) */
@@ -325,8 +328,6 @@ static void do_control(void)
 
     //reset underlying pacing interval if we are not continuing underlying pacing
     if (!(shm->continue_underlying)) state.pacing_interval_counter = shm->nominal_pi;
-
-    //state.last_stim_given = rtp_shm->scan_index;
   }
 
   if ( state.control_pulse_width_counter == 0 ) {
@@ -345,25 +346,24 @@ static void do_control(void)
 
 }
 
-
 //this function puts the snapshot on the fifo for the non-real-time application
 //to grab and save to disk
-static void out_to_fifo(void)
-{
+static void out_to_fifo(void) {
+
   working_snapshot.nominal_pi = shm->nominal_pi;
-  //working_snapshot.pi = state.pi;
   working_snapshot.pi = state.previous_apd+state.di;
   working_snapshot.delta_pi = state.delta_pi;
+  working_snapshot.apd_xx = (int)(100*(1.0 - shm->apd_xx));
   working_snapshot.ap_ti = state.ap_ti;
-  working_snapshot.ap_t90 = state.ap_t90;
+  working_snapshot.ap_tf = state.ap_tf;  
   working_snapshot.apd = state.apd;
   working_snapshot.previous_apd = state.previous_apd;
   working_snapshot.di = state.di;
   working_snapshot.previous_di = state.previous_di;
-  working_snapshot.vmax = state.vmax_since_last_detected_thresh_crossing;
-  //  working_snapshot.vmin = state.vmin_since_last_detected_thresh_crossing;
-  working_snapshot.vmin = state.vmin_previous;
+  working_snapshot.v_apa = state.v_apa;
+  working_snapshot.v_baseline = state.v_baseline_n_minus_1;
   working_snapshot.control_on = shm->control_on;
+  working_snapshot.only_negative_perturbations = shm->only_negative_perturbations;
   working_snapshot.pacing_on = shm->pacing_on;
   working_snapshot.continue_underlying = shm->continue_underlying;
   working_snapshot.target_shorter = shm->target_shorter;
@@ -388,13 +388,13 @@ static void out_to_fifo(void)
 /****************************************************************************************/
 
 // leave this alone unless you know what you're doing !!!
-int map_control_init (void)
+int apd_control_init (void)
 {
   int retval = 0;
 
   if (rtp_shm->sampling_rate_hz < REQUIRED_SAMPLING_RATE) {
-    printk("map_control: cannot start the module because the sampling rate of "
-           "rt_process is not %d hz! map_control.o *requires* a %d hz period "
+    printk("apd_control: cannot start the module because the sampling rate of "
+           "rt_process is not %d hz! apd_control.o *requires* a %d hz period "
            "on the rt loop for its own internal simplicity.  The current "
            "rate that rt_process is looping at is: %d", 
            REQUIRED_SAMPLING_RATE, REQUIRED_SAMPLING_RATE, 
@@ -402,13 +402,13 @@ int map_control_init (void)
     return -ETIME;
   }
 
-  if ( (retval = rtp_register_function(do_map_control_stuff))
+  if ( (retval = rtp_register_function(do_apd_control_stuff))
        || (retval = init_shared_mem())
        || (retval = rtp_find_free_rtf(&shm->fifo_minor, MC_FIFO_SZ))
        || (retval = init_ao_chan()) 
-       || (retval = rtp_activate_function(do_map_control_stuff))
+       || (retval = rtp_activate_function(do_apd_control_stuff))
     ) 
-    map_control_cleanup();  
+    apd_control_cleanup();  
 
   return retval;
 }
@@ -428,14 +428,16 @@ static int init_shared_mem(void)
   memset(shm, 0, sizeof(MCShared));
 
   shm->fifo_minor = -1;
-  shm->map_channel = -1;
+  shm->apd_channel = -1;
   shm->g_val = INITIAL_G_VAL;    //shm initialization you might want to change
   shm->delta_g = INITIAL_DELTA_G;   //shm initialization you might want to change
   shm->nominal_pi = INITIAL_PI;   //shm initialization you might want to change
   shm->pacing_on=0;   //shm initialization you might want to change
   shm->control_on=0;   //shm initialization you might want to change
   shm->continue_underlying=0;   //shm initialization you might want to change
+  shm->only_negative_perturbations=1;  //shm initialization you might want to change
   shm->target_shorter=0;   //shm initialization you might want to change
+  shm->apd_xx=(1.0 - (0.01*INIT_APD_XX));      //shm initialization you might want to change
 
   if ( (shm->ao_chan = 
         find_free_chan(rtp_shm->ao_chans_in_use, rtp_shm->n_ao_chans)) < 0) 
@@ -506,10 +508,10 @@ static int init_ao_chan(void)
 }
 
 // leave this alone unless you know what you're doing !!!
-void map_control_cleanup (void)
+void apd_control_cleanup (void)
 {
-  rtp_deactivate_function(do_map_control_stuff);
-  rtp_unregister_function(do_map_control_stuff);
+  rtp_deactivate_function(do_apd_control_stuff);
+  rtp_unregister_function(do_apd_control_stuff);
   if (shm && shm->fifo_minor >= 0)  rtf_destroy(shm->fifo_minor);
   if (shm && shm->ao_chan >= 0)
     /* indicate that now this channel is free */

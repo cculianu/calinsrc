@@ -60,9 +60,9 @@
 #include "tempspooler.h"
 
 #include "tweaked_mbuff.h"
-#include "map_control.h"
+#include "apd_control.h"
 
-#include "map_control_private.h"
+#include "apd_control_private.h"
 #include "searchable_combo_box.h"
 
 #define RCS_VERSION_STRING  "$Id$"
@@ -73,16 +73,16 @@ extern "C" {
   /* Stuff needed by plugin engine... */
   int ds_plugin_ver = DS_PLUGIN_VER;
 
-  const char * name = "Map Control Experiment",
+  const char * name = "APD Control Experiment",
              * description =
-              "Some GUI controls for interfacing with the Map Control stimulation "
-              "real-time module named 'map_control.o'.  This rtl/rt_process "
+              "Some GUI controls for interfacing with the Apd Control stimulation "
+              "real-time module named 'apd_control.o'.  This rtl/rt_process "
               "addon was developed for a cardiac action potential control "
               "at Cornell University.",
              * author =
               "David J. Christini, Ph.D and Calin A. Culianu.",
              * requires =
-              "map_control.o be installed into the kernel.  Analog output.";
+              "apd_control.o be installed into the kernel.  Analog output.";
   
   Plugin * entry(QObject *o) 
   { 
@@ -90,10 +90,10 @@ extern "C" {
     /* Top-level widget.. parent is root */
     DAQSystem *d = dynamic_cast<DAQSystem *>(o);
 
-    Assert<PluginException>(d, "Map Control Plugin Load Error", 
-                            "The Map Control Plugin can only be used in "
+    Assert<PluginException>(d, "APD Control Plugin Load Error", 
+                            "The APD Control Plugin can only be used in "
                             "conjunction with daq_system!  Sorry!");    
-    return new MapControl(d); ;
+    return new APDcontrol(d); ;
   } 
 
 };
@@ -108,8 +108,8 @@ static const double apd_min   = 75.0,   //for graph axis
   apd_max   = 200.0,  //for graph axis
   delta_pi_min = -50,  //for graph axis
   delta_pi_max = 50,  //for graph axis
-  g_min    = -15.0,  //for graph axis
-  g_max    = 15.0;  //for graph axis
+  g_min    = 0.0,  //for graph axis
+  g_max    = 5.0;  //for graph axis
 
 /********************************************************************/
 /*
@@ -118,13 +118,13 @@ static const double apd_min   = 75.0,   //for graph axis
  Most of your edits should probably be in this function
 */
 /********************************************************************/
-MapControl::MapControl(DAQSystem *daqSystem_parent) 
+APDcontrol::APDcontrol(DAQSystem *daqSystem_parent) 
   : QObject(daqSystem_parent, ::name), need_to_save(false),  
     shm(NULL), fifo(-1)
 {
   daq_shmCtl = &daqSystem_parent->shmController();
 
-  spooler = new TempSpooler<MCSnapShot>("mapcontrol", true);
+  spooler = new TempSpooler<MCSnapShot>("apdcontrol", true);
 
   determineRTOS(); /* can throw exception here */
   moduleAttach(); /* can throw exception here */
@@ -192,40 +192,36 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
 
     QWidget *tmpw = new QWidget(stats);
 
-    QGridLayout *tmplo = new QGridLayout(tmpw, 11, 2);
+    QGridLayout *tmplo = new QGridLayout(tmpw, 11, 4);
 
     // text displays
-    tmplo->addWidget(new QLabel("APD_n (ms): ", tmpw), 0, 0);
-    tmplo->addWidget(new QLabel("APD_n-1 (ms): ", tmpw), 1, 0);
-    tmplo->addWidget(new QLabel("APD_*: ", tmpw), 2, 0);
-    tmplo->addWidget(new QLabel("DI_n: ", tmpw), 3, 0);
-    tmplo->addWidget(new QLabel("DI_n-1: ", tmpw), 4, 0);
-    tmplo->addWidget(new QLabel("PI = APD+DI(ms): ", tmpw), 5, 0);
-    tmplo->addWidget(new QLabel("delta PI (ms): ", tmpw), 6, 0);
-    tmplo->addWidget(new QLabel("Vmax (V): ", tmpw), 7, 0);
-    tmplo->addWidget(new QLabel("Vmin (V): ", tmpw), 8, 0);
-    tmplo->addWidget(new QLabel("AP_ti (ms): ", tmpw), 9, 0);
-    tmplo->addWidget(new QLabel("AP_t90 (ms): ", tmpw), 10, 0);
-    tmplo->addWidget(new QLabel("Value of g: ", tmpw), 11, 0);
-    tmplo->addWidget(new QLabel("delta g: ", tmpw), 12, 0);
-    tmplo->addWidget(new QLabel("consec. alternating perturbations: ", tmpw), 13, 0);
-    tmplo->addWidget(new QLabel("Last beat scan index: ", tmpw), 14, 0);
+    int line_counter=0;
+    tmplo->addWidget(new QLabel("APD_n (ms): ", tmpw), line_counter++, 0);
+    tmplo->addWidget(new QLabel("DI_n: ", tmpw), line_counter++, 0);
+    tmplo->addWidget(new QLabel("PI = APD+DI(ms): ", tmpw), line_counter++, 0);
+    tmplo->addWidget(new QLabel("delta PI (ms): ", tmpw), line_counter++, 0);
+    tmplo->addWidget(new QLabel("APA (V): ", tmpw), line_counter++, 0);
+    tmplo->addWidget(new QLabel("AP baseline (V): ", tmpw), line_counter++, 0);
+    line_counter=0;
+    tmplo->addWidget(new QLabel("AP_ti (ms): ", tmpw), line_counter++, 2);
+    tmplo->addWidget(new QLabel("AP_tf (ms): ", tmpw), line_counter++, 2);
+    tmplo->addWidget(new QLabel("g: ", tmpw), line_counter++, 2);
+    tmplo->addWidget(new QLabel("delta g: ", tmpw), line_counter++, 2);
+    tmplo->addWidget(new QLabel("alternating perturbations: ", tmpw), line_counter++, 2);
     
-    tmplo->addWidget(gui_indicator_apd = new QLabel(tmpw), 0, 1); 
-    tmplo->addWidget(gui_indicator_previous_apd = new QLabel(tmpw), 1, 1); 
-    tmplo->addWidget(gui_indicator_apd_fp = new QLabel(tmpw), 2, 1); 
-    tmplo->addWidget(gui_indicator_di = new QLabel(tmpw), 3, 1);    
-    tmplo->addWidget(gui_indicator_previous_di   = new QLabel(tmpw), 4, 1);
-    tmplo->addWidget(gui_indicator_pi = new QLabel(tmpw), 5, 1);
-    tmplo->addWidget(gui_indicator_delta_pi = new QLabel(tmpw), 6, 1);
-    tmplo->addWidget(gui_indicator_vmax = new QLabel(tmpw), 7, 1);
-    tmplo->addWidget(gui_indicator_vmin = new QLabel(tmpw), 8, 1);
-    tmplo->addWidget(gui_indicator_ap_ti = new QLabel(tmpw), 9, 1);
-    tmplo->addWidget(gui_indicator_ap_t90 = new QLabel(tmpw), 10, 1);
-    tmplo->addWidget(gui_indicator_g_val = new QLabel(tmpw), 11, 1);
-    tmplo->addWidget(gui_indicator_delta_g = new QLabel(tmpw), 12, 1);
-    tmplo->addWidget(gui_indicator_consec_alternating = new QLabel(tmpw), 13, 1);
-    tmplo->addWidget(gui_indicator_last_beat_index = new QLabel(tmpw), 14, 1);
+    line_counter=0;
+    tmplo->addWidget(gui_indicator_apd = new QLabel(tmpw), line_counter++, 1); 
+    tmplo->addWidget(gui_indicator_di = new QLabel(tmpw), line_counter++, 1);    
+    tmplo->addWidget(gui_indicator_pi = new QLabel(tmpw), line_counter++, 1);
+    tmplo->addWidget(gui_indicator_delta_pi = new QLabel(tmpw), line_counter++, 1);
+    tmplo->addWidget(gui_indicator_v_apa = new QLabel(tmpw), line_counter++, 1);
+    tmplo->addWidget(gui_indicator_v_baseline = new QLabel(tmpw), line_counter++, 1);
+    line_counter=0;
+    tmplo->addWidget(gui_indicator_ap_ti = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_ap_tf = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_g_val = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_delta_g = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_consec_alternating = new QLabel(tmpw), line_counter++, 3);
 
   }
 
@@ -243,45 +239,69 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
     //new line of control widgets
     QVBox *tmpvb = new QVBox(ctls);
     QHBox *tmphb = new QHBox(tmpvb);
+    tmphb->setSpacing(5);
 
-    (void) new QLabel("AI Channel to Monitor:", tmphb);
+    (void)new QLabel("AI channel to measure APDs:", tmphb);
+
     ai_channels = new SearchableComboBox(tmphb);
     connect(ai_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
     connect(daqSystem(), SIGNAL(channelOpened(uint)), this, SLOT(synchAIChan()));
     connect(daqSystem(), SIGNAL(channelClosed(uint)), this, SLOT(synchAIChan()));
     synchAIChan();
+    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
 
-    (void) new QLabel("AO Stim Channel:", tmphb);
+    (void) new QLabel("APD90,80,70,...:", tmphb);
+    apd_xx_edit_box = new QLineEdit(tmphb);
+    apd_xx_edit_box->setValidator(new QIntValidator(apd_xx_edit_box));
+    apd_xx_edit_box->setText(QString("%1").arg( (int)(100*(1.0-(shm->apd_xx)))) );
+    apd_xx_edit_box->setMaxLength(3);
+    connect(apd_xx_edit_box, SIGNAL(textChanged(const QString &)), this, SLOT(changeAPDxx(const QString &)));
+    apd_xx_edit_box->setMaximumWidth(apd_xx_edit_box->minimumSizeHint().width());
+
+    //new line of control widgets
+    tmphb = new QHBox(tmpvb);        
+    tmphb->setSpacing(5);
+
+    (void)new QLabel("AO stim channel:", tmphb);
     ao_channels = new SearchableComboBox(tmphb);
-    (void) new QLabel("    " /* poor man's spaceing */, tmphb);
+    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
     populateAOComboBox();
     synchAOChan();
     connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
 
     //new line of control widgets
     tmphb = new QHBox(tmpvb);        
-    tmphb->setSpacing(6);
+    tmphb->setSpacing(5);
 
-    pacing_toggle = new QCheckBox("Pacing On", tmphb);
+    pacing_toggle = new QCheckBox("Pacing ON", tmphb);
     pacing_toggle->setChecked(shm->pacing_on);    
     connect(pacing_toggle, SIGNAL(toggled(bool)), this, SLOT(togglePacing(bool)));
+    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
     
-    (void) new QLabel("  Nominal PI:", tmphb);
-    nominal_pi = new QSpinBox(1, 2000, 1, tmphb);
+    (void) new QLabel("Nominal PI:", tmphb);
+    nominal_pi = new QSpinBox(1, 2000, 1, tmphb);    
     nominal_pi->setValue(static_cast<int>(shm->nominal_pi));
     connect(nominal_pi, SIGNAL(valueChanged(int)), this, SLOT(changeNominalPI(int)));
     
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
-    tmphb->setSpacing(6);
+    tmphb->setSpacing(5);
 
-    control_toggle = new QCheckBox("Control On", tmphb);
+    control_toggle = new QCheckBox("Control ON", tmphb);
     control_toggle->setChecked(shm->control_on);    
     connect(control_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleControl(bool)));
 
-    underlying_toggle = new QCheckBox("Continue Underlying Pacing", tmphb);
+    underlying_toggle = new QCheckBox("Continue underlying pacing", tmphb);
     underlying_toggle->setChecked(shm->continue_underlying);    
     connect(underlying_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleUnderlying(bool)));
+
+    //new line of control widgets
+    tmphb = new QHBox(tmpvb);
+    tmphb->setSpacing(5);
+
+    only_negative_toggle = new QCheckBox("Only negative perturbations", tmphb);
+    only_negative_toggle->setChecked(shm->only_negative_perturbations);    
+    connect(only_negative_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleOnlyNegativePerturbations(bool)));
 
     target_shorter_toggle = new QCheckBox("Target shorter APD initially", tmphb);
     target_shorter_toggle->setChecked(shm->target_shorter);    
@@ -289,14 +309,14 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
 
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
-    tmphb->setSpacing(6);
+    tmphb->setSpacing(5);
 
-    (void) new QLabel("Value of g:", tmphb);
+    (void) new QLabel("g: ", tmphb);
     gval = new QLineEdit(tmphb);
     gval->setValidator(new QDoubleValidator(gval));
     gval->setText(QString("%1").arg(shm->g_val));
     connect(gval, SIGNAL(textChanged(const QString &)), this, SLOT(changeG(const QString &)));
-    (void) new QLabel("    ", tmphb); // po' man's spacing
+
 
     g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
     g_adj_manual_only->setChecked(shm->g_adjustment_mode == MC_G_ADJ_MANUAL);
@@ -304,22 +324,22 @@ MapControl::MapControl(DAQSystem *daqSystem_parent)
     //gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->control_on);
     connect(g_adj_manual_only, SIGNAL(stateChanged(int)), this, SLOT(gAdjManualOnly(int)));
 
-    (void) new QLabel("Delta g:", tmphb);
+    (void)new QLabel("delta g:", tmphb);
     /* delta-g controls */   
     gui_indicator_delta_g_bar_value = new QLabel(QString::number(shm->delta_g), tmphb);
     delta_g_bar = new QScrollBar
       ( mc_delta_g_toint(MC_DELTA_G_MIN), mc_delta_g_toint(MC_DELTA_G_MAX),
         1, mc_delta_g_toint((MC_DELTA_G_MAX - MC_DELTA_G_MIN) / 5.0), 
         mc_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
-    connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-    tmphb->setStretchFactor(delta_g_bar, 1);
-
+     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
+     delta_g_bar->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed)); 
+     delta_g_bar->setMinimumSize(100, delta_g_bar->minimumSize().height()); // force this scrollbar to EXIST!
+     tmphb->setStretchFactor(delta_g_bar, 3);
   }
   
   controlslayout->addMultiCellWidget // footnote at the bottom
-    (new QLabel(QString("MC Control Experiment Notes:\n"
-                        "All graphs display %1 beats on the x-axis.\n"
-                        "The vertical gridlines are %2 beats apart.")
+    (new QLabel(QString("APD control experiment notes:\n"
+                        "x-axis displays %1 points (%2 points per vertical gridline).")
                .arg(beats_per_gridline * num_gridlines)
                .arg(beats_per_gridline), controls), 
      n_ctl_r-1, n_ctl_r-1, 0, n_ctl_c-1, AlignBottom | AlignLeft);
@@ -342,7 +362,7 @@ controls, (2) readInFifo, and (3) PVSaver
 /********************************************************************/
 
 //destructor
-MapControl::~MapControl() 
+APDcontrol::~APDcontrol() 
 {
   timer->stop();
   safelyQuit(); /* prompts the user to save, if necessary.. kinda sloppy to 
@@ -355,32 +375,32 @@ MapControl::~MapControl()
 }
 
 const char *
-MapControl::name() const
+APDcontrol::name() const
 {
   return ::name;
 }
 
 const char *
-MapControl::description() const
+APDcontrol::description() const
 {
   return ::description;
 }
 
 
-void MapControl::determineRTOS()
+void APDcontrol::determineRTOS()
 {
   rtosUsed = Unknown;
   if (QFile::exists("/proc/rtai")) rtosUsed = RTAI;
   else if (QFile::exists("/dev/rtl_shm")) rtosUsed = RTLinux;// temp hack
 
   Assert<PluginException>(rtosUsed != Unknown,
-                          "Map Control Plugin Attach Error",
-                          "The Map Control plugin could not be attached "
+                          "APD Control Plugin Attach Error",
+                          "The APD Control plugin could not be attached "
                           "because it can't figure out which RTOS you are "
                           "running.  Are you running either RTLinux or RTAI?");
 }
 
-void MapControl::moduleAttach()
+void APDcontrol::moduleAttach()
 {
   switch(rtosUsed) {
   case RTLinux:
@@ -398,11 +418,11 @@ void MapControl::moduleAttach()
   }
 
   Assert<PluginException>(shm && shm->magic == MC_SHM_MAGIC,
-                          "Map Control Plugin Attach Error", 
-                          "The Map Control Plugin can not find the shared "
+                          "APD Control Plugin Attach Error", 
+                          "The APD Control Plugin can not find the shared "
                           "memory buffer named \"" MC_SHM_NAME "\".  "
                           "(Or it is of the wrong version)\n\n"
-                          "Are you sure that module map_control.o is loaded?");
+                          "Are you sure that module apd_control.o is loaded?");
   
 
   QString fname;
@@ -411,10 +431,10 @@ void MapControl::moduleAttach()
   fifo = open(fname, O_RDONLY | O_NDELAY);
 
   Assert<PluginException>(!needFifo(),
-                          "Map Control Plugin Attach Error",
+                          "APD Control Plugin Attach Error",
                           QString 
-                          ( "Even though the Map Control Kernel Module is "
-                            "loaded, the Map Control plugin could not attach\n "
+                          ( "Even though the APD Control Kernel Module is "
+                            "loaded, the APD Control plugin could not attach\n "
                             "to the required fifo \"%1\".  Please make sure "
                             "this file exists and is read/write for the \n"
                             "current user."
@@ -426,7 +446,7 @@ void MapControl::moduleAttach()
     
 }
 
-void MapControl::moduleDetach()
+void APDcontrol::moduleDetach()
 {
   if (!needFifo()) close(fifo); fifo = -1;
 
@@ -454,12 +474,12 @@ void MapControl::moduleDetach()
 }
 
 /* returns parent() dynamic_cast to DAQSystem* */
-DAQSystem * MapControl::daqSystem()  
+DAQSystem * APDcontrol::daqSystem()  
 { return dynamic_cast<DAQSystem *>(parent()); }
 
 
 /* Very long-winded code to build the graph axis labels... */
-void MapControl::addAxisLabels()
+void APDcontrol::addAxisLabels()
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
@@ -514,7 +534,7 @@ void MapControl::addAxisLabels()
 
 }
 
-void MapControl::periodic()
+void APDcontrol::periodic()
 {
   /* check the in fifo for data, and act upon it if found... */
   readInFifo();
@@ -525,7 +545,7 @@ void MapControl::periodic()
 }
 
 // read fifo from real-time-process, store in snapshot, and display via setText
-void MapControl::readInFifo()
+void APDcontrol::readInFifo()
 {
   static const int n2rd = 1000; /* number of MCSnapShot's to read at a time */
   MCSnapShot buf[n2rd];
@@ -555,18 +575,14 @@ void MapControl::readInFifo()
   gui_indicator_pi->setText(QString::number(snapshot.pi));
   gui_indicator_delta_pi->setText(QString::number(snapshot.delta_pi));
   gui_indicator_apd->setText(QString::number(snapshot.apd));
-  gui_indicator_previous_apd->setText(QString::number(snapshot.previous_apd));
-  gui_indicator_apd_fp->setText(QString::number((snapshot.apd+snapshot.previous_apd)/2));
   gui_indicator_di->setText(QString::number(snapshot.di));
-  gui_indicator_previous_di->setText(QString::number(snapshot.previous_di));
-  gui_indicator_vmax->setText(QString::number(snapshot.vmax));
-  gui_indicator_vmin->setText(QString::number(snapshot.vmin));
+  gui_indicator_v_apa->setText(QString::number(snapshot.v_apa));
+  gui_indicator_v_baseline->setText(QString::number(snapshot.v_baseline));
   gui_indicator_ap_ti->setText(QString(uint64_to_cstr(snapshot.ap_ti)));
-  gui_indicator_ap_t90->setText(QString(uint64_to_cstr(snapshot.ap_t90)));
+  gui_indicator_ap_tf->setText(QString(uint64_to_cstr(snapshot.ap_tf)));
   gui_indicator_g_val->setText(QString::number(snapshot.g_val));
   gui_indicator_delta_g->setText(QString::number(snapshot.delta_g));
   gui_indicator_consec_alternating->setText(QString::number(snapshot.consec_alternating));
-  gui_indicator_last_beat_index->setText(QString(uint64_to_cstr(snapshot.scan_index))); 
   /* update our slider value representation if actual last read delta_g
      disagrees with the UI's notion of what it is... */
   static const float smallf = 0.0001;
@@ -584,7 +600,7 @@ void MapControl::readInFifo()
 
 /* Possible race conditions here but it's too much trouble to implement
    atomicity for the free channels list right now... */
-void MapControl::populateAOComboBox()
+void APDcontrol::populateAOComboBox()
 {
   uint i;
 
@@ -599,7 +615,7 @@ void MapControl::populateAOComboBox()
 
 /* possible race conditions here.. since channel free list access is
    non-atomic! */
-void MapControl::changeAOChan(const QString & selected)
+void APDcontrol::changeAOChan(const QString & selected)
 {
   int selected_i = selected.toInt();
   
@@ -619,7 +635,7 @@ void MapControl::changeAOChan(const QString & selected)
 }
 
 /* synch the ao_channels listbox with what is really in the kernel */
-void MapControl::synchAOChan() 
+void APDcontrol::synchAOChan() 
 {
   QString ao_chan;
 
@@ -629,16 +645,16 @@ void MapControl::synchAOChan()
     ao_channels->setSelected(ao_channels->findItem(ao_chan, CaseSensitive|ExactMatch), true); 
 }
 
-void MapControl::changeAIChan(const QString &chan)
+void APDcontrol::changeAIChan(const QString &chan)
 {
   bool ok;
 
-  shm->map_channel = chan.toInt(&ok);
+  shm->apd_channel = chan.toInt(&ok);
 
-  if (!ok) shm->map_channel = -1;
+  if (!ok) shm->apd_channel = -1;
 }
 
-void MapControl::synchAIChan()
+void APDcontrol::synchAIChan()
 {
   uint i;
   int sel;
@@ -651,10 +667,10 @@ void MapControl::synchAIChan()
     if (daq_shmCtl->isChanOn(ComediSubDevice::AnalogInput, i))
       ai_channels->insertItem(QString().setNum(i));
   
-  sel = ai_channels->findItem(QString().setNum(shm->map_channel), CaseSensitive | ExactMatch);
+  sel = ai_channels->findItem(QString().setNum(shm->apd_channel), CaseSensitive | ExactMatch);
   if (sel < 0) {
     ai_channels->setSelected(0);
-    shm->map_channel = -1;
+    shm->apd_channel = -1;
   }
   else ai_channels->setSelected(sel); 
 
@@ -662,7 +678,18 @@ void MapControl::synchAIChan()
 
 }
 
-void MapControl::togglePacing(bool on)
+
+void APDcontrol::changeAPDxx(const QString &xx_value)
+{  
+  int new_apd_xx;
+  bool ok;
+
+  new_apd_xx = xx_value.toInt(&ok);
+  if (ok)
+    shm->apd_xx = 1.0 - (0.01*new_apd_xx);
+}
+
+void APDcontrol::togglePacing(bool on)
 {
   if (!on) {
     shm->pacing_on = 0;
@@ -671,12 +698,12 @@ void MapControl::togglePacing(bool on)
   }
 }
 
-void MapControl::changeNominalPI(int pi_in_ms)
+void APDcontrol::changeNominalPI(int pi_in_ms)
 {
   shm->nominal_pi = pi_in_ms;
 }
 
-void MapControl::toggleControl(bool on)
+void APDcontrol::toggleControl(bool on)
 {
   
   if (!on) {
@@ -694,7 +721,7 @@ void MapControl::toggleControl(bool on)
   }
 }
 
-void MapControl::toggleUnderlying(bool on)
+void APDcontrol::toggleUnderlying(bool on)
 {
   if (!on) {
     shm->continue_underlying = 0;
@@ -703,7 +730,16 @@ void MapControl::toggleUnderlying(bool on)
   }
 }
 
-void MapControl::toggleTargetShorter(bool on)
+void APDcontrol::toggleOnlyNegativePerturbations(bool on)
+{
+  if (!on) {
+    shm->only_negative_perturbations = 0;
+  } else {
+    shm->only_negative_perturbations = 1;
+  }
+}
+
+void APDcontrol::toggleTargetShorter(bool on)
 {
   if (!on) {
     shm->target_shorter = 0;
@@ -712,12 +748,12 @@ void MapControl::toggleTargetShorter(bool on)
   }
 }
 
-void MapControl::gAdjManualOnly(int yes)
+void APDcontrol::gAdjManualOnly(int yes)
 {
   shm->g_adjustment_mode = (yes ? MC_G_ADJ_MANUAL : MC_G_ADJ_AUTOMATIC);
 }
 
-void MapControl::changeG(const QString &g)
+void APDcontrol::changeG(const QString &g)
 {  
   double newG;
   bool ok;
@@ -727,16 +763,16 @@ void MapControl::changeG(const QString &g)
     shm->g_val = newG;
 }
 
-void MapControl::changeDG(int new_dg_sliderval) 
+void APDcontrol::changeDG(int new_dg_sliderval) 
 {
   shm->delta_g = mc_delta_g_fromint(new_dg_sliderval);
   gui_indicator_delta_g_bar_value->setNum(mc_delta_g_fromint(new_dg_sliderval));
 }
 
-const char * MapControl::fileheader = 
+const char * APDcontrol::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD, previous_APD, DI, previous_DI, AP_ti, AP_t90, Vmax, Vmin, g, delta_g, g_adjustment_mode, consecutive_alternating, continue_underlying, target_shorter\n";
+"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD, previous_APD, DI, previous_DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
 
 //save important snapshot values to disk 
 //important to edit this to suit your data needs
@@ -749,17 +785,17 @@ struct PVSaver
   { 
     QString scanIndex (uint64_to_cstr(ws.scan_index)),
             apTi      (uint64_to_cstr(ws.ap_ti)),
-            apT90     (uint64_to_cstr(ws.ap_t90));
+            apTf     (uint64_to_cstr(ws.ap_tf));
     
     dummy.sprintf
-      ("%s %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d\n",     
+      ("%s %d %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
        scanIndex.latin1(), 
        (int)ws.pacing_on, (int)ws.control_on,
        ws.nominal_pi, ws.pi, ws.delta_pi, 
-       ws.apd, ws.previous_apd, ws.di, ws.previous_di, 
-       apTi.latin1(), apT90.latin1(), ws.vmax, ws.vmin, 
+       ws.apd_xx, ws.apd, ws.previous_apd, ws.di, ws.previous_di, 
+       apTi.latin1(), apTf.latin1(), ws.v_apa, ws.v_baseline, 
        ws.g_val, ws.delta_g, (int)ws.g_adjustment_mode, ws.consec_alternating, 
-       (int)ws.continue_underlying, (int)ws.target_shorter);
+       (int)ws.only_negative_perturbations, (int)ws.continue_underlying, (int)ws.target_shorter);
 
     out << dummy;
   }
@@ -768,7 +804,7 @@ struct PVSaver
   QString dummy, header;
 };
 
-void MapControl::save()
+void APDcontrol::save()
 { 
   if (outFile.isNull()) { saveAs(); return; }
 
@@ -802,7 +838,7 @@ void MapControl::save()
   need_to_save = false;
 }
 
-void MapControl::saveAs()
+void APDcontrol::saveAs()
 {
   bool dont_overwrite = false;
 
@@ -827,11 +863,11 @@ void MapControl::saveAs()
   save();
 }
 
-void MapControl::safelyQuit()
+void APDcontrol::safelyQuit()
 {
   if (need_to_save) {
     int usersaid = 
-      QMessageBox::warning(window, "Data is unsaved", "The Map Control Plugin is terminating, and the data for the Map Control Control Experiment is unsaved.\nDo you wish to save or discard changes?", "Save Changes", "Discard Changes");
+      QMessageBox::warning(window, "Data is unsaved", "The APD Control Plugin is terminating, and the data for the APD Control Control Experiment is unsaved.\nDo you wish to save or discard changes?", "Save Changes", "Discard Changes");
     if (usersaid == 0)
       save(); /* this way even on file pick error
 				     they will be prompted to save */
