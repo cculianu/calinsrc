@@ -2,16 +2,43 @@
 #!Some code to intelligently read rtl.mk
 #!
 #${
-  if (! defined $ENV{'QTDIR'} ) {
+sub qt_dir_checks($) {
+	my $base = shift;
+ 
+	if ( ! defined $base || $base eq "" ) {
+		goto err_ret;
+	}
+	
+	my @dirs = ($base, "${base}/lib", "${base}/include");
+	
+	foreach my $dir (@dirs) {
+		if ( ! defined $dir 
+		     || ! -r $dir 
+		     || ! -d $dir 
+		     || ! -x $dir ) {
+		err_ret:
+			return undef;
+		} 
+	}
+	
+	return 1;
+	
+}
+  if (! qt_dir_checks($ENV{'QTDIR'}) ) {
     die q|
 ------------------------------------------------------------------------------
 ABORTING TMAKE
 **************
-The 'QTDIR' environment variable was not found.
+The 'QTDIR' environment variable was not found (or was set to a bogus 
+directory). 
+
+Your QTDIR=| . ( $ENV{'QTDIR'} ? $ENV{'QTDIR'} : "<No Value Set>" ) . q|
 
 Since this is a QT Project, this environment variable needs to be defined
-and should point to your QT directory.  This is often (but not necessarily)
-something like '/usr/lib/qt2', '/usr/local/lib/qt2' or '/usr/local/qt2'. 
+and should point to your QT2 directory.  This is often (but not necessarily)
+something like '/usr/lib/qt2', '/usr/local/lib/qt2' or '/usr/local/qt2'. It
+also must contain the proper qt libraries in a subdirectory called 'lib' and
+the proper qt development headers in a subdirectory called 'include'.
 ------------------------------------------------------------------------------
 |;		
   }
@@ -30,7 +57,7 @@ the comedi and comedilib source directories).
 ------------------------------------------------------------------------------
 |;
   }
-  if (! -f $project{'RTL_MK'}) {
+  if (! -f $project{'RTL_MK'} || ! -r $project{'RTL_MK'} ) {
     __daq_system_no_rtl_mk_Death:
     die q|
 ------------------------------------------------------------------------------
