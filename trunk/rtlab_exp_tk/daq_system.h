@@ -34,6 +34,7 @@
 #include <qstatusbar.h> 
 #include <qlistview.h>
 #include <qtextedit.h>
+#include <qtextbrowser.h>
 
 #include <map>
 #include <vector>
@@ -43,6 +44,7 @@
 #include "ecggraph.h"
 #include "ecggraphcontainer.h"
 #include "simple_text_editor.h"
+#include "help_browser.h"
 #ifdef __RTLINUX__
 #endif
 
@@ -211,7 +213,8 @@ class DAQSystem : public QMainWindow
   void addChannel(); 
   void openChannelWindow(uint chan, uint range, uint n_secs);
   void saveGraphSettings(const ECGGraphContainer *self);
-  void about() { /* about the application */ };
+  //void about();    /* about the application */
+  void daqHelp( int id );
 
   /* Log-related slots */
   void logTimeStamp(); /* writes the current sample count into the log */
@@ -298,7 +301,5 @@ class DAQSystem : public QMainWindow
   PluginMenu plugin_menu;
 
 };
-
-
 
 #endif 

@@ -47,7 +47,8 @@
 #include <qlineedit.h>
 #include "comedi_device.h"
 #include "output_file_w.h"
-
+#include "daq_help_sources.h"
+#include "help_browser.h"
 
 class Probe;
 class DAQSettings;
@@ -87,6 +88,7 @@ class ConfigurationWindow : public QDialog
   void askUserForTemplateFilename();
   void toSettings(); // merges state of dialog box into the settings
   void fromSettings(); // sets state of dialog box from the settings
+  void configHelp();   //opens up help window
 
  protected slots:
   void accept();
@@ -118,7 +120,6 @@ class ConfigurationWindow : public QDialog
   /* validates this form and returns false if form failed */
   bool validate();
 
-
   const Probe & deviceProbe;
   DAQSettings & settings;
 
@@ -131,7 +132,6 @@ class ConfigurationWindow : public QDialog
   OutputFileW outputFileGroupContainer;
 
   QGridLayout deviceSelectionGrid/*4 x 3*/, templateSelectionGrid/*3 x 2*/;
-              
   
   QButtonGroup deviceSelectionRadioGroup;
   QRadioButton deviceRadio, fileRadio;
@@ -141,8 +141,11 @@ class ConfigurationWindow : public QDialog
   QLabel logPreviewerLabel;
   TextContentsPreviewer logPreviewer;
   QCheckBox showDialogOnStartupChk;
+  QHBox bottomButtons;
   QPushButton OK;
+  QPushButton helpButton;
 
+  //HelpBrowser *helpBrowser;
 #ifdef TEST_CW
   friend int main (int argc, char *argv[], char *envp[]);
 #endif

@@ -34,13 +34,14 @@ extern "C" {
 #include <qworkspace.h>
 #include <qstring.h>
 #include <qmessagebox.h>
+
 #include "common.h"
 #include "exception.h"
 #include "probe.h"
 #include "daq_settings.h"
 #include "configuration.h"
 #include "daq_system.h"
-
+#include "daq_help_sources.h"
 static void testAndMakeDaqSystemDirOrQuit(void);
 static void init(void);
 static void uninit();
@@ -66,7 +67,7 @@ main(int argc, char *argv[])
     /* display configuration window, if we're supposed to */
     do {
       conf->startupScreenSemantics = true;
-      if ( showConfigScreen && !conf->exec() ) {
+      if ( showConfigScreen && !conf->exec() ) { 
         uninit();
         return (1);
       }

@@ -47,6 +47,7 @@
 #include <qfont.h>
 #include <qfontmetrics.h>
 #include <qpixmap.h>
+#include <qtextbrowser.h>
 
 #include <iostream>
 #include <map>
@@ -66,6 +67,8 @@
 #include "ecggraphcontainer.h"
 #include "daq_system.h"
 #include "common.h"
+#include "daq_help_sources.h"
+#include "help_browser.h"
 
 #include "timestamp.xpm"
 #include "plus.xpm"
@@ -133,7 +136,12 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     connect(&windowMenu, SIGNAL(activated(int)), 
 	    this, SLOT(windowMenuFocusWindow(int)));
 
-    helpMenu.insertItem("&About", this, SLOT( about() ) );
+    //helpMenu.insertItem("DAQ System Help", this, SLOT( daqHelp() ) );
+    helpMenu.insertItem("DAQ System Help", 0);
+    helpMenu.insertItem("Configurating DAQ System", 1);
+    helpMenu.insertItem("&About", 2);
+    connect(&helpMenu, SIGNAL(activated(int)), 
+	    this, SLOT(daqHelp(int)));
 
     _menuBar.insertItem("&File", &fileMenu);
     _menuBar.insertItem("&Log", &logMenu);
@@ -256,6 +264,20 @@ DAQSystem::addChannel (void)
   
 }
 
+void DAQSystem::daqHelp( int id )
+{
+  if ( id == 0 )
+    HelpBrowser::getDefaultBrowser( )->
+      openPage( DAQHelpSources::mainWindowHelpSource );
+  
+  else if ( id == 1 )
+    HelpBrowser::getDefaultBrowser( )->
+      openPage( DAQHelpSources::configWindowHelpSource );
+
+  else if ( id == 2 )
+    HelpBrowser::getDefaultBrowser( )->
+      openPage( DAQHelpSources::aboutHelpSource );
+}
 
 bool
 DAQSystem::queryOpen(uint & chan, uint & range, 
