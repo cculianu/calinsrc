@@ -30,6 +30,21 @@
 #include "shared_stuff.h"
 #include "common.h"
 
+namespace ComediChannel
+{
+  enum AnalogRef {
+    Ground = AREF_GROUND,
+    Common = AREF_COMMON,
+    Differential = AREF_DIFF,
+    Other = AREF_OTHER,
+    Undefined,
+  };
+  
+  /* helper functions */
+  int ar2int(AnalogRef r);
+  AnalogRef int2ar(int r);
+};
+
 class ComediSubDevice
 {  
   friend class ComediDevice;
@@ -101,7 +116,7 @@ class ComediDevice
   bool isNull() const { return subdevices.size() <= 0; };
 };
 
-#define _cd_undefinedval COMEDI_SUBD_UNUSED-1
+#define _cd_undefinedval (COMEDI_SUBD_UNUSED-1)
 inline
 int
 ComediSubDevice::sd2int(SubdevType t) 
@@ -146,6 +161,47 @@ ComediSubDevice::int2sd(int i)
   return ret;
 }
 #undef _cd_undefinedval
+
+#define _ar_undefinedval (static_cast<int>(ComediChannel::Undefined))
+inline
+int
+ComediChannel::ar2int(AnalogRef r) 
+{ 
+  switch (r) {
+  case Ground:
+    return AREF_GROUND;
+  case Common:
+    return AREF_COMMON;
+  case Differential:
+    return AREF_DIFF;
+  case Other:
+    return AREF_OTHER;
+  default:
+    return _ar_undefinedval;
+  }
+  return _ar_undefinedval; /* not reached */
+}
+
+inline
+ComediChannel::AnalogRef
+ComediChannel::int2ar(int i) 
+{
+  switch (i) {
+  case AREF_GROUND:
+    return Ground;
+  case AREF_COMMON:
+    return Common;
+  case AREF_DIFF:
+    return Differential;
+  case AREF_OTHER:
+    return Other;
+  default:
+    return Undefined;
+  }
+  return Undefined; /* not reached */
+}
+#undef _ar_undefinedval
+
 
 /* pass optional int * to save the unit type in the param 
 

@@ -213,7 +213,10 @@ class DAQSystem : public QMainWindow
   void channelClosed(uint chan);
   
  public slots:
-  void addChannel(); 
+  void addChannel();  /* brings up the add channel dialog box */
+  void changeAREFDialog();  /* brings up the change aref dialog box */
+  void changeAREF(ComediChannel::AnalogRef); /* applies the aref change 
+                                               to all channels */
   void openChannelWindow(uint chan, uint range, uint n_secs);
   void saveGraphSettings(const ECGGraphContainer *self);
   //void about();    /* about the application */
@@ -273,6 +276,9 @@ class DAQSystem : public QMainWindow
   /* Prints the current graph's contents for each of the graph containers
      specified in the vector */
   void print(vector<const ECGGraphContainer *> &);
+
+  void allChannelsOffSaveState(vector<uint> & vector_to_save_ON_channels_to);
+  void channelsOn (const vector<uint> & chanspec);
 
   QPrinter printer;  /* the printer used for printing */
 
