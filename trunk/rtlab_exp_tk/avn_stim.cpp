@@ -643,3 +643,4 @@ void AVNStim::safelyQuit()
                  they will be prompted to save */
   }
 }
+

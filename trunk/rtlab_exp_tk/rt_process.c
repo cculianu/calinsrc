@@ -148,14 +148,15 @@ static sampling_rate_t last_sampling_rate = 0;
    rtp_shm->sampling_rate_hz, changes: task_period and last_sampling_rate */
 inline int readjust_rt_task_period(void);
 
+static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
+                                           modules -- not exported so as
+                                           to keep the interface clean...*/
+
 
 /* this task reads data from the DAQ board, then calls 
    all of the functions registered in rt_functions linked list */
 static void *daq_rt_task (void *arg) 
 {
-  static MultiSampleStruct one_full_scan; /* Used to pass off samples to other
-                                             modules */
-
   register hrtime_t loopstart = 0;    /* used to calibrate timing on
                                          sampling rate changes            */
 

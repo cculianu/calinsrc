@@ -242,6 +242,8 @@ class DAQSystem : public QMainWindow
 
   void resynch();
 
+  void showLogWindow();
+
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
