@@ -131,8 +131,10 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
 
   virtual void spool(const T * thing, int nmemb) 
     { /* do spooling */ 
-      if ( gzwrite(gzfile, const_cast<T *>(thing), 
-                   sizeof(T) * nmemb) != sizeof(T) * nmemb ) {
+      if ( static_cast<long>(gzwrite(gzfile, 
+                                     const_cast<T *>(thing), 
+                                     sizeof(T) * nmemb)) 
+           != static_cast<long>(sizeof(T) * nmemb) ) {
         int err;
         throw FileException ("Could not write", 
                              QString("Error writing to a temporary gz file.  ")
@@ -146,16 +148,12 @@ template <class T> class TempSpoolerGZ : public TempSpooler<T>
     { 
       static const int num_at_a_time = 10;
       unsigned long long int numLeft = numSpooled();
-      int r;
 
       if (!numSpooled()) return; /* abort early if we have no data */
 
       closeGZ();
       openGZ(Read);
       
-      Assert<FileException>(r >= 0, "Seek error in "__FILE__, gzerror(gzfile, 
-                                                                      &errno));
-
       char buf[sizeof(T) * num_at_a_time / sizeof(char)];
       int n_read;
       while((n_read = ::gzread(gzfile, buf, sizeof(T) * num_at_a_time)) != 0){

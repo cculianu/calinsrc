@@ -30,6 +30,7 @@
 #include "dsd_repair.h"
 #include "common.h"
 #include "exception.h"
+#include "tempspooler.h"
 
 using namespace std;
 
@@ -155,7 +156,7 @@ Op *DEFAULT_OP = ops[0];
 
 int main (int argc, char *argv[]) 
 {
-
+  (void)argc; // suppress compiler warnings..
   Op *op = 0; 
     
   argv++; /* consume argv[0] */
@@ -173,7 +174,6 @@ int main (int argc, char *argv[])
                 
         value = name.section('=', 1);
         name = name.section('=', 0, 0);
-        const char *n = name.latin1(), *v = value.latin1(); // for debug
 
         name.simplifyWhiteSpace();
         value.simplifyWhiteSpace();        
@@ -234,39 +234,41 @@ SplitOp::SplitOp()
 /* An internal class to deal with writing to .txt, .nds, or .bin format files.
    Auto-senses the file type based on the extention and saves the file
    appropriately. */
-class TxtOrBinOrNDSWriter {
+class TxtOrBinOrNDSWriter : protected TempSpoolerGZ<SampleStruct> {
 public:
   TxtOrBinOrNDSWriter(const QString & file, uint rate, DSDStream::FileDataType t);
   ~TxtOrBinOrNDSWriter();
-
+  
+  const char *mode() const; 
+  
   void writeSample(const SampleStruct *);
   void writeSample(const SampleStruct &s) { writeSample(&s); };
+  void finish();
 private:
-  enum Mode { NDS, BIN = 1, Ascii = 2  };
+  friend struct TMP;
+  enum Mode { NDS, BIN = 1, ASCII = 2  };
   Mode m;
   uint rate;
   DSDOStream *dout;
-  FILE       *fout, *tmp;
+  FILE       *fout/*, *tmp*/;
+  QTextStream *t;
 
   map<uint,float> chans;
 
+  bool done;
+
   void writeScan(scan_index_t index);
-  void writeScanText(scan_index_t index, QTextStream &);
+  void writeScanText(scan_index_t index);
 };
 
 TxtOrBinOrNDSWriter::TxtOrBinOrNDSWriter(const QString & file, 
                                          uint rate, 
                                          DSDStream::FileDataType t)
-  : rate(rate), dout(0), fout(0), tmp(0)
+  : rate(rate), dout(0), fout(0), /*tmp(0),*/ t(0), done(false)
 {
   if (((m = BIN) && file.endsWith(".bin")) 
-      || ((m = Ascii) && (file.endsWith(".txt") || file.endsWith(".dat")))) {
-    tmp = tmpfile();
+      || ((m = ASCII) && (file.endsWith(".txt") || file.endsWith(".dat")))) {
     fout = fopen(file.latin1(), "w");
-    if (!tmp) {
-      throw FileException("Could not open temp file.", 
-                          QString("Check %1!").arg(P_tmpdir));
-    }
     if (!fout) {
       throw FileException(QString("Could not open output file %1.").arg(file), 
                           QString("Error is: %1").arg(strerror(errno)));
@@ -277,7 +279,51 @@ TxtOrBinOrNDSWriter::TxtOrBinOrNDSWriter(const QString & file,
   }
 }
 
+const char * TxtOrBinOrNDSWriter::mode() const
+{
+  switch(m) {
+  case BIN:
+    return "Raw Binary";
+  case ASCII:
+    return "ASCII Text";
+  case NDS:
+    return "NDS Format (new DAQ System)";
+  default:
+    return "Unknown";
+  }
+}
+
+
+  struct TMP 
+  {
+    typedef void (TxtOrBinOrNDSWriter::*FN)(scan_index_t);
+
+        TMP(TxtOrBinOrNDSWriter *w,FN f) 
+          : instance(w), index(0), i(0), chans(w->chans), fn(f)
+        {}
+        ~TMP() { done(); }
+        void operator()(const SampleStruct & s) 
+        {
+          if (s.scan_index > index) { // new scan        
+            index = s.scan_index;
+            if (i) (instance->*fn)(s.scan_index);
+          }
+          chans[s.channel_id] = s.data;
+          i++;
+        }
+        void done() { if (i) {(instance->*fn)(index); i = 0;} }
+        TxtOrBinOrNDSWriter *instance;
+        scan_index_t index, i;
+        map<uint, float> &chans;
+        FN fn;
+  };
+
 TxtOrBinOrNDSWriter::~TxtOrBinOrNDSWriter()
+{
+  if (!done) finish();
+}
+
+void TxtOrBinOrNDSWriter::finish()
 {
   switch(m) {
   case NDS:
@@ -287,50 +333,29 @@ TxtOrBinOrNDSWriter::~TxtOrBinOrNDSWriter()
   break;
   case BIN:
     {
-      SampleStruct s;
-      scan_index_t index = 0;
-      int n_chans = chans.size();
-      uint i = 0;
-      fseek(tmp, 0, SEEK_SET);
-      fwrite(&n_chans, sizeof(int), 1, fout);
-      while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
-        if (s.scan_index > index) { // new scan        
-          index = s.scan_index;
-          if (i) writeScan(s.scan_index);
-        }
-        chans[s.channel_id] = s.data;
-        i++;
-      }
-      writeScan(s.scan_index);
-      fclose(tmp); 
+      int num_channels = chans.size();
+      fwrite(&num_channels, sizeof(int), 1, fout);
+      TMP oper(this, &TxtOrBinOrNDSWriter::writeScan);
+      forEach(oper);
+      oper.done();
       fclose(fout);
-      tmp = fout = 0;
+      fout = 0;
     }
   break;
-  case Ascii:
+  case ASCII:
     {
-      SampleStruct s;
-      scan_index_t index = 0;
-      int n_chans = chans.size();
-      uint i = 0;
-      fseek(tmp, 0, SEEK_SET);
-      QTextStream *t = new QTextStream(fout, IO_WriteOnly | IO_Truncate);
-      while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
-        if (s.scan_index > index) { // new scan        
-          index = s.scan_index;
-          if (i) writeScanText(s.scan_index, *t);
-        }
-        chans[s.channel_id] = s.data;
-        i++;
-      }
-      writeScanText(s.scan_index, *t);
+      t = new QTextStream(fout, IO_WriteOnly | IO_Truncate);
+      TMP oper(this, &TxtOrBinOrNDSWriter::writeScanText);
+      forEach(oper);
+      oper.done();
       delete t;
-      fclose(tmp); 
+      t = 0;
       fclose(fout);
-      tmp = fout = 0;
+      fout = 0;
     }
   break;
   }
+  done = true;
 }
 
 void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
@@ -344,22 +369,22 @@ void TxtOrBinOrNDSWriter::writeScan(scan_index_t index)
   } 
 }
 
-void TxtOrBinOrNDSWriter::writeScanText(scan_index_t index, QTextStream & t)
+void TxtOrBinOrNDSWriter::writeScanText(scan_index_t index)
 {
   double time = index / static_cast<double>(rate);
-  t << time;
+  (*t) << time;
   map<uint,float>::iterator it, end;
   for (it = chans.begin(), end = chans.end(); it != end; it++) 
-    t <<  " " << it->second;  
-  t << "\n";    
+    (*t) <<  " " << it->second;  
+  (*t) << "\n";    
 }
 
 void TxtOrBinOrNDSWriter::writeSample(const SampleStruct *s)
-{
+{  
   if (m == NDS) { 
     dout->writeSample(s); 
   } else {
-    fwrite(s, sizeof(const SampleStruct), 1, tmp);
+    spool(s, 1);
     chans[s->channel_id] = 0;
   }
 }
@@ -400,8 +425,11 @@ int SplitOp::doIt()
       }
     } 
     
-    cerr << "Done!" << endl;
+    cerr << "Repackaging as " << out.mode() << ".." << endl;
+    
+    out.finish();
 
+    cerr << "Done!" << endl;
   } catch (Exception & e) {
     e.showError();
     return EIO;
@@ -484,9 +512,7 @@ int InfoOp::doIt()
   }
         
   scan_index_t
-    startI = compensate_for_start_quirk ? in.scanIndex() :in.startIndex(),
-    scanC  = in.scanCount()  
-             - static_cast<scan_index_t>(compensate_for_start_quirk ? 1 : 0);
+    startI = compensate_for_start_quirk ? in.scanIndex() :in.startIndex();
          
   std::string  
     startIndex = Convert(startI).sStr(),
