@@ -1,0 +1,43 @@
+daq_system is a C++ data acquisition application that uses the Qt
+(version 2.01) graphical library on the Linux operating system. The
+data acquisition is accomplished by rt_process.cc which uses the
+Real-Time Linux kernel extension for accurate real-time
+processing. See INSTALL for RT-Linux and COMEDI versions this software
+should run on. The software was developed on a computer with a 266 MHz
+Intel Pentium-II processor, 192MB of SDRAM, and a Diamond Viper 330
+AGP 4MB video card. I use a National Instruments ___MIO16E10 board for
+data acquisition - you can use any board supported by COMEDI.
+
+1. rt_process.o uses rt_task_make_periodic and a while loop with a
+rt_task_wait() command to scan NUM_AD_CHANNELS_TO_USE channels
+(defined in rt_process.h) from a DAQ board at a sample rate of
+HZ_FREQUENCY (set in rt_process.h).
+
+2. Each data scan is rtf_put to its own dedicated FIFO for access by
+daq_system.
+
+3. daq_system uses QTimer to emit a signal approximately every 1 ms
+which tells daq_system to read data from the DAQ FIFOs (/dev/rtf0
+for AD0 and /dev/rtf1 for AD1). Every time the timer signal is
+emmitted, daq_system reads the FIFOs until they are empty [by
+utilizing a select() command], thus picking up all the data.
+
+4. daq_system communicates the values of its toggle buttons and
+scroll bars to rt_process via shared memory.
+
+5. The data from each channel is examined by SpikeDetect inside
+rt_process to detect spikes (vspike and aspike) (a voltage spike in an
+ECG signal occurs when the heart beats). A spike is detected when the
+ECG voltage crosses a spike threshold (appropriate horizontal line on
+ECG plot) that is controlled by a Qscrollbar. For non-ECG
+applications, you can just ignore this functionality.
+
+6. Data can be output in either ASCII or binary format - selectable
+prior to the first activation of data output (self-explanatory on GUI).
+
+7. For futher info look at the code itself.
+
+<If there are any problems/questions/issues, please email me.>
+
+David Christini
+dchristi@med.cornell.edu
