@@ -23,7 +23,9 @@
 #ifndef _USER_CMD_H
 #define _USER_CMD_H 1
 
+struct SharedMemStruct;
+
 /* called from rtlab.o's main loop -- reads off the control fifo
-   and executes commands from userland */
-extern void do_user_commands(void);
+   and executes commands from user process */
+extern void do_user_commands(struct SharedMemStruct *);
 #endif
