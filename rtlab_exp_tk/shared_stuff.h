@@ -25,10 +25,8 @@
   Defines all the shared parameters and structures  that are used for 
   kernel/userland communication  in the DAQ System
 */
-
 #ifndef _SHARED_MEMORY_DOT_H
 # define _SHARED_MEMORY_DOT_H
-
 
 /* dconst, or dummy const is a hackish way to enforce the fact that userland
    should NOT modify certain key shared memory struct members */
@@ -120,11 +118,11 @@ struct SharedMemStruct {
   sampling_rate_t sampling_rate_hz; /* Use this to modify the period of the rt
                                        loop (dangerous!).  Initialized to 1000  */
   
-  scan_index_t scan_index; /*       index of current analog input scan --   
-                                    notice how this property is writable..
-                                    we can reset this at any time from the 
-                                    user process so as to allow the ability
-                                    to reset the scan index                  */
+  volatile scan_index_t scan_index; /* index of current analog input scan --   
+                                       notice how this property is writable..
+                                       we can reset this at any time from the 
+                                       user process so as to allow the ability
+                                       to reset the scan index               */
 				     
   SpikeParams spike_params;              /* see struct definition above      */
 
@@ -183,7 +181,7 @@ inline
 void
 init_spike_params (SpikeParams *p)
 {
-  register uint i;
+  register unsigned int i;
 
   for (i = 0; i < CHAN_MASK_SIZE; i++) {
     p->enabled_mask[i] = 0;  

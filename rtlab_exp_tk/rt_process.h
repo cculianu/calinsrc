@@ -43,13 +43,6 @@
                                         should some day come from a config 
                                         script?                              */
 
-# define DEFAULT_AI_FIFO        0    /* the /dev/rtfX device to use: this 
-                                        should some day come from a config 
-                                        script and/or be more dynamic?       */
-# define DEFAULT_AO_FIFO        1    /* the /dev/rtfX device to use: this 
-                                        should some day come from a config 
-                                        script and/or be more dynamic?       */
-
 typedef struct {
   char channel_mask[CHAN_MASK_SIZE]; /* mask of channels id's */
   hrtime_t acq_start; /* hrtime that data acquisition started for first chan.*/
@@ -98,10 +91,11 @@ extern int rtp_deactivate_function(rtfunction_t function);
 /* activates a function that was previously registered,
    returns 0 on success, EINVAL on error */
 extern int rtp_activate_function(rtfunction_t function);
-
-
-
-
+/* Finds a free fifo, calls rtf_create(), and puts the minor number in minor.  
+   On error a negative errno is returned. 
+   Use this to quickly find a free fifos.  Helpful so that don't have to loop
+   to find a free. */
+extern int rtp_find_free_rtf(int *minor, int size);
 /* 
    EXPORTED VARIABLES:
    Other variables present in rt_process.o: 

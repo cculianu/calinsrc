@@ -27,6 +27,7 @@
 #include <linux/version.h>
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/bitops.h>
 #include <asm/semaphore.h> /* for synchronizing the exported functions */
 #include <asm/bitops.h>    /* for set/clear bit                        */
 #include <linux/malloc.h>
@@ -58,10 +59,6 @@
 MODULE_AUTHOR("David J. Christini, PhD and Calin A. Culianu [not PhD :(]");
 MODULE_DESCRIPTION(MODULE_NAME ": A Real-Time Sampling Task for use with kcomedilib and the daq_system user program");
 
-MODULE_PARM(ai_fifo, "i");
-MODULE_PARM_DESC(ai_fifo, "The /dev/rtfXX device number to use for echoing incoming analog input. Defaults to 0.");
-MODULE_PARM(ao_fifo, "i");
-MODULE_PARM_DESC(ao_fifo, "The /dev/rtfXX device numer to use for echoing outgoing analog output. Defaults to 1.");
 MODULE_PARM(ai_comedi_device, "i");
 MODULE_PARM_DESC(ai_comedi_device, "The comedi device minor number to use for analog input. Defaults to 0.");
 MODULE_PARM(ao_comedi_device, "i");
@@ -71,6 +68,7 @@ EXPORT_SYMBOL_NOVERS(rtp_register_function);
 EXPORT_SYMBOL_NOVERS(rtp_unregister_function);
 EXPORT_SYMBOL_NOVERS(rtp_deactivate_function);
 EXPORT_SYMBOL_NOVERS(rtp_activate_function);
+EXPORT_SYMBOL_NOVERS(rtp_find_free_rtf);
 EXPORT_SYMBOL_NOVERS(rtp_shm);
 EXPORT_SYMBOL_NOVERS(spike_info);
 
@@ -93,7 +91,6 @@ static void detectSpikes (MultiSampleStruct *m);
 static int __rtp_set_f_active(rtfunction_t f, char v); /* internal */
 static int __rtp_register_function(rtfunction_t function); /* internal */
 static int __rtp_unregister_function(rtfunction_t function); /* internal */
-
 typedef enum SubDevT {
   AI = 0,
   AO
@@ -131,10 +128,8 @@ static struct rt_function_list
 DECLARE_MUTEX(rt_functions_sem);
 
 /* module parameters */
-int ai_fifo = DEFAULT_AI_FIFO, 
-    ao_fifo = DEFAULT_AO_FIFO, 
-    ai_comedi_device = DEFAULT_COMEDI_MINOR,
-    ao_comedi_device = DEFAULT_COMEDI_MINOR;
+int    ai_comedi_device = DEFAULT_COMEDI_MINOR,
+       ao_comedi_device = DEFAULT_COMEDI_MINOR;
 
 /* Exported globals below.. */
 SharedMemStruct *rtp_shm = 0;            /* (exported) mbuff shared memory */
@@ -332,14 +327,12 @@ int  init_module(void)
     error = -ENOMEM;
   }
   
-  if ( (error = rtf_create(rtp_shm->ai_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
-       (error != SS_RT_QUEUE_SZ_BYTES) ) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ai_fifo_minor, SS_RT_QUEUE_SZ_BYTES))) {
     errorMessage = "Cannot create fifo for communicating analog input to userland!";     
     goto init_error;
   }
 
-  if ( (error = rtf_create(rtp_shm->ao_fifo_minor, SS_RT_QUEUE_SZ_BYTES)) &&
-       (error != SS_RT_QUEUE_SZ_BYTES) ) {
+  if ((error = rtp_find_free_rtf(&rtp_shm->ao_fifo_minor, SS_RT_QUEUE_SZ_BYTES))) {
     errorMessage = "Cannot create a fifo for communicating analog output to userland!";     
     goto init_error;
   }
@@ -396,8 +389,8 @@ init_shared_mem(int ai_subdev, int ao_subdev)
   rtp_shm->ao_minor = ao_comedi_device;
   rtp_shm->ai_subdev = ai_subdev;
   rtp_shm->ao_subdev = ao_subdev;
-  rtp_shm->ai_fifo_minor = ai_fifo;
-  rtp_shm->ao_fifo_minor = ao_fifo;
+  rtp_shm->ai_fifo_minor = -1;
+  rtp_shm->ao_fifo_minor = -1;
   /* num AI channels in use */
   rtp_shm->n_ai_chans = comedi_get_n_channels(rtp_shm->ai_minor, ai_subdev); 
   rtp_shm->n_ao_chans = comedi_get_n_channels(rtp_shm->ao_minor, ao_subdev);
@@ -511,19 +504,15 @@ void cleanup_module(void)
   }
 
 }
+
 static void cleanup_fifos (void) 
 {
   if (! rtp_shm) return;
 
-  do {
-    int i, fifos[2] = {rtp_shm->ai_fifo_minor, 
-                       rtp_shm->ao_fifo_minor};
-    
-    for (i = 0; i < 2; i++)
-      if (fifos[i] >= 0)
-        rtf_destroy(fifos[i]);
-  
-  } while (0);
+  if (rtp_shm->ai_fifo_minor >= 0) rtf_destroy(rtp_shm->ai_fifo_minor);
+  if (rtp_shm->ao_fifo_minor >= 0) rtf_destroy(rtp_shm->ao_fifo_minor);    
+
+  rtp_shm->ai_fifo_minor = rtp_shm->ao_fifo_minor = -1;
 }
 
 static void cleanup_comedi_stuff (void) 
@@ -651,8 +640,8 @@ static void detectSpikes (MultiSampleStruct *m)
 
       if (m->samples[i].spike) {
         m->samples[i].spike_period = spike_info.period[chan] =
-          ((int)(this_chan_time - spike_info.last_spike_time[chan])) 
-          / (double)1000000.0;
+          (this_chan_time - spike_info.last_spike_time[chan]) 
+           * ((double)0.000001);
         spike_info.last_spike_time[chan] = this_chan_time;
       }
       
@@ -851,6 +840,35 @@ static int __rtp_set_f_active(rtfunction_t f, char v)
   return retval;
 }
 
+/* Finds a free fifo, calls rtf_create(), and puts the minor number in minor.  
+   On error a negative errno is returned. 
+   Use this to quickly find a free fifos.  Helpful so that don't have to loop
+   to find a free. */
+int rtp_find_free_rtf(int *minor, int size)
+{
+  unsigned int i;
+
+  if (!minor) return -EFAULT;
+     
+  /* keep trying to create a fifo until we find a free one */
+  for (i = 0; i < RTF_NO; i++) {
+    int ret;
+
+    ret = rtf_create(i, size);
+
+    /* the rtf_create docs contradict the actual code for rtf_create... */
+    if (ret == size || ret == 0) {
+      /* got it! */      
+      *minor = i;
+      printk(MODULE_NAME ": rtp_find_free_rtf(): fifo minor is %d\n", *minor);
+      return 0;
+    } else if (ret != -EBUSY) return ret;
+  }
+  
+  return -EBUSY;
+
+}
+
 inline double sampl_to_volts(SubDevT t, uint chan, uint range, lsampl_t sampl)
 {
   comedi_krange *krange;
@@ -890,7 +908,6 @@ inline int readjust_rt_task_period(void)
   }
   return 0;
 }
-
 #undef __I_AM_BUSY
 
 #ifdef TIME_RT_LOOP
