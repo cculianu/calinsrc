@@ -31,9 +31,10 @@
 #include <asm/semaphore.h> /* for synchronizing the exported functions */
 #include <asm/bitops.h>    /* for set/clear bit                        */
 #include <linux/slab.h>
-#include <linux/string.h> /* some memory copyage */
-#include <linux/fs.h> /* for the determine_minor() functionality */
+#include <linux/string.h> /* some memory copyage                       */
+#include <linux/fs.h> /* for the determine_minor() functionality       */
 #include <linux/proc_fs.h>
+#include <asm/div64.h> /* for do_div 64-bit division mavro             */
 
 #define RTLAB_INTERNAL
 
@@ -118,6 +119,11 @@ static int rtlab_proc_register(void);
 struct calib_parms { int iterations; long period; };
 static void *calibrate_jitter(void *arg);
 
+/* Since we can potentially be running at variable sampling rates, we need 
+   to keep track of actual real wall clock time in ms.  This function is called
+   early from inside the realtime loop. */
+static inline void update_time_ms(rtos_time_t current_time);
+
 /* Cleans up the sampling_rate parameter that comes in as a mod param,
    so that it is a multiple of 1000, or an even factor of 1000 */
 static sampling_rate_t normalizeSamplingRate(sampling_rate_t rate);
@@ -161,7 +167,6 @@ inline comedi_krange *get_krange(SubDevT t, uint chan, uint range);
 static int internal_data_read_delayed( COMEDI_T, uint subdev, uint chan, 
                                        uint range, uint aref, lsampl_t *data, 
                                        uint nano_sec);
-
 
 static pthread_t daq_task = 0;          /* main RT task */
 static void     *daq_task_stack = 0;    /* main RT task stack */
@@ -269,7 +274,7 @@ static void *daq_rt_task (void *arg)
   //  while (1) {
   while(!atomic_read(&stop_daq_task)) {
 
-    loopstart = gethrtime();
+    loopstart = rtos_get_time();
 
     if (rtp_shm->scan_index > 1LL) {
     /* compute jitter */
@@ -282,6 +287,8 @@ static void *daq_rt_task (void *arg)
     /* set next_task_period wakeup time to be a multiple of task_period, 
        also recomputes task_period in case sampling_rate changed */
     readjust_rt_task_wakeup();
+
+    update_time_ms(loopstart); /* update rtp_shm->time_ms */
 
 #ifdef TIME_RT_LOOP
     if ( I_SHOULD_PRINT_TIME )
@@ -730,6 +737,9 @@ init_shared_mem(void)
     fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ai_chans;
   rtp_shm->ao_fifo_sz_blocks = 
     fifo_secs * rtp_shm->sampling_rate_hz * rtp_shm->n_ao_chans;
+
+  /* initialize our time_ms variable */
+  rtp_shm->time_ms = 0;
 
   /* initialize the spike_params member */
   init_spike_params(&rtp_shm->spike_params);
@@ -1367,6 +1377,7 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "AI Channels:\n%s\n"
                "AO Channels:\n%s\n"
                "Sampling Rate: %u Hz    Scan Index: %u (inaccurate)\n"
+	       "Relative Time: %u milliseconds\n"
                "AI Minor Device: %d    AI Sub-Device ID: %d     "
                "AO Minor Device: %d    AO Sub-Device ID: %d\n"
                "AI FIFO Device Minor: %d    AO FIFO Device Minor: %d\n"
@@ -1378,6 +1389,7 @@ static int rtlab_proc_read (char *page, char **start, off_t off, int count,
                "(unimplemented)",
                (uint)rtp_shm->sampling_rate_hz,
                (uint)rtp_shm->scan_index,
+	       (uint)rtp_shm->time_ms,
                rtp_shm->ai_minor, rtp_shm->ai_subdev, 
                rtp_shm->ao_minor, rtp_shm->ao_subdev,
                rtp_shm->ai_fifo_minor, rtp_shm->ao_fifo_minor,
@@ -1675,6 +1687,29 @@ static int internal_data_read_delayed( COMEDI_T dev, uint subdev, uint chan,
 
 	return comedi_do_insn (dev, &insn);
 }
+
+/* Since we can potentially be running at variable sampling rates, we need 
+   to keep track of actual real wall clock time in ms.  This function is called
+   early from the realtime loop. */
+static inline void update_time_ms(rtos_time_t now)
+{
+  
+  static int64         first_call = -1; /* always relative to first_call. */
+  static const int32   nanos_per_milli = 1000000L;
+  uint64               quotient;
+  uint32               remainder;
+
+  /* TODO FIX THIS TO SOMEHOW USE NATIVE LONG LONG DIVISION!!
+     NOTE: do_div() is in asm/div64.h and is supposedly 64-bit-safe! */
+
+  if (first_call == -1) first_call = now; 
+
+  quotient = now - first_call;
+  remainder = do_div(quotient, nanos_per_milli);
+  if (remainder >= (nanos_per_milli / 2)) quotient++;
+  rtp_shm->time_ms = quotient;
+}
+
 
 #undef __I_AM_BUSY
 

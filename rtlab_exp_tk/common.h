@@ -32,17 +32,7 @@
 #define BUG() do { fprintf(stderr, "BUG at %s:%d!\n", __FILE__, __LINE__); } while (0)
 #endif
 
-
-typedef unsigned int uint;
-
-typedef short int16;
-typedef unsigned short uint16;
-
-typedef char int8;
-typedef unsigned char uint8;
-
-typedef unsigned long long uint64;
-typedef long long int64;
+#include "rtlab_types.h"
 
 #define RTLAB_MODULE_NAME "rtlab"
 
