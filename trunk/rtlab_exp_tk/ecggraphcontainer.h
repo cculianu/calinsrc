@@ -67,11 +67,23 @@ public slots:
   void updateYAxisLabels(double rangeMin, double rangeMax);
 
 
-private:
+ protected:
 
-  bool parseRangeString(const QString &string, double *rangeMin, double *rangeMax, RangeUnit *units);
- 
   QGridLayout *layout;
+
+ protected slots:
+  void mouseUpInGraph();
+  void mouseDownInGraph();
+
+ private:
+  
+  /* parses 'string' for range settings and puts the results
+     inside rangeMin, rangeMax, and units */
+  bool parseRangeString(const QString &string, 
+			double & rangeMin, 
+			double & rangeMax, 
+			RangeUnit & units);
+ 
 
   QLabel *topYLabel, *middleYLabel, *bottomYLabel, *graphNameLabel;
 
@@ -81,7 +93,7 @@ private:
 
   QComboBox *rangeComboBox;  // holds range labels
   QSpinBox *secondsVisibleBox; // holds/changes the number of seconds visible
-
+  
 };
 
 #endif

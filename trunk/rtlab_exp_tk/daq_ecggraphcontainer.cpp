@@ -20,8 +20,16 @@
  * Boston, MA 02111-1307, USA, or go to their website at
  * http://www.gnu.org.
  */
-#include "ecggraph.h"
 #include "daq_ecggraphcontainer.h"
+
+
+/* ugly non-class-specific static constants but this saves needing to duplicate this work in the .h file */
+static const QString 
+  MOUSE_POS_FORMAT("Mouse pos: %1 V at scan %2"),
+  CURRENT_INDEX_FORMAT("Scan Index: %1"),
+  SPIKE_THOLD_FORMAT("Spike Threshold: %1 V"),
+  LAST_SPIKE_FORMAT("Last Spike %1 V at %2");
+  
 
 DAQECGGraphContainer::
 DAQECGGraphContainer(ECGGraph *graph, 	
@@ -33,11 +41,51 @@ DAQECGGraphContainer(ECGGraph *graph,
 
 {
   this->setChannelId(chan);
-  this->setCaption(graph->name());
+  if (name)  this->setCaption(name);
   /* delete the defualt range setting as it breaks daq_system */
   deleteRangeSetting(0);
   connect(this, SIGNAL(rangeChanged(int)), 
 	  this, SLOT (_rangeChangedWrapper(int)));
+
+  // for the status bar..
+  statusBar = new QStatusBar( this );
+  statusBar->setSizeGripEnabled( false );
+
+  /* this _tries_ to add the status bar to the bottom... 
+     not elegant design but what he hey?? */
+  layout->addMultiCellWidget( statusBar, 
+			      layout->numRows(), layout->numRows(),
+			      0, layout->numCols()-1 );
+
+  {
+    /* populate that status bar with them gosh-darned labels and signal/slot
+       connections */
+
+    currentIndex = new QLabel(CURRENT_INDEX_FORMAT.arg("-"), statusBar);
+    mouseOverVector = new QLabel(MOUSE_POS_FORMAT.arg("-").arg("-"),statusBar);
+    spikeThreshHold = new QLabel(statusBar);       
+    lastSpike = new QLabel(LAST_SPIKE_FORMAT.arg("-").arg("-"), statusBar);
+
+    if ( graph->spikeMode() ) {
+      setSpikeThreshHoldStatus(graph->spikeThreshHold());
+    } else {
+      unsetSpikeThreshHoldStatus();
+    }
+    
+    statusBar->addWidget(currentIndex);
+    statusBar->addWidget(mouseOverVector);
+    statusBar->addWidget(spikeThreshHold);
+    statusBar->addWidget(lastSpike);
+
+    connect(graph, SIGNAL(mouseOverVector(double, long long)),
+	    this, SLOT(setMouseVectorStatus(double, long long)));
+    connect(graph, SIGNAL(spikeThreshHoldSet(double)),
+	    this, SLOT(setSpikeThreshHoldStatus(double)));      
+    connect(graph, SIGNAL(spikeThreshHoldUnset()),
+	    this, SLOT(unsetSpikeThreshHoldStatus()));
+    connect(graph, SIGNAL(spikeDetected(long long, double)),
+	    this, SLOT(setLastSpikeStatus(long long, double)));
+  }
 }
 
 
@@ -45,7 +93,7 @@ void
 DAQECGGraphContainer::
 closeEvent (QCloseEvent *e) 
 {
-  emit closing(this); /* this tells daqsystem to remove us from 
+  emit closing(this); /* This tells daqsystem to remove us from 
 			 the channel list */
   ECGGraphContainer::closeEvent(e);
 }  
@@ -62,4 +110,49 @@ DAQECGGraphContainer::
 newSample(const SampleStruct *sample)
 {
   graph->plot(sample->data);
+  //setCurrentIndexStatus(sample->scan_index);
+}
+
+
+/* Slot for updating the 'Mouse pos' status bar line.
+   The 'index' we get here (from the ECGGraph class) is inaccurate
+   as dropped samples can lead to de-synchronization between
+   the graph and the actual sample's scan index.
+   In addition we may also have O.B.1 (Obi-Wan) error here -- I didn't 
+   check since I will re-write this mechanism soon.  
+
+   TODO: Rethink scan index strategy  --Calin */
+void
+DAQECGGraphContainer::
+setMouseVectorStatus(double voltage, long long index)
+{   
+  mouseOverVector->setText(MOUSE_POS_FORMAT.arg(voltage).arg((long int)index));
+}
+
+void
+DAQECGGraphContainer::
+setCurrentIndexStatus(long long index)
+{
+  currentIndex->setText(CURRENT_INDEX_FORMAT.arg((long int)index));
+}
+
+void
+DAQECGGraphContainer::
+setSpikeThreshHoldStatus(double voltage)
+{
+  spikeThreshHold->setText(SPIKE_THOLD_FORMAT.arg(voltage));
+}
+
+void
+DAQECGGraphContainer::
+unsetSpikeThreshHoldStatus()
+{
+  spikeThreshHold->setText(SPIKE_THOLD_FORMAT.arg("-"));
+}
+
+void
+DAQECGGraphContainer::
+setLastSpikeStatus(long long index, double voltage)
+{
+  lastSpike->setText(LAST_SPIKE_FORMAT.arg(voltage).arg((long int) index));
 }

@@ -13,7 +13,11 @@
 
 /* To Do: Understand the quirks of qt's line drawing!
    Clean up this code! */
-
+struct ECGPoint {
+  ECGPoint() : index(0), amplitude(0) {};
+  long long index; /* x */
+  double amplitude; /* y */
+};
 
 class ECGGraph : public QWidget {
 
@@ -83,11 +87,13 @@ class ECGGraph : public QWidget {
 signals:
   // to do: move these out of here in favor of
   //        keeping this class generic?
+
   void rangeChanged(double newRangeMin, double newRangeMax);
 
-  void spikeDetected(const ECGGraph *graph, 
-			     long long spikeSampleNumber, 
-			     double spikeAmplitude);
+  void spikeDetected(long long spikeSampleNumber, 
+		     double spikeAmplitude);
+
+  void spikeDetected(ECGPoint p);
 
   /** used to indicate that the mouse is currently at
       a certain Y value (amplitude).  Useful for
@@ -103,17 +109,25 @@ signals:
   void mouseOverVector(double amplitude, long long cumSampleIndex);
 
   /** emitted when the user clicks on the graph */
-  void rightClicked(); virtual void leftClicked();
+  void rightClicked();  void leftClicked(); void eitherClicked();
+  void rightReleased(); void leftReleased(); void eitherReleased();
 
-public slots:
+  void spikeThreshHoldSet(double amplitude);
+  void spikeThreshHoldUnset(void);
+
+ public slots:
  
- virtual void setRange(double newRangeMin, double newRangeMax);
+  virtual void setRange(double newRangeMin, double newRangeMax);
 
- virtual void setSpikeThreshHold (double amplitude);
- virtual void unsetSpikeThreshHold ();
- /* redraws the graph and resizes its internal data structures to fit
-    a new number of seconds setting */
- virtual void setSecondsVisible(int seconds);
+  /* sets the spike threshhold to value 'amplitude'. */
+  virtual void setSpikeThreshHold (double amplitude);
+
+  /* clears the spike threshhold */
+  virtual void unsetSpikeThreshHold ();
+
+  /* redraws the graph and resizes its internal data structures to fit
+     a new number of seconds setting */
+  virtual void setSecondsVisible(int seconds);
  
 
  protected:
@@ -132,7 +146,9 @@ public slots:
   virtual void mouseMoveEvent (QMouseEvent *event);
   
   virtual void mousePressEvent (QMouseEvent *event);
-    
+
+  virtual void mouseReleaseEvent (QMouseEvent *event);
+
   int     numSamples,          // the number of samples this graph supports
           currentSampleIndex,
           sampleRateHz,
@@ -144,8 +160,7 @@ public slots:
            *samples;             // array of size numSamples 
 
   long long  _totalSampleCount; /* tells us how many samples 
-				   we have plotted in total */
-    
+					    we have plotted in total */
 
   QPointArray *points;          /* a cache of all the points written 
 				   (size is numSamples) */  
@@ -159,7 +174,11 @@ public slots:
 
   bool spikeTHoldEnabled;
   double spikeTHold;
+
   QPoint spikeTHoldPoints[2];
+
+  ECGPoint lastSpike;
+  int spikeBlanking;
 
   /** You need to draw at least 2 line segments with this method, 
       otherwise QPainter::drawPolyline() will be a noop for some 
@@ -198,7 +217,14 @@ public slots:
   virtual void paintSpikeTHoldLine();
   virtual void clearSpikeTHoldLine();
   virtual void computeSpikeTHoldPoints();
+
+ private:
+  /* internal stuff for spike detection */
+  short spikeStatus;
+  
+  void detectSpike();
 };
+
 
 
 #endif

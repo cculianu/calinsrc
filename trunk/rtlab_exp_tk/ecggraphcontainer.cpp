@@ -22,8 +22,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 				     WFlags flags = 0) 
   : 
     QFrame (parent, name, flags), 
-    graph(graph),
-    graphNameLabel(0)
+    graph(graph)
     
 {  
   static const QString yAxisLabelFormat( "%1 V" );
@@ -33,19 +32,18 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   // this is the master layout for this widget
   layout = new QGridLayout (this, 2, 2, 1, 1);
   
-  // graph's name in the top left
-  graphNameLabel = new QLabel(graph->name(), this);
-  graphNameLabel->setAlignment(AlignRight | AlignTop);  
-  graphNameLabel->setMargin(1);
-  graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
-
-  layout->addWidget (graphNameLabel, 0, 0);
 
   // the controls on top
   controlsBox = new QHBox(this);
   controlsBox->setFrameStyle(StyledPanel | Raised);
   controlsBox->setMargin(2);
   controlsBox->setSpacing(2);
+
+  // graph's name in the top left
+  graphNameLabel = new QLabel((name ? name : ""), controlsBox);
+  graphNameLabel->setAlignment(AlignRight | AlignTop);  
+  graphNameLabel->setMargin(1);
+  graphNameLabel->setFrameStyle(QFrame::StyledPanel | QFrame::Raised);
 
   // the range settings control
   QLabel *tmpLabel = new QLabel ("Change Scale: ", controlsBox);  
@@ -55,11 +53,11 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
   QToolTip::add(tmpLabel, "Use this to change graph scale (Y Axis Range).");
 
   controlsBox->setStretchFactor(rangeComboBox, 1);  
-  layout->addWidget (controlsBox, 0, 1);
+  layout->addMultiCellWidget (controlsBox, 0, 0, 0, 1);
 
-  connect(rangeComboBox, 
+  connect(rangeComboBox,  
 	  SIGNAL(activated(const QString &)),
-	  this,
+	  this, 
 	  SLOT (rangeChange(const QString &))); 
 
   // add the current range setting (from the graph) to the combo box
@@ -98,17 +96,17 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
 	  SLOT(updateYAxisLabels(double, double)));
   
   connect (graph,
-	   SIGNAL(mouseOverAmplitude(double)),
-	   graph,
-	   SLOT (setSpikeThreshHold(double)));
+	   SIGNAL(eitherClicked(void)),
+	   this,
+	   SLOT(mouseDownInGraph(void)));
   connect (graph,
-	   SIGNAL(rightClicked(void)),
-	   graph,
-	   SLOT (unsetSpikeThreshHold(void)));
+	   SIGNAL(eitherReleased(void)),
+	   this,
+	   SLOT(mouseUpInGraph(void)));
   connect (graph,
-	   SIGNAL(leftClicked(void)),
+	   SIGNAL(eitherClicked(void)),
 	   graph,
-	   SLOT (unsetSpikeThreshHold(void)));
+	   SLOT(unsetSpikeThreshHold(void)));
 
   graph->reparent(this, QPoint(0,0) );
 
@@ -139,7 +137,7 @@ ECGGraphContainer::rangeChange( const QString &rangeString ) {
   double newRangeMin, newRangeMax;
   RangeUnit unit;
 
-  if ( parseRangeString(rangeString, &newRangeMin, &newRangeMax, &unit) ) {
+  if ( parseRangeString(rangeString, newRangeMin, newRangeMax, unit) ) {
     if ( unit == MilliVolts ) {
       /* for notifying anyone interested in range changes on the 
 	 container-level */
@@ -211,7 +209,7 @@ ECGGraphContainer::findRangeSetting (double min, double max, RangeUnit u) {
   RangeUnit testunit;
 
   for (i = 0; i < rangeComboBox->count(); i++) {
-    parseRangeString(rangeComboBox->text(i), &testmin, &testmax, &testunit);
+    parseRangeString(rangeComboBox->text(i), testmin, testmax, testunit);
     if (testmin == min && testmax == max && testunit == u) {
       return i;
     }    
@@ -240,25 +238,47 @@ ECGGraphContainer::updateYAxisLabels(double rangeMin, double rangeMax) {
 
 }
 
+void
+ECGGraphContainer::mouseUpInGraph()
+{
+  disconnect (graph,
+	      SIGNAL(mouseOverAmplitude(double)),
+	      graph,
+	      SLOT (setSpikeThreshHold(double)));
+
+}
+
+void
+ECGGraphContainer::mouseDownInGraph()
+{
+  connect (graph,
+	   SIGNAL(mouseOverAmplitude(double)),
+	   graph,
+	   SLOT (setSpikeThreshHold(double)));
+}
+
 /** parses the range setting string and places its components in
-    the provided pointers */
+    the provided reference parameters */
 bool
-ECGGraphContainer::parseRangeString (const QString &rangeString, double *rangeMin, double *rangeMax, RangeUnit *units) {
+ECGGraphContainer::parseRangeString (const QString & rangeString, 
+				     double & rangeMin, 
+				     double & rangeMax, 
+				     RangeUnit & units) 
+{
   static QRegExp regexp("-?[0-9]+\\.?-?[0-9]*");
   int index=0,len=0;
 
   if ( (index = regexp.match(rangeString, 0, &len)) != -1
-       && sscanf(rangeString.mid(index,len), "%lf", rangeMin) 
+       && sscanf(rangeString.mid(index,len), "%lf", &rangeMin) 
        && (index = regexp.match(rangeString, index+len, &len)) != -1
-       && sscanf(rangeString.mid(index,len), "%lf", rangeMax) ) {
+       && sscanf(rangeString.mid(index,len), "%lf", &rangeMax) ) {
     // look for the units string
-      *units = ((rangeString.find(unitStrings[MilliVolts], index + len ) > -1) 
-		 ? MilliVolts 
-		 : Volts );
+      units = ((rangeString.find(unitStrings[MilliVolts], index + len ) > -1) 
+	       ? MilliVolts 
+	       : Volts );
       return true;
   }
   return false;
   
-
 }
 

@@ -129,14 +129,31 @@ class SampleDeviceEOFException : public SampleDeviceException
     : SampleDeviceException(brief, full) {};
 };
 
-class SampleOutputFileException : public Exception
+class FileException : public Exception
+{
+ public:
+  FileException ( const QString & brief = "Error working with a file.",
+		  const QString & full = "A file operation failed." )
+    : Exception(brief, full) {};
+};
+
+class SampleOutputFileException : public FileException
 {
  public:
   SampleOutputFileException(const QString & brief = "There was an error "
-			    "with the output file.",
+			    "with the sample output file.",
 			    const QString & full = "Some error occurred "
 			    "when outputting samples to a file.") 
-    : Exception(brief, full) {};
+    : FileException(brief, full) {};
+};
+
+class FileNotFoundException : public FileException
+{
+ public:
+  FileNotFoundException ( const QString & brief = "File not found.",
+			  const QString & full = "A required or specified file"
+			  " was not found." )
+    : FileException(brief, full) {};
 };
 
 #endif

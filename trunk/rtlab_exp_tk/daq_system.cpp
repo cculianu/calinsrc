@@ -67,6 +67,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   ws.setScrollBarsEnabled(true);
   ws.show();
 
+  statusBar.addWidget(&statusBarScanIndex);
+
   { /* build menus */
     fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
     fileMenu.insertSeparator();
@@ -74,6 +76,11 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
     channelsMenu.insertItem("&Add Channel...", this, SLOT( addChannel() ) );
     windowMenu.insertItem("&Cascade", &ws, SLOT( cascade() ) );
     windowMenu.insertItem("&Tile", &ws, SLOT( tile() ) );
+    windowMenu.insertSeparator(); /* after this, all open windows will be
+				     stored */
+    connect(&windowMenu, SIGNAL(activated(int)), 
+	    this, SLOT(windowMenuFocusWindow(int)));
+
     helpMenu.insertItem("&About", this, SLOT( about() ) );
 
     _menuBar.insertItem("&File", &fileMenu);
@@ -234,19 +241,24 @@ DAQSystem::openChannelWindow(uint chan, uint range,
   /* leaky memory prevented by spaghetti-like destructive close
      on the DAQECGGraphContainer and a signal-emitting
      destructor in DAQECGGraph */
-  ECGGraph *graph = 
-    new ECGGraph(1000, n_secs);
-
-  graph->setName((const char *)("Channel " + QString().setNum(chan)).latin1());
+  ECGGraph *graph = new ECGGraph(1000, n_secs);
 
   /* todo: put the below in a deleteable place! */
   DAQECGGraphContainer *gcont =
-    new DAQECGGraphContainer(graph, chan, &ws, 0);
+    new DAQECGGraphContainer(graph, chan, &ws, 
+			     QString("Channel %1").arg(chan).latin1());
+
   buildRangeSettings(gcont);
+
+  windowMenuAddWindow(gcont); /* add this window to the 
+				 windowMenu QPopupMenu */
+
   gcont -> show(); /* will this help with window setting/geometry? */
   readerLoop.addListener(gcont);
   connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
 	  this, SLOT(removeGraphContainer(const DAQECGGraphContainer *)));
+  connect(gcont, SIGNAL(closing(const DAQECGGraphContainer *)),
+	  this, SLOT(windowMenuRemoveWindow(const DAQECGGraphContainer *)));
   connect(gcont, SIGNAL(rangeChanged(uint, int)),
 	  this, SLOT(graphChangedRange(uint, int)));
 
@@ -291,7 +303,7 @@ DAQSystem::removeGraphContainer(const DAQECGGraphContainer * gcont)
 
   ShmMgr::setChannel(ComediSubDevice::AnalogInput, chan, false);
   gcontainers.erase(chan);
-
+  
 }
 
 void 
@@ -317,6 +329,36 @@ graphChangedRange(uint channel, int range)
 			  (uint)range);
 }
 
+void
+DAQSystem::windowMenuFocusWindow(int id)
+{
+  if (menuIdToWindowMap.find(id) != menuIdToWindowMap.end()) {
+    menuIdToWindowMap[ id ]->setFocus(); /* is this how we 
+					    activate it? */
+  }
+}
+
+void
+DAQSystem::windowMenuAddWindow(QWidget *w)
+{
+  /* now add this window to our 'Window' QPopupMenu */
+  menuIdToWindowMap [ windowMenu.insertItem(w->name()) ] = w;
+  /* /add window */
+}
+
+void
+DAQSystem::windowMenuRemoveWindow(const QWidget *w)
+{
+  map<int, QWidget *>::iterator i;
+  for (i = menuIdToWindowMap.begin(); i != menuIdToWindowMap.end(); i++) {
+    if (i->second == w) {
+      windowMenu.removeItem(i->first);
+      menuIdToWindowMap.erase(i);
+      return;
+    }
+  }
+}
+
 /* populates the graphcontianer with the correct range options for this 
    channel */
 void 
@@ -339,8 +381,9 @@ DAQSystem::buildRangeSettings(ECGGraphContainer *c)
 void
 DAQSystem::setStatusBarScanIndex(scan_index_t index)
 {
-  statusBarScanIndex.setText(QString("Scan Index: %1").arg((ulong)index));
+  statusBarScanIndex.setText(QString("Global Scan Index: %1").arg((ulong)index));
 }
+
 
 ReaderLoop::
 /* very comedi-specific constructor! Must change! */
