@@ -93,7 +93,8 @@ static RRIntervals  rr_intervals;
 static AVNLiebnitz  working_liebnitz; /* used for inter-function comm.      */
 static int          last_ao_chan_used = -1;
 static unsigned int ao_range = 0;
-static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
+static lsampl_t     ao_stim_level = 0, /* basically comedi_get_maxdata()- 1 */
+                    ao_rest_level = 0; /* either ao_stim_level / 2 or 0 */
 
 #define NEXT_SAVED    do { rr_intervals.index = rri_next_index(); } while(0)
 #define PREV_SAVED    do { rr_intervals.index = rri_prev_index(); } while(0)
@@ -120,6 +121,7 @@ static lsampl_t     ao_stim_level = 0; /* basically comedi_get_maxdata()- 1 */
 static const   int INIT_NOM_NUM_STIMS = 20;  /* the nominal num_stims value  */
 static const   int STIM_PERIOD        = 5;   /* in milliseconds              */
 static const   int STIM_SUSTAIN       = 1;   /* in milliseconds              */
+static const float STIM_VOLTAGE       = 5.0; /* Preferred stim voltage       */
 static const float INITIAL_DELTA_G    = 0.1; /* for AVNShared init.          */
 static const   int INITIAL_NUM_RR_AVG = 10;  /* "   "         "              */
 static const float INITIAL_G_VAL      = 1.0; /* "   "         "              */
@@ -245,10 +247,26 @@ static int init_shared_mem(void)
   return 0;
 }
 
+/* Figures out if krange.max is close enough to voltage within 0.01 tolerance*/
+static int krange_max_is_close(const comedi_krange *k, double voltage)
+{
+  static const double krange_multiple = 1e-6, tolerance = 0.01;
+  double num = ((double)(k->max)) * krange_multiple, diff;
+  
+  diff = num - voltage;
+
+  if (diff < 0) diff = voltage - num;
+
+  if (diff <= tolerance) return 1;
+                           
+  return 0;
+}
+
 /* probes shm->ao_chan to find the maximal possible output voltage and
    saves range setting in the static global ao_range */
 static int init_ao_chan(void) 
 {
+  char gotit = 0;
   int n_ranges 
     = comedi_get_n_ranges(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, 
                           shm->ao_chan);
@@ -270,16 +288,15 @@ static int init_ao_chan(void)
     /* indicate that now this channel is free */
     _set_bit(last_ao_chan_used, rtp_shm->ao_chans_in_use, 0);
 
-  ao_range = 0;
-
-  for (i = 0; i < n_ranges; i++) {
+  for (i = 0, ao_range = 0; i < n_ranges && !gotit; i++) {
     comedi_get_krange(rtp_comedi_ao_dev_handle, rtp_shm->ao_subdev, 
                       shm->ao_chan, i, &krange);
-    if (krange.max > max_v) {
+    if (krange.max > max_v || krange_max_is_close(&krange, STIM_VOLTAGE)) {
       ao_range = i;
       ao_stim_level = comedi_get_maxdata(rtp_comedi_ao_dev_handle, 
                                          rtp_shm->ao_subdev, 
                                          shm->ao_chan);
+      ao_rest_level = ( krange.min == 0 ? 0 : ao_stim_level / 2 );
       max_v = krange.max;
     }
   }
@@ -359,7 +376,7 @@ static void stimulate(int new_spike)
                       shm->ao_chan, 
                       ao_range, 
                       AREF_GROUND,
-                      ao_stim_level / 2);
+                      ao_rest_level);
     
   }
 
@@ -492,7 +509,7 @@ static int avn_stim_proc_read (char *page, char **start, off_t off, int count,
              "------------------------------------------------------------\n"
              "FIFO Minor Device: %d\n"
              "AI Channel ID to Monitor: %d\n"
-             "AO Output (Stimulation) Channel ID: %d\n\n"
+             "AO Output (Stimulation) Channel ID: %d Range ID: %u\n\n"
              "G Value: %s\n"
              "Delta-G: %s\n"             
              "G Adjustment Mode: %s\n"
@@ -505,7 +522,7 @@ static int avn_stim_proc_read (char *page, char **start, off_t off, int count,
              "Number of Beats in RR Average: %d\n"
              "G-Too-Small-Count: %d\n"
              "G-Too-Big-Count: %d\n",
-             shm->fifo_minor, shm->spike_channel, shm->ao_chan,             
+             shm->fifo_minor, shm->spike_channel, shm->ao_chan, ao_range,
              g_val, delta_g, 
              (g_adj == AVN_G_ADJ_MANUAL ? "Manual" :
                (g_adj == AVN_G_ADJ_AUTOMATIC ? "Automatic" : "Unknown")),
