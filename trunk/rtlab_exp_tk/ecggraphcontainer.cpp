@@ -258,7 +258,7 @@ ECGGraphContainer::ECGGraphContainer(ECGGraph *graph,
     statusBar->addWidget(spikeFrequency);
     
     connect(graph, SIGNAL(mouseOverVector(double, uint64)),
-            this, SLOT(setMouseVectorStatus(double, scan_index_t)));
+            this, SLOT(setMouseVectorStatus(double, uint64)));
     connect(graph, SIGNAL(spikeThresholdSet(double)),
             this, SLOT(setSpikeThresholdStatus(double)));      
     connect(graph, SIGNAL(spikeThresholdUnset()),
