@@ -51,15 +51,14 @@ struct MCSnapShot {
   int apd_channel; /* the channel with the apd's that the algorithm are trying to control */
   int apd_xx; 
   int apd; /* computed current apd */
-  int previous_apd; /* previous apd */
   int di; /* current di */
-  int previous_di; /* current di */
   double v_apa; /* Action Potential Amplitude (APA) in volts */
   double v_baseline; /* baseline voltage */
   scan_index_t ap_ti; /* AP initial time (when crossed threshold in upward direction) */
   scan_index_t ap_tf; /* AP end time (when crossed below APDxx voltage value) */
   int consec_alternating; /* number of perturbations in a row that alternated on, off, on, off */
   double g_val; /* the value of our magic coefficient g */
+  int ao_chan;
 
   /* all below fields are here as a record of what the ui had told the
      realtime process to do during this scan -- the actual
@@ -85,23 +84,26 @@ struct MCSnapShot {
 #define MC_G_ADJ_MANUAL 0x0
 #define MC_G_ADJ_AUTOMATIC 0x1
 
+#define NumAPDs 8 /*number of APD channels*/
+#define NumAOchannels 2 /*number of AO channels ... assumes they are numbered 0 and 1*/
+
 //shared memory
 struct MCShared {
-  int apd_channel; /* The channel we are monitoring in the kernel */
+  int ai_chan_this_ao_chan_is_dependent_on[NumAOchannels]; /* The channel a given AO chan is monitoring */
   double apd_xx; // xx=0.1 for APD90, 0.2 for APD80, etc.
-  int ao_chan; /* The channel that is doing the control, specified by user interface */
-  char pacing_on;    /* if nonzero, pace */
-  int nominal_pi; /* in milliseconds */  
-  char control_on;    /* if nonzero, control */
-  char continue_underlying;    /* if nonzero, continue underlying pacing during control */
-  char only_negative_perturbations;    /* if nonzero, then allow only negative perturbations, otherwise both + and - */
-  char target_shorter;    /* if nonzero, target shorter APD for first control attempt */
-  char g_adjustment_mode; /* see above #defines */
+  int ao_chan; /* obsolete, but may still remain in apd_control.c */
+  char pacing_on[NumAOchannels];    /* if nonzero, pace */
+  int nominal_pi[NumAOchannels]; /* in milliseconds */  
+  char control_on[NumAOchannels];    /* if nonzero, control */
+  char continue_underlying[NumAOchannels];    /* if nonzero, continue underlying pacing during control */
+  char only_negative_perturbations[NumAOchannels];    /* if nonzero, then allow only negative perturbations, otherwise both + and - */
+  char target_shorter[NumAOchannels];    /* if nonzero, target shorter APD for first control attempt */
+  char g_adjustment_mode[NumAOchannels]; /* see above #defines */
 
   int fifo_minor; /* Just informational for user side to know where the fifo is */
 
-  volatile double g_val;  /* the ui can change this and it affects control */
-  volatile float delta_g; /* the amount we modify g each time we do control */
+  volatile double g_val[NumAOchannels];  /* the ui can change this and it affects control */
+  volatile float delta_g[NumAOchannels]; /* the amount we modify g each time we do control */
 
   unsigned int magic;   /* should always equal MC_SHM_MAGIC */
   int reserved[4]; /* just so i can look like i know what i am doing... */

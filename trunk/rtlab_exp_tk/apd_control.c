@@ -53,11 +53,11 @@ static void do_apd_control_stuff(MultiSampleStruct *);
 
 /* 'inner' helper functions... */
 static void setup_analog_output(void);
-static void do_pacing(void);  
-static void calculate_apd_and_control_perturbation(MultiSampleStruct *);
-static void do_control(void); 
-static void automatically_adapt_g(void);
-static void out_to_fifo(void);
+static void do_pacing(int);  
+static void calculate_apd_and_control_perturbation(int,MultiSampleStruct *);
+static void do_control(int); 
+static void automatically_adapt_g(int);
+static void out_to_fifo(int,int);
 static int find_free_chan(volatile char *, unsigned int);
 
 module_init(apd_control_init);
@@ -96,15 +96,8 @@ static const int REQUIRED_SAMPLING_RATE = 1000;
 
 //structure storing the state of the system so that one scan knows the
 //state from the previous scan
-struct StimState {    //look in apd_control.h and apd_control.cpp for comments on these variables
+struct APDState {    //look in apd_control.h and apd_control.cpp for comments on these variables
   scan_index_t scan_index;
-  int pacing_pulse_width_counter;
-  int pacing_interval_counter;
-  int control_stimulus_called;
-  int control_interval_counter;
-  int control_pulse_width_counter;
-  int pi;
-  int delta_pi;
   int find_peak;
   double v_baseline_since_last_detected_thresh_crossing;
   double v_baseline_n_minus_1;   //v_baseline for the previous AP
@@ -117,18 +110,23 @@ struct StimState {    //look in apd_control.h and apd_control.cpp for comments o
   int previous_apd;
   int di;
   int previous_di;
+};
+
+struct StimState {    //look in apd_control.h and apd_control.cpp for comments on these variables
+  scan_index_t scan_index;
+  int pacing_pulse_width_counter;
+  int pacing_interval_counter;
+  int control_stimulus_called;
+  int control_interval_counter;
+  int control_pulse_width_counter;
+  int pi;
+  int delta_pi;
   int consec_alternating;
   int previous_perturbation_signs[4];
 };
 
-struct StimState state = {scan_index:0, 
-			  pacing_pulse_width_counter:0, 
-			  pacing_interval_counter:0, 
-			  control_stimulus_called:0, 
-			  control_interval_counter:0, 
-			  control_pulse_width_counter:-1,
-			  pi:0, 
-			  delta_pi:0, 
+struct APDState apd_state[NumAPDs],
+                            default_apd_state = {scan_index:0, 
 			  find_peak:0, 
 			  v_baseline_since_last_detected_thresh_crossing:RESET_V_BASELINE,
 			  v_baseline_n_minus_1:RESET_V_BASELINE,
@@ -141,6 +139,17 @@ struct StimState state = {scan_index:0,
 			  previous_apd:0, 
 			  di:0, 
 			  previous_di:0,
+};
+
+struct StimState stim_state[NumAOchannels],
+                            default_stim_state = {scan_index:0, 
+			  pacing_pulse_width_counter:0, 
+			  pacing_interval_counter:0, 
+			  control_stimulus_called:0, 
+			  control_interval_counter:0, 
+			  control_pulse_width_counter:-1,
+			  pi:0, 
+			  delta_pi:0, 
 			  consec_alternating:0,
 			  previous_perturbation_signs:{1,0,1,0} /*init to alternating*/
 };
@@ -154,89 +163,99 @@ struct StimState state = {scan_index:0,
 static void do_apd_control_stuff (MultiSampleStruct * m)
 {
 
+  int which_ai_chan;
+
   /* Note that do_pacing assumes that rt_process.o is running at precisely 1000 hz! */
   setup_analog_output();
 
-  do_pacing();
+  do_pacing(0); //pacing for AOchan 0
+  do_pacing(1); //pacing for AOchan 1
 
-  calculate_apd_and_control_perturbation(m);
+  for (which_ai_chan=0; which_ai_chan<NumAPDs; which_ai_chan++)
+    if (is_chan_on(which_ai_chan,rtp_shm->ai_chans_in_use))
+	calculate_apd_and_control_perturbation(which_ai_chan,m);
 
-  if (state.control_stimulus_called) do_control();
+  if (stim_state[0].control_stimulus_called) do_control(0);
+  if (stim_state[1].control_stimulus_called) do_control(1);
 
   m = 0; /* to avoid compiler errors ... not sure what this does ... Calin put it here */
 }
 
 // this function does periodic pacing at the PI controlled by the user in the GUI
 // via the shm->nominal_pi shared memory variable
-static void do_pacing(void)
+static void do_pacing(int which_ao_chan)
 { 
 
-  if ( (state.pacing_interval_counter == 0) && (shm->pacing_on) ) { 
+  if ( (stim_state[which_ao_chan].pacing_interval_counter == 0) && 
+       (shm->pacing_on[which_ao_chan]) ) { 
     /* polarization (begin stimulation) */
     comedi_data_write(rtp_comedi_ao_dev_handle, 
                       rtp_shm->ao_subdev, 
-                      shm->ao_chan, 
+                      which_ao_chan,
                       ao_range, 
                       AREF_GROUND,
                       ao_stim_level);
-    state.pacing_interval_counter = shm->nominal_pi;
-    state.pacing_pulse_width_counter = STIM_PULSE_WIDTH;
+    stim_state[which_ao_chan].pacing_interval_counter = shm->nominal_pi[which_ao_chan];
+    stim_state[which_ao_chan].pacing_pulse_width_counter = STIM_PULSE_WIDTH;
   }
 
-  if ( state.pacing_pulse_width_counter == 0 ) {
+  if ( stim_state[which_ao_chan].pacing_pulse_width_counter == 0 ) {
     /* decay and rest */
     comedi_data_write(rtp_comedi_ao_dev_handle, // reset
                       rtp_shm->ao_subdev, 
-                      shm->ao_chan, 
+                      which_ao_chan,
                       ao_range, 
                       AREF_GROUND,
                       ao_rest_level);    
   }
 
-  if (state.pacing_interval_counter > 0)  state.pacing_interval_counter--;
-  if (state.pacing_pulse_width_counter > 0)  state.pacing_pulse_width_counter--;
+  if (stim_state[which_ao_chan].pacing_interval_counter > 0)  stim_state[which_ao_chan].pacing_interval_counter--;
+  if (stim_state[which_ao_chan].pacing_pulse_width_counter > 0)  stim_state[which_ao_chan].pacing_pulse_width_counter--;
 
 }
 
 //self-explanatory function title
-static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
+static void calculate_apd_and_control_perturbation(int which_ai_chan, MultiSampleStruct * m)
 {
 
+  int which_ao_chan;
+  int yes_do_control;
+
   //voltage_at used MultiSampleStruct * m to return the voltage of the requested channel.
-  double this_voltage=voltage_at(shm->apd_channel,m);
+  double this_voltage=voltage_at(which_ai_chan,m);
 
   //look for v_baseline on every scan ... this may be overkill, but it's safest in case signal drifts
   //and we miss an AP (i.e., if we only looked during part of the AP cycle and we miss an AP
   //then we may stop looking for v_baseline)
-  if (this_voltage < state.v_baseline_since_last_detected_thresh_crossing)
-    state.v_baseline_since_last_detected_thresh_crossing = this_voltage;
+  if (this_voltage < apd_state[which_ai_chan].v_baseline_since_last_detected_thresh_crossing)
+    apd_state[which_ai_chan].v_baseline_since_last_detected_thresh_crossing = this_voltage;
 
-  // is there a threshold crossing occuring at this scan? ... the conditional statement  is Calin's code
-  if ( (shm->apd_channel > -1 && _test_bit((int)shm->apd_channel, spike_info.spikes_this_scan))) {
-    state.find_peak=1;                           //if so, set find_peak so that we know to start looking for peak amplitude
-    state.ap_ti=rtp_shm->scan_index; //this scan is the beginning of the action potential, so set ap_ti    
+  // is there a threshold crossing occuring at this scan? ... the conditional is Calin's code
+  if ( ( _test_bit((int)which_ai_chan, spike_info.spikes_this_scan)) ) {
+    apd_state[which_ai_chan].find_peak=1;                           //if so, set find_peak so that we know to start looking for peak amplitude
+    apd_state[which_ai_chan].ap_ti=rtp_shm->scan_index; //this scan is the beginning of the action potential, so set ap_ti    
 
-    state.v_baseline_n_minus_2 = state.v_baseline_n_minus_1; //store previous as n_minus_2
-    state.v_baseline_n_minus_1 = state.v_baseline_since_last_detected_thresh_crossing; //store
-    state.v_baseline_since_last_detected_thresh_crossing = RESET_V_BASELINE; //reset
-    state.v_apa=RESET_V_APA; //reset
+    apd_state[which_ai_chan].v_baseline_n_minus_2 = apd_state[which_ai_chan].v_baseline_n_minus_1; //store previous as n_minus_2
+    apd_state[which_ai_chan].v_baseline_n_minus_1 = apd_state[which_ai_chan].v_baseline_since_last_detected_thresh_crossing; //store
+    apd_state[which_ai_chan].v_baseline_since_last_detected_thresh_crossing = RESET_V_BASELINE; //reset
+    apd_state[which_ai_chan].v_apa=RESET_V_APA; //reset
   }
 
   //check this scan to see if it is the peak AP voltage ... this search will be run for each scan
   //after threshold crossing occurred until MS_AFTER_THRESH_TO_LOOK_FOR_PEAK ms 
   //after the threshold  crossing occurred
-  while (state.find_peak && state.find_peak<MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
-    if (this_voltage > state.v_apa)
-      state.v_apa = this_voltage; 
-    state.find_peak++;
+  while (apd_state[which_ai_chan].find_peak && apd_state[which_ai_chan].find_peak<MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
+    if (this_voltage > apd_state[which_ai_chan].v_apa)
+      apd_state[which_ai_chan].v_apa = this_voltage; 
+    apd_state[which_ai_chan].find_peak++;
     //now that we've found peak voltage, compute the voltage for apd90
-    if (state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
-      double which_baseline_to_use=state.v_baseline_n_minus_1;
+    if (apd_state[which_ai_chan].find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) { 
+      double which_baseline_to_use=apd_state[which_ai_chan].v_baseline_n_minus_1;
       // ******* NOTE: should the next conditional be using < instead of > ?
       // ******* currently baseline is set at the larger of the 2 previous baselines.
-      if (state.v_baseline_n_minus_2 > which_baseline_to_use) 
-	which_baseline_to_use = state.v_baseline_n_minus_2;
-      state.v_xx = (shm->apd_xx)*(state.v_apa - which_baseline_to_use) + which_baseline_to_use;
+      if (apd_state[which_ai_chan].v_baseline_n_minus_2 > which_baseline_to_use) 
+	which_baseline_to_use = apd_state[which_ai_chan].v_baseline_n_minus_2;
+      apd_state[which_ai_chan].v_xx = (shm->apd_xx)*(apd_state[which_ai_chan].v_apa - which_baseline_to_use) + which_baseline_to_use;
 
     }
   }
@@ -244,140 +263,176 @@ static void calculate_apd_and_control_perturbation(MultiSampleStruct * m)
   // is this scan the first time we cross back below apd90 ... if so, determine apd and do other
   // stuff, including compute control perturbation
   // obviously, this process can only occur after the peak voltage was found in the previous section
-  if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && (this_voltage<state.v_xx)) {
-    state.find_peak=0;
+  if ((apd_state[which_ai_chan].find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && (this_voltage<apd_state[which_ai_chan].v_xx)) {
+    apd_state[which_ai_chan].find_peak=0;
     //set previous_apd and previous_di before we make changes to new di and new apd
-    state.previous_apd = state.apd;
-    state.previous_di=state.di;
+    apd_state[which_ai_chan].previous_apd = apd_state[which_ai_chan].apd;
+    apd_state[which_ai_chan].previous_di=apd_state[which_ai_chan].di;
     //set new di before we change ap_tf (because we need to use previous ap_tf)
-    state.di=state.ap_ti-state.ap_tf; //this DI is time since last AP_tf;
+    apd_state[which_ai_chan].di=apd_state[which_ai_chan].ap_ti-apd_state[which_ai_chan].ap_tf; //this DI is time since last AP_tf;
     //for new apd
-    state.ap_tf=rtp_shm->scan_index;
-    state.apd = state.ap_tf-state.ap_ti;
+    apd_state[which_ai_chan].ap_tf=rtp_shm->scan_index;
+    apd_state[which_ai_chan].apd = apd_state[which_ai_chan].ap_tf-apd_state[which_ai_chan].ap_ti;
 
-    // compute control perturbation
-    if (shm->control_on) { 
+    //Determine if this channel is one that is being monitored by one of the 2 AO channels
+    which_ao_chan=-1;
+    yes_do_control=0;
+    //is this the channel that is being monitored for ao0?
+    if (which_ai_chan == shm->ai_chan_this_ao_chan_is_dependent_on[0]) { 
+      which_ao_chan=0;
+      if (shm->control_on[which_ao_chan]) yes_do_control=1;
+    }
+    //if not, is this the channel that is being monitored for ao1?
+    else if (which_ai_chan == shm->ai_chan_this_ao_chan_is_dependent_on[1])  { 
+      which_ao_chan=1;
+      if (shm->control_on[which_ao_chan]) yes_do_control=1;
+    }
+
+    // compute control perturbation if yes_do_control
+    if (yes_do_control) { 
 
       //this is for automatic g adaptation .. shift array of previous perturbation sign values 
-      state.previous_perturbation_signs[0] = state.previous_perturbation_signs[1];
-      state.previous_perturbation_signs[1] = state.previous_perturbation_signs[2];
-      state.previous_perturbation_signs[2] = state.previous_perturbation_signs[3];
+      stim_state[which_ao_chan].previous_perturbation_signs[0] = 
+	stim_state[which_ao_chan].previous_perturbation_signs[1];
+      stim_state[which_ao_chan].previous_perturbation_signs[1] = 
+	stim_state[which_ao_chan].previous_perturbation_signs[2];
+      stim_state[which_ao_chan].previous_perturbation_signs[2] = 
+	stim_state[which_ao_chan].previous_perturbation_signs[3];
 
       // ****** note minus sign inserted in  front of g_val!!!  djc: 9/25/02
-      state.delta_pi = -(int)(shm->g_val*(state.previous_apd - state.apd));
+      stim_state[which_ao_chan].delta_pi = -(int)(shm->g_val[which_ao_chan]*(apd_state[which_ai_chan].previous_apd - apd_state[which_ai_chan].apd));
 
-      if (  (!( shm->only_negative_perturbations)) ||  //if positive perturbs allowed 
-            ( (shm->only_negative_perturbations)&&(state.delta_pi<=(-1)) ) ) { //or if only negative allowed and this perturb <0
-	state.control_stimulus_called=1;
+      if (  (!( shm->only_negative_perturbations[which_ao_chan])) ||  //if positive perturbs allowed 
+            ( (shm->only_negative_perturbations[which_ao_chan])&&(stim_state[which_ao_chan].delta_pi<=(-1)) ) ) { //or if only negative allowed and this perturb <0
+	stim_state[which_ao_chan].control_stimulus_called=1;
 	// control stimulus must occur at the time expected for the next pacing stimulus
-	// (which is given by state.pacing_interval_counter ... which at the current scan should be equal
+	// (which is given by stim_state[which_ao_chan].pacing_interval_counter ... which at the current scan should be equal
 	//   to nominal_pi - apd), plus the perturbation (which is negative).
-	state.control_interval_counter = state.pacing_interval_counter+state.delta_pi;
+	stim_state[which_ao_chan].control_interval_counter = stim_state[which_ao_chan].pacing_interval_counter+stim_state[which_ao_chan].delta_pi;
 
 	//make pacing_interval_counter > control_interval_counter if this is a positive perturbation
 	//so that the natural pacing doesn't precede the control (unless we're continue_underlying)
-	if ( (state.delta_pi>=1) && (!(shm->continue_underlying)) )
-	  state.pacing_interval_counter = state.control_interval_counter + 1;
+	if ( (stim_state[which_ao_chan].delta_pi>=1) && (!(shm->continue_underlying[which_ao_chan])) )
+	  stim_state[which_ao_chan].pacing_interval_counter = stim_state[which_ao_chan].control_interval_counter + 1;
 
-	state.previous_perturbation_signs[3]=0;
+	stim_state[which_ao_chan].previous_perturbation_signs[3]=0;
       }
-      else  state.previous_perturbation_signs[3]=1;
+      else  stim_state[which_ao_chan].previous_perturbation_signs[3]=1;
 
-      if ((shm->g_adjustment_mode) == MC_G_ADJ_AUTOMATIC) automatically_adapt_g(); 
+      if ((shm->g_adjustment_mode[which_ao_chan]) == MC_G_ADJ_AUTOMATIC) automatically_adapt_g(which_ao_chan); 
 
     }
     //write to fifo, which in apd_control.cpp will be saved to disk
-    out_to_fifo();    // write snapshot to fifo at the end of every action potential
+    out_to_fifo(which_ai_chan,which_ao_chan);  // write snapshot to fifo at the end of every action potential
                              // note that end of ap was chosen arbitrarily .. could have been beginning
                              // may make more sense to do it whenever a stimulus is delivered
 
-  }  //end of   if ((state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && ...
+  }  //end of   if ((apd_state.find_peak==MS_AFTER_THRESH_TO_LOOK_FOR_PEAK) && ...
 
 }
 
 // this function performs automatic adaptation of g (control proportionality constant)
 // according to the algorithm in Hall&Christini, PRE, vol. 63, article 06204, 2001
-static void automatically_adapt_g(void) {
+static void automatically_adapt_g(int which_ao_chan) {
 
   //if perturbation sign has not alternated 4 times in a row, then we are overperturbing,
   //meaning our g is too large, so we should decrease g.
-  if ( (state.previous_perturbation_signs[3] == state.previous_perturbation_signs[2]) ||
-       (state.previous_perturbation_signs[2] == state.previous_perturbation_signs[1]) ||
-       (state.previous_perturbation_signs[1] == state.previous_perturbation_signs[0]) ) {
-    shm->g_val -= shm->delta_g;      // decrease g if perturbation sign did not alternating 4 times in a row
+  if ( (stim_state[which_ao_chan].previous_perturbation_signs[3] == stim_state[which_ao_chan].previous_perturbation_signs[2]) ||
+       (stim_state[which_ao_chan].previous_perturbation_signs[2] == stim_state[which_ao_chan].previous_perturbation_signs[1]) ||
+       (stim_state[which_ao_chan].previous_perturbation_signs[1] == stim_state[which_ao_chan].previous_perturbation_signs[0]) ) {
+    shm->g_val[which_ao_chan] -= shm->delta_g[which_ao_chan];      // decrease g if perturbation sign did not alternating 4 times in a row
                                                             // i.e., decrease the size of perturbations
-    state.consec_alternating = 0; 
+    stim_state[which_ao_chan].consec_alternating = 0; 
   }
   else {
-    shm->g_val += shm->delta_g; // else perturbation sign has alternated 4 times in  a row,
+    shm->g_val[which_ao_chan] += shm->delta_g[which_ao_chan]; // else perturbation sign has alternated 4 times in  a row,
                                                        // meaning we are underperturbing, so we increase g
-    state.consec_alternating = 4;
+    stim_state[which_ao_chan].consec_alternating = 4;
   }
 
   // don't let g be < 0
-  if (shm->g_val < 0.0) shm->g_val = 0;
+  if (shm->g_val[which_ao_chan] < 0.0) shm->g_val[which_ao_chan] = 0;
 
 }
 
 // this function does alternans control
-static void do_control(void) { 
+static void do_control(int which_ao_chan) { 
 
-  if ( (state.control_interval_counter == 0) ) { 
+  if ( (stim_state[which_ao_chan].control_interval_counter == 0) ) { 
     /* polarization (begin stimulation) */
     comedi_data_write(rtp_comedi_ao_dev_handle, 
                       rtp_shm->ao_subdev, 
-                      shm->ao_chan, 
+                      which_ao_chan, 
                       ao_range, 
                       AREF_GROUND,
                       ao_stim_level);
-    state.control_pulse_width_counter = STIM_PULSE_WIDTH;
+    stim_state[which_ao_chan].control_pulse_width_counter = STIM_PULSE_WIDTH;
 
     //reset underlying pacing interval if we are not continuing underlying pacing
-    if (!(shm->continue_underlying)) state.pacing_interval_counter = shm->nominal_pi;
+    if (!(shm->continue_underlying[which_ao_chan])) 
+      stim_state[which_ao_chan].pacing_interval_counter = shm->nominal_pi[which_ao_chan];
   }
 
-  if ( state.control_pulse_width_counter == 0 ) {
+  if ( stim_state[which_ao_chan].control_pulse_width_counter == 0 ) {
     /* decay and rest */
     comedi_data_write(rtp_comedi_ao_dev_handle, // reset
                       rtp_shm->ao_subdev, 
-                      shm->ao_chan, 
+                      which_ao_chan, 
                       ao_range, 
                       AREF_GROUND,
                       ao_rest_level);
-    state.control_stimulus_called = 0; //turn off control call
+    stim_state[which_ao_chan].control_stimulus_called = 0; //turn off control call
   }
 
-  if (state.control_interval_counter >= 0)  state.control_interval_counter--;
-  if (state.control_pulse_width_counter >= 0)  state.control_pulse_width_counter--;
+  if (stim_state[which_ao_chan].control_interval_counter >= 0)  
+    stim_state[which_ao_chan].control_interval_counter--;
+  if (stim_state[which_ao_chan].control_pulse_width_counter >= 0)  
+    stim_state[which_ao_chan].control_pulse_width_counter--;
 
 }
 
 //this function puts the snapshot on the fifo for the non-real-time application
 //to grab and save to disk
-static void out_to_fifo(void) {
+static void out_to_fifo(int which_ai_chan, int which_ao_chan) {
 
-  working_snapshot.nominal_pi = shm->nominal_pi;
-  working_snapshot.pi = state.previous_apd+state.di;
-  working_snapshot.delta_pi = state.delta_pi;
-  working_snapshot.apd_channel = shm->apd_channel;
-  working_snapshot.apd_xx = (int)(100*(1.0 - shm->apd_xx));
-  working_snapshot.ap_ti = state.ap_ti;
-  working_snapshot.ap_tf = state.ap_tf;  
-  working_snapshot.apd = state.apd;
-  working_snapshot.previous_apd = state.previous_apd;
-  working_snapshot.di = state.di;
-  working_snapshot.previous_di = state.previous_di;
-  working_snapshot.v_apa = state.v_apa;
-  working_snapshot.v_baseline = state.v_baseline_n_minus_1;
-  working_snapshot.control_on = shm->control_on;
-  working_snapshot.only_negative_perturbations = shm->only_negative_perturbations;
-  working_snapshot.pacing_on = shm->pacing_on;
-  working_snapshot.continue_underlying = shm->continue_underlying;
-  working_snapshot.target_shorter = shm->target_shorter;
-  working_snapshot.consec_alternating = state.consec_alternating;
-  working_snapshot.delta_g = shm->delta_g;
-  working_snapshot.g_val = shm->g_val;
+  working_snapshot.apd_channel = which_ai_chan;
   working_snapshot.scan_index = rtp_shm->scan_index;
+
+  working_snapshot.apd_xx = (int)(100*(1.0 - shm->apd_xx));
+  working_snapshot.v_apa = apd_state[which_ai_chan].v_apa;
+  working_snapshot.v_baseline = apd_state[which_ai_chan].v_baseline_n_minus_1;
+  working_snapshot.ap_ti = apd_state[which_ai_chan].ap_ti;
+  working_snapshot.ap_tf = apd_state[which_ai_chan].ap_tf;  
+  working_snapshot.apd = apd_state[which_ai_chan].apd;
+  working_snapshot.di = apd_state[which_ai_chan].di;
+
+  working_snapshot.ao_chan=which_ao_chan;
+  if (which_ao_chan >= 0) {
+    working_snapshot.nominal_pi = shm->nominal_pi[which_ao_chan];
+    working_snapshot.pi = apd_state[which_ai_chan].previous_apd+apd_state[which_ai_chan].di;
+    working_snapshot.delta_pi = stim_state[which_ao_chan].delta_pi;
+    working_snapshot.control_on = shm->control_on[which_ao_chan];
+    working_snapshot.only_negative_perturbations = shm->only_negative_perturbations[which_ao_chan];
+    working_snapshot.pacing_on = shm->pacing_on[which_ao_chan];
+    working_snapshot.continue_underlying = shm->continue_underlying[which_ao_chan];
+    working_snapshot.target_shorter = shm->target_shorter[which_ao_chan];
+    working_snapshot.consec_alternating = stim_state[which_ao_chan].consec_alternating;
+    working_snapshot.delta_g = shm->delta_g[which_ao_chan];
+    working_snapshot.g_val = shm->g_val[which_ao_chan];
+  }
+  else    {
+    working_snapshot.nominal_pi = -1;
+    working_snapshot.pi = -1;
+    working_snapshot.delta_pi = -1;
+    working_snapshot.control_on = -1;
+    working_snapshot.only_negative_perturbations = -1;
+    working_snapshot.pacing_on = -1;
+    working_snapshot.continue_underlying = -1;
+    working_snapshot.target_shorter = -1;
+    working_snapshot.consec_alternating = -1;
+    working_snapshot.delta_g = -1;
+    working_snapshot.g_val = -1;
+  }
 
   rtf_put(shm->fifo_minor, &working_snapshot, sizeof(working_snapshot));
 }
@@ -398,6 +453,11 @@ static void out_to_fifo(void) {
 int apd_control_init (void)
 {
   int retval = 0;
+  int i;
+
+  //initialize structs
+  for (i=0; i<NumAPDs; i++) memcpy(&apd_state[i],&default_apd_state,sizeof(struct APDState));
+  for (i=0; i<NumAOchannels; i++) memcpy(&stim_state[i],&default_stim_state,sizeof(struct StimState));
 
   if (rtp_shm->sampling_rate_hz < REQUIRED_SAMPLING_RATE) {
     printk("apd_control: cannot start the module because the sampling rate of "
@@ -424,6 +484,7 @@ int apd_control_init (void)
 //that are marked by:   //shm initialization you might want to change
 static int init_shared_mem(void)
 {
+  int i;
 
   memset(&working_snapshot, 0, sizeof(MCSnapShot));
 
@@ -435,15 +496,18 @@ static int init_shared_mem(void)
   memset(shm, 0, sizeof(MCShared));
 
   shm->fifo_minor = -1;
-  shm->apd_channel = -1;
-  shm->g_val = INITIAL_G_VAL;    //shm initialization you might want to change
-  shm->delta_g = INITIAL_DELTA_G;   //shm initialization you might want to change
-  shm->nominal_pi = INITIAL_PI;   //shm initialization you might want to change
-  shm->pacing_on=0;   //shm initialization you might want to change
-  shm->control_on=0;   //shm initialization you might want to change
-  shm->continue_underlying=0;   //shm initialization you might want to change
-  shm->only_negative_perturbations=1;  //shm initialization you might want to change
-  shm->target_shorter=0;   //shm initialization you might want to change
+
+  for (i=0; i<NumAOchannels; i++) {
+    shm->ai_chan_this_ao_chan_is_dependent_on[i] = -1;
+    shm->g_val[i] = INITIAL_G_VAL;    //shm initialization you might want to change
+    shm->delta_g[i] = INITIAL_DELTA_G;   //shm initialization you might want to change
+    shm->nominal_pi[i] = INITIAL_PI;   //shm initialization you might want to change
+    shm->pacing_on[i]=0;   //shm initialization you might want to change
+    shm->control_on[i]=0;   //shm initialization you might want to change
+    shm->continue_underlying[i]=0;   //shm initialization you might want to change
+    shm->only_negative_perturbations[i]=1;  //shm initialization you might want to change
+    shm->target_shorter[i]=0;   //shm initialization you might want to change
+  }
   shm->apd_xx=(1.0 - (0.01*INIT_APD_XX));      //shm initialization you might want to change
 
   if ( (shm->ao_chan = 
@@ -541,11 +605,15 @@ static int find_free_chan(volatile char *chans, unsigned int n_chans)
 // except _possibly_ for the last part "safety/constraint checks"
 static void setup_analog_output(void)
 {
+  int i;
+
   if (last_ao_chan_used != shm->ao_chan) 
     init_ao_chan();
  
   //  some  safety/constraint checks ... such as making sure the user didn't make delta_g 
   //  an unacceptable value
-  if (shm->delta_g < MC_DELTA_G_MIN) shm->delta_g = MC_DELTA_G_MIN;
-  else if (shm->delta_g > MC_DELTA_G_MAX) shm->delta_g = MC_DELTA_G_MAX;  
+  for (i=0; i<NumAOchannels; i++) {
+    if (shm->delta_g[i] < MC_DELTA_G_MIN) shm->delta_g[i] = MC_DELTA_G_MIN;
+    else if (shm->delta_g[i] > MC_DELTA_G_MAX) shm->delta_g[i] = MC_DELTA_G_MAX;  
+  }
 }
