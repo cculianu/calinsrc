@@ -43,7 +43,8 @@
 #include "probe.h"
 #include "comedi_device.h"
 #include "output_file_w.h"
-
+#include "daq_help_sources.h"
+#include "help_browser.h"
 
 #ifdef TEST_CW
 #include <qapplication.h>
@@ -101,11 +102,14 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   logPreviewerLabel("Log Template Preview:", &templateGroupContainer),
   logPreviewer(&templateGroupContainer),
   showDialogOnStartupChk(this),
-  OK("Ok", this)
+  bottomButtons(this),
+  OK("Ok", &bottomButtons),
+  helpButton("Help", &bottomButtons)
+
 {
   setSizeGripEnabled(true);
   setMinimumSize(QSize(150,100));
-
+  
   deviceSelectionGroup.setTitle("Input Device Selection");
   
   masterGrid.addWidget(&deviceSelectionGroup, 0, 0);
@@ -153,13 +157,18 @@ ConfigurationWindow::ConfigurationWindow (const Probe &deviceProbe,
   templateSelectionGrid.addMultiCellWidget(&logPreviewer, 2, 2, 0, 1); 
 
   masterGrid.addWidget(&showDialogOnStartupChk, 3, 0); 
-  masterGrid.addWidget(&OK, 4, 0);
+  masterGrid.addWidget(&bottomButtons, 4, 0);
+  //masterGrid.addWidget(&OK, 4, 0);
   showDialogOnStartupChk.setText("Always show this configuration window on "
 				 "application startup");
   OK.setAutoDefault(true);
   OK.setMaximumSize(OK.sizeHint());
   connect(&OK, SIGNAL(clicked(void)),
 	  this, SLOT(accept(void)));
+  
+  helpButton.setMaximumSize( helpButton.sizeHint() );
+  connect(&helpButton, SIGNAL(clicked(void)),
+	  this, SLOT(configHelp(void)));
 
   fromSettings();
 }
@@ -277,6 +286,13 @@ ConfigurationWindow::accept()
   toSettings();
   settings.saveSettings();
   QDialog::accept();
+}
+
+void
+ConfigurationWindow::configHelp()
+{
+  HelpBrowser::getDefaultBrowser()->
+    openPage( DAQHelpSources::configWindowHelpSource );
 }
 
 bool
