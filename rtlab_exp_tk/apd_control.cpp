@@ -77,7 +77,7 @@ extern "C" {
              * description =
               "Some GUI controls for interfacing with the Apd Control stimulation "
               "real-time module named 'apd_control.o'.  This rtl/rt_process "
-              "addon was developed for a cardiac action potential control "
+              "addon was developed for cardiac action-potential-duration control "
               "at Cornell University.",
              * author =
               "David J. Christini, Ph.D and Calin A. Culianu.",
@@ -122,20 +122,6 @@ const APDcontrol::GraphRangeSettings APDcontrol::apd_ranges[n_apd_ranges] =
     { min: -10, max: 600 }, { min: 0,  max: 1000 } 
   };
 
-const int APDcontrol::n_delta_pi_ranges = 4;
-const APDcontrol::GraphRangeSettings APDcontrol::delta_pi_ranges[n_delta_pi_ranges] = 
-  {
-    { min: -50, max: 50 }, { min: -75, max: 75 }, { min: -100, max: 100},
-    { min: -200, max: 200 }
-  };
-
-const int APDcontrol::n_g_ranges = 4;
-const APDcontrol::GraphRangeSettings APDcontrol::g_ranges[n_g_ranges] = 
-  {
-    { min: 0, max: 1 }, { min: 0, max: 5 }, { min: 0, max: 10},
-    { min: 0, max: 20 }
-  };
-
 /********************************************************************/
 /*
  *MAIN OBJECT*
@@ -158,7 +144,8 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   window = new QWidget (0, name(), Qt::WStyle_Tool);
   window->setCaption(name());
 
-  masterlayout = new QGridLayout(window, 2, 2);
+  //masterlayout = new QGridLayout(window, 2, 2);
+  masterlayout = new QGridLayout(window, 3, 2);
 
   QMenuBar *mb = new QMenuBar(window);
   masterlayout->addMultiCellWidget(mb, 0, 0, 0, 1);
@@ -170,47 +157,54 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
 
   /* graphs.. */
   graphs = new QWidget(window, "APD Control Graph Virtual Widget");
-  masterlayout->addWidget(graphs, 1, 1);
+  //masterlayout->addWidget(graphs, 1, 1);
+  masterlayout->addWidget(graphs, 2, 0);
   masterlayout->setColStretch(1, 2);
 
-  graphlayout = new QGridLayout(graphs, 6, 3);
+  int num_graph_columns = 3; //2 columns of graphs, plus one spacer in between
+  int num_graph_rows = NumAPDGraphs; //NumAPDGraphs/2 rows of graphs, plus spacers
+  graphlayout = new QGridLayout(graphs, num_graph_rows, num_graph_columns);
+
+  graphlayout->setColStretch(0, 20); //graphs are 20X as wide as space between
   graphlayout->setColStretch(1, 1);
+  graphlayout->setColStretch(2, 20);
+
+  for (int i=0; i<num_graph_rows; i++)
+    if (!(i%2)) graphlayout->setRowStretch(i, 10); //graphs are 10X as high as spaces between
+    else graphlayout->setRowStretch(i, 1);
   
-  apd_graph   = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             apd_ranges[0].min, apd_ranges[0].max, 
-                             graphs, QString(name()) + " - RR Interval");
-  delta_pi_graph = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             delta_pi_ranges[0].min, delta_pi_ranges[0].max, 
-                             graphs, QString(name()) + " - Number of Stimuli");
-  
-  g_graph    = new ECGGraph (beats_per_gridline, num_gridlines, 
-                             g_ranges[0].min, g_ranges[0].max,
-                             graphs, QString(name()) + " - G Values");
+  for (int which_apd_graph=0; which_apd_graph<NumAPDGraphs; which_apd_graph++) {
+    apd_graph[which_apd_graph]   = new ECGGraph (beats_per_gridline, num_gridlines, 
+	             apd_ranges[0].min, apd_ranges[0].max, 
+                             graphs, QString(name()) + " - APD");
 
-  g_graph->plotFactor = delta_pi_graph->plotFactor = apd_graph->plotFactor = 2;
+    //    graphlayout->addMultiCellWidget(apd_graph[which_apd_graph], (2*which_apd_graph+1), 
+    //				    (2*which_apd_graph+1), 1, 2); 
 
-  graphlayout->addMultiCellWidget(apd_graph, 1, 1, 1, 2); 
-  graphlayout->setRowStretch(1, 3);
-  graphlayout->addMultiCellWidget(delta_pi_graph, 3, 3, 1, 2); 
-  graphlayout->setRowStretch(3, 3);
-  graphlayout->addMultiCellWidget(g_graph, 5, 5, 1, 2); 
-  graphlayout->setRowStretch(5, 3);
-  
-  graphlayout->addWidget(new QLabel("APD", graphs), 0, 1);
-  graphlayout->addWidget(new QLabel("Delta PI", graphs), 2, 1);
-  graphlayout->addWidget(new QLabel("g", graphs), 4, 1);
+    //int start_row = 4*which_apd_graph;
+    //int end_row = 4*which_apd_graph+3;
+    //int start_column = which_apd_graph%2;
+    //int end_column = (which_apd_graph%2)+2; 
+    int which_graph_row = 2*which_apd_graph;
+    int which_graph_column = 0;
+    if (which_apd_graph>3) {
+      which_graph_row -= NumAPDGraphs;
+      which_graph_column = 2;
+    }
+    //    graphlayout->addWidget(apd_graph[which_apd_graph], start_row, end_row,
+    //				    start_column, end_column);
+    graphlayout->addWidget(apd_graph[which_apd_graph], which_graph_row,which_graph_column,0);
+    graphlayout->addWidget(new QLabel(QString("APD CH%1").arg(which_apd_graph), graphs), which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignRight));
 
-  apd_range_ctl = new QComboBox(false, graphs, "APD Range Combo box");
-  delta_pi_range_ctl = new QComboBox(false, graphs, "Delta Pi Range Combo box");
-  g_range_ctl = new QComboBox(false, graphs, "G Range Combo box");
+    apd_range_ctl[which_apd_graph]=new QComboBox(false, graphs, "APD Range Combo box");
+    graphlayout->addWidget(apd_range_ctl[which_apd_graph],which_graph_row,which_graph_column,(Qt::AlignTop | Qt::AlignLeft));
 
-  graphlayout->addWidget(apd_range_ctl, 0, 2);
-  graphlayout->addWidget(delta_pi_range_ctl, 2, 2);
-  graphlayout->addWidget(g_range_ctl, 4, 2);  
+    addAxisLabels(which_apd_graph);
+    buildRangeComboBoxesAndConnectSignals(which_apd_graph);
+  }
 
-  addAxisLabels();
+  //  graphlayout->addColSpacing (1, 30); 
 
-  buildRangeComboBoxesAndConnectSignals();
   /* end graphs... */
 
 /*******************************************************/
@@ -223,12 +217,36 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   const int n_ctl_r = 3, n_ctl_c = 1;
   controlslayout = new QGridLayout(controls, n_ctl_r, n_ctl_c);
 
-  { /* stats groupbox */
-    QGroupBox *stats = new QGroupBox(1, Vertical, "Stats", controls);
-    controlslayout->addMultiCellWidget(stats, 0, 0, 0, n_ctl_c-1);
+  //SignalMappers to connect duplicated widgets to actions for
+  //the appropriate signal/graph
+  ai_channels_mapper = new QSignalMapper(this);
+  nominal_pi_mapper = new QSignalMapper(this);
+  gval_mapper = new QSignalMapper(this);
+  //apd_xx_edit_box_mapper = new QSignalMapper(this);
+  delta_g_bar_mapper = new QSignalMapper(this);
+  pacing_toggle_mapper = new QSignalMapper(this);
+  control_toggle_mapper = new QSignalMapper(this);
+  underlying_toggle_mapper = new QSignalMapper(this);
+  only_negative_toggle_mapper = new QSignalMapper(this);
+  target_shorter_toggle_mapper = new QSignalMapper(this);
+  g_adj_manual_only_mapper = new QSignalMapper(this);
 
-    QWidget *tmpw = new QWidget(stats);
+  { /* ctls_ao0 and ctls_ao1 groupbox */    //**** ask calin what the point of this { is ???
+    // Dave -- I wanted to logically group the below -- no real point
 
+    /*******************************************************/
+    /* edit this section to change GUI controls      
+       note that to change the functionality of a 
+       particular control, you have to change its
+       slot function directly                                        */
+    /*******************************************************/
+
+    for (int which_ao_chan=0; which_ao_chan<NumAOchannels; which_ao_chan++) {
+
+    QGroupBox *ctls_ao = new QGroupBox(1, Vertical, QString("AO%1 Controls").arg(which_ao_chan), controls);
+    controlslayout->addMultiCellWidget(ctls_ao, which_ao_chan, which_ao_chan, 0, n_ctl_c-1);
+
+    QWidget *tmpw = new QWidget(ctls_ao);
     QGridLayout *tmplo = new QGridLayout(tmpw, 11, 4);
 
     // text displays
@@ -236,143 +254,164 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
     tmplo->addWidget(new QLabel("APD_n (ms): ", tmpw), line_counter++, 0);
     tmplo->addWidget(new QLabel("DI_n: ", tmpw), line_counter++, 0);
     tmplo->addWidget(new QLabel("PI = APD+DI(ms): ", tmpw), line_counter++, 0);
-    tmplo->addWidget(new QLabel("delta PI (ms): ", tmpw), line_counter++, 0);
-    tmplo->addWidget(new QLabel("APA (V): ", tmpw), line_counter++, 0);
-    tmplo->addWidget(new QLabel("AP baseline (V): ", tmpw), line_counter++, 0);
     line_counter=0;
-    tmplo->addWidget(new QLabel("AP_ti (ms): ", tmpw), line_counter++, 2);
-    tmplo->addWidget(new QLabel("AP_tf (ms): ", tmpw), line_counter++, 2);
+    tmplo->addWidget(new QLabel("delta PI (ms): ", tmpw), line_counter++, 2);
     tmplo->addWidget(new QLabel("g: ", tmpw), line_counter++, 2);
     tmplo->addWidget(new QLabel("delta g: ", tmpw), line_counter++, 2);
-    tmplo->addWidget(new QLabel("alternating perturbations: ", tmpw), line_counter++, 2);
     
     line_counter=0;
-    tmplo->addWidget(gui_indicator_apd = new QLabel(tmpw), line_counter++, 1); 
-    tmplo->addWidget(gui_indicator_di = new QLabel(tmpw), line_counter++, 1);    
-    tmplo->addWidget(gui_indicator_pi = new QLabel(tmpw), line_counter++, 1);
-    tmplo->addWidget(gui_indicator_delta_pi = new QLabel(tmpw), line_counter++, 1);
-    tmplo->addWidget(gui_indicator_v_apa = new QLabel(tmpw), line_counter++, 1);
-    tmplo->addWidget(gui_indicator_v_baseline = new QLabel(tmpw), line_counter++, 1);
+    tmplo->addWidget(gui_indicator_apd[which_ao_chan] = new QLabel(tmpw), line_counter++, 1); 
+    tmplo->addWidget(gui_indicator_di[which_ao_chan] = new QLabel(tmpw), line_counter++, 1);    
+    tmplo->addWidget(gui_indicator_pi[which_ao_chan] = new QLabel(tmpw), line_counter++, 1);
     line_counter=0;
-    tmplo->addWidget(gui_indicator_ap_ti = new QLabel(tmpw), line_counter++, 3);
-    tmplo->addWidget(gui_indicator_ap_tf = new QLabel(tmpw), line_counter++, 3);
-    tmplo->addWidget(gui_indicator_g_val = new QLabel(tmpw), line_counter++, 3);
-    tmplo->addWidget(gui_indicator_delta_g = new QLabel(tmpw), line_counter++, 3);
-    tmplo->addWidget(gui_indicator_consec_alternating = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_delta_pi[which_ao_chan] = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_g_val[which_ao_chan] = new QLabel(tmpw), line_counter++, 3);
+    tmplo->addWidget(gui_indicator_delta_g[which_ao_chan] = new QLabel(tmpw), line_counter++, 3);
 
-  }
-
-/*******************************************************/
-/* edit this section to change GUI controls      
-   note that to change the functionality of a 
-   particular control, you have to change its
-   slot function directly                                        */
-/*******************************************************/
-  
-  { /* controls groupbox */
-    QGroupBox *ctls = new QGroupBox(1, Vertical, "Controls", controls);
-    controlslayout->addMultiCellWidget(ctls, 1, 1, 0, n_ctl_c-1);
-
-    //new line of control widgets
-    QVBox *tmpvb = new QVBox(ctls);
+    QVBox *tmpvb = new QVBox(ctls_ao);
     QHBox *tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(5);
 
     (void)new QLabel("AI channel to measure APDs:", tmphb);
 
-    ai_channels = new SearchableComboBox(tmphb);
-    connect(ai_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
-    connect(daqSystem(), SIGNAL(channelOpened(uint)), this, SLOT(synchAIChan()));
-    connect(daqSystem(), SIGNAL(channelClosed(uint)), this, SLOT(synchAIChan()));
-    synchAIChan();
-    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
+    ai_channels[which_ao_chan] = new SearchableComboBox(tmphb);
+    if (which_ao_chan==(NumAOchannels-1)) { // only run these the first time through the loop
+      synchAIChan();
+      connect(daqSystem(), SIGNAL(channelOpened(uint)), this, SLOT(synchAIChan()));
+      connect(daqSystem(), SIGNAL(channelClosed(uint)), this, SLOT(synchAIChan()));
+    }
+    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |---------| */
+    ai_channels_mapper->setMapping(ai_channels[which_ao_chan],which_ao_chan);
+    connect (ai_channels[which_ao_chan], SIGNAL(activated(const QString &)),
+	     ai_channels_mapper, SLOT(map()));
+    connect(ai_channels_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(changeAIChan(int)));
 
+    if (!which_ao_chan) {  //we only want one of these (for AO0)
+      (void) new QLabel("APD90,80,70,...:", tmphb);
+      apd_xx_edit_box = new QLineEdit(tmphb);
+      apd_xx_edit_box->setValidator(new QIntValidator(apd_xx_edit_box));
+      apd_xx_edit_box->setText(QString("%1").arg( (int)(100*(1.0-(shm->apd_xx)))) );
+      apd_xx_edit_box->setMaxLength(3);
+      connect(apd_xx_edit_box, SIGNAL(textChanged(const QString &)), this, SLOT(changeAPDxx(const QString &)));
+      apd_xx_edit_box->setMaximumWidth(apd_xx_edit_box->minimumSizeHint().width());
+    }
+    /* We only want one of these ... not mapper
     (void) new QLabel("APD90,80,70,...:", tmphb);
-    apd_xx_edit_box = new QLineEdit(tmphb);
-    apd_xx_edit_box->setValidator(new QIntValidator(apd_xx_edit_box));
-    apd_xx_edit_box->setText(QString("%1").arg( (int)(100*(1.0-(shm->apd_xx)))) );
-    apd_xx_edit_box->setMaxLength(3);
-    connect(apd_xx_edit_box, SIGNAL(textChanged(const QString &)), this, SLOT(changeAPDxx(const QString &)));
-    apd_xx_edit_box->setMaximumWidth(apd_xx_edit_box->minimumSizeHint().width());
+    apd_xx_edit_box[which_ao_chan] = new QLineEdit(tmphb);
+    apd_xx_edit_box[which_ao_chan]->setValidator(new QIntValidator(apd_xx_edit_box[which_ao_chan]));
+    apd_xx_edit_box[which_ao_chan]->setText(QString("%1").arg( (int)(100*(1.0-(shm->apd_xx)))) );
+    apd_xx_edit_box[which_ao_chan]->setMaxLength(3);
+    apd_xx_edit_box[which_ao_chan]->setMaximumWidth(apd_xx_edit_box[which_ao_chan]->minimumSizeHint().width());
+    apd_xx_edit_box_mapper->setMapping(apd_xx_edit_box[which_ao_chan],which_ao_chan);
+    connect (apd_xx_edit_box[which_ao_chan], SIGNAL(valueChanged(int)),
+	     apd_xx_edit_box_mapper, SLOT(map()));
+    connect(apd_xx_edit_box_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(changeAPDxx(int)));
+    */
 
     //new line of control widgets
     tmphb = new QHBox(tmpvb);        
     tmphb->setSpacing(5);
 
-    (void)new QLabel("AO stim channel:", tmphb);
-    ao_channels = new SearchableComboBox(tmphb);
-    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
-    populateAOComboBox();
-    synchAOChan();
-    connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
-
-    //new line of control widgets
-    tmphb = new QHBox(tmpvb);        
-    tmphb->setSpacing(5);
-
-    pacing_toggle = new QCheckBox("Pacing ON", tmphb);
-    pacing_toggle->setChecked(shm->pacing_on);    
-    connect(pacing_toggle, SIGNAL(toggled(bool)), this, SLOT(togglePacing(bool)));
-    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |-------------| */
+    pacing_toggle[which_ao_chan] = new QCheckBox("Pacing ON", tmphb);
+    pacing_toggle[which_ao_chan]->setChecked(shm->pacing_on[which_ao_chan]);    
+    tmphb->setStretchFactor(new QWidget(tmphb), 1);     /* Invisible spacer widget    |---------| */
+    pacing_toggle_mapper->setMapping(pacing_toggle[which_ao_chan],which_ao_chan);
+    connect (pacing_toggle[which_ao_chan], SIGNAL(toggled(bool)),
+	     pacing_toggle_mapper, SLOT(map()));
+    connect(pacing_toggle_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(togglePacing(int)));
     
     (void) new QLabel("Nominal PI:", tmphb);
-    nominal_pi = new QSpinBox(1, 2000, 1, tmphb);    
-    nominal_pi->setValue(static_cast<int>(shm->nominal_pi));
-    connect(nominal_pi, SIGNAL(valueChanged(int)), this, SLOT(changeNominalPI(int)));
+    nominal_pi[which_ao_chan] = new QSpinBox(1, 2000, 1, tmphb);    
+    nominal_pi[which_ao_chan]->setValue(static_cast<int>(shm->nominal_pi[which_ao_chan]));
+    nominal_pi_mapper->setMapping(nominal_pi[which_ao_chan],which_ao_chan);
+    connect (nominal_pi[which_ao_chan], SIGNAL(valueChanged(int)),
+	     nominal_pi_mapper, SLOT(map()));
+    connect(nominal_pi_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(changeNominalPI(int)));
     
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(5);
 
-    control_toggle = new QCheckBox("Control ON", tmphb);
-    control_toggle->setChecked(shm->control_on);    
-    connect(control_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleControl(bool)));
+    control_toggle[which_ao_chan] = new QCheckBox("Control ON", tmphb);
+    control_toggle[which_ao_chan]->setChecked(shm->control_on[which_ao_chan]);    
+    control_toggle_mapper->setMapping(control_toggle[which_ao_chan],which_ao_chan);
+    connect (control_toggle[which_ao_chan], SIGNAL(toggled(bool)),
+	     control_toggle_mapper, SLOT(map()));
+    connect(control_toggle_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(toggleControl(int)));
 
-    underlying_toggle = new QCheckBox("Continue underlying pacing", tmphb);
-    underlying_toggle->setChecked(shm->continue_underlying);    
-    connect(underlying_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleUnderlying(bool)));
+    underlying_toggle[which_ao_chan] = new QCheckBox("Continue underlying pacing", tmphb);
+    underlying_toggle[which_ao_chan]->setChecked(shm->continue_underlying[which_ao_chan]);
+    underlying_toggle_mapper->setMapping(underlying_toggle[which_ao_chan],which_ao_chan);
+    connect (underlying_toggle[which_ao_chan], SIGNAL(toggled(bool)),
+	     underlying_toggle_mapper, SLOT(map()));
+    connect(underlying_toggle_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(toggleUnderlying(int)));
 
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(5);
 
-    only_negative_toggle = new QCheckBox("Only negative perturbations", tmphb);
-    only_negative_toggle->setChecked(shm->only_negative_perturbations);    
-    connect(only_negative_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleOnlyNegativePerturbations(bool)));
+    only_negative_toggle[which_ao_chan] = new QCheckBox("Only negative perturbations", tmphb);
+    only_negative_toggle[which_ao_chan]->setChecked(shm->only_negative_perturbations[which_ao_chan]);    
+    only_negative_toggle_mapper->setMapping(only_negative_toggle[which_ao_chan],which_ao_chan);
+    connect (only_negative_toggle[which_ao_chan], SIGNAL(toggled(bool)),
+	     only_negative_toggle_mapper, SLOT(map()));
+    connect(only_negative_toggle_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(toggleOnlyNegativePerturbations(int)));
 
-    target_shorter_toggle = new QCheckBox("Target shorter APD initially", tmphb);
-    target_shorter_toggle->setChecked(shm->target_shorter);    
-    connect(target_shorter_toggle, SIGNAL(toggled(bool)), this, SLOT(toggleTargetShorter(bool)));
+    target_shorter_toggle[which_ao_chan] = new QCheckBox("Target shorter APD initially", tmphb);
+    target_shorter_toggle[which_ao_chan]->setChecked(shm->target_shorter[which_ao_chan]);    
+    target_shorter_toggle_mapper->setMapping(target_shorter_toggle[which_ao_chan],which_ao_chan);
+    connect (target_shorter_toggle[which_ao_chan], SIGNAL(toggled(bool)),
+	     target_shorter_toggle_mapper, SLOT(map()));
+    connect(target_shorter_toggle_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(toggleTargetShorter(int)));
 
     //new line of control widgets
     tmphb = new QHBox(tmpvb);
     tmphb->setSpacing(5);
 
     (void) new QLabel("g: ", tmphb);
-    gval = new QLineEdit(tmphb);
-    gval->setValidator(new QDoubleValidator(gval));
-    gval->setText(QString("%1").arg(shm->g_val));
-    connect(gval, SIGNAL(textChanged(const QString &)), this, SLOT(changeG(const QString &)));
+    gval[which_ao_chan] = new QLineEdit(tmphb);
+    gval[which_ao_chan]->setValidator(new QDoubleValidator(gval[which_ao_chan]));
+    gval[which_ao_chan]->setText(QString("%1").arg(shm->g_val[which_ao_chan]));
+    gval_mapper->setMapping(gval[which_ao_chan],which_ao_chan);
+    connect (gval[which_ao_chan], SIGNAL(textChanged(const QString &)),
+	     gval_mapper, SLOT(map()));
+    connect(gval_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(changeG(int)));
 
-
-    g_adj_manual_only = new QCheckBox("Adjust g Only Manually", tmphb);
-    g_adj_manual_only->setChecked(shm->g_adjustment_mode == MC_G_ADJ_MANUAL);
-    g_adj_manual_only->setDisabled(!shm->control_on);
-    //gval->setDisabled(!g_adj_manual_only->isChecked() && !shm->control_on);
-    connect(g_adj_manual_only, SIGNAL(stateChanged(int)), this, SLOT(gAdjManualOnly(int)));
+    g_adj_manual_only[which_ao_chan] = new QCheckBox("Adjust g Only Manually", tmphb);
+    g_adj_manual_only[which_ao_chan]->setChecked(shm->g_adjustment_mode[which_ao_chan] == MC_G_ADJ_MANUAL);
+    g_adj_manual_only[which_ao_chan]->setDisabled(!shm->control_on[which_ao_chan]);
+    g_adj_manual_only_mapper->setMapping(g_adj_manual_only[which_ao_chan],which_ao_chan);
+    connect (g_adj_manual_only[which_ao_chan], SIGNAL(toggled(bool)),
+	     g_adj_manual_only_mapper, SLOT(map()));
+    connect(g_adj_manual_only_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(gAdjManualOnly(int)));
 
     (void)new QLabel("delta g:", tmphb);
     /* delta-g controls */   
-    gui_indicator_delta_g_bar_value = new QLabel(stringifyDeltaG(shm->delta_g), tmphb);
-    delta_g_bar = new QScrollBar
+    gui_indicator_delta_g_bar_value[which_ao_chan] = new QLabel(stringifyDeltaG(shm->delta_g[which_ao_chan]), tmphb);
+    delta_g_bar[which_ao_chan] = new QScrollBar
       ( mc_delta_g_toint(MC_DELTA_G_MIN), mc_delta_g_toint(MC_DELTA_G_MAX),
         MC_DELTA_G_SCROLLBAR_STEP, MC_DELTA_G_SCROLLBAR_STEP * 5, 
-        mc_delta_g_toint(shm->delta_g), Qt::Horizontal, tmphb );
-     connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-     delta_g_bar->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed)); 
-     delta_g_bar->setMinimumSize(100, delta_g_bar->minimumSize().height()); // force this scrollbar to EXIST!
-     tmphb->setStretchFactor(delta_g_bar, 3);
-  }
+        mc_delta_g_toint(shm->delta_g[which_ao_chan]), Qt::Horizontal, tmphb );
+     delta_g_bar[which_ao_chan]->setSizePolicy(QSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed)); 
+     delta_g_bar[which_ao_chan]->setMinimumSize(100, delta_g_bar[which_ao_chan]->minimumSize().height()); // force this scrollbar to EXIST!
+     tmphb->setStretchFactor(delta_g_bar[which_ao_chan], 3);
+    delta_g_bar_mapper->setMapping(delta_g_bar[which_ao_chan],which_ao_chan);
+    connect (delta_g_bar[which_ao_chan], SIGNAL(valueChanged(int)),
+	     delta_g_bar_mapper, SLOT(map()));
+    connect(delta_g_bar_mapper, SIGNAL(mapped(int)),
+	    this, SLOT(changeDG(int)));
+
+    } //end of for (which_ao_chan ...
   
   controlslayout->addMultiCellWidget // footnote at the bottom
     (new QLabel(QString("APD control experiment notes:\n"
@@ -387,8 +426,8 @@ APDcontrol::APDcontrol(DAQSystem *daqSystem_parent)
   timer = new QTimer(this);
   connect(timer, SIGNAL(timeout()), this, SLOT(periodic()));
   timer->start(50);
+  }
 }
-
 
 /********************************************************************/
 /*
@@ -401,11 +440,15 @@ controls, (2) readInFifo, and (3) PVSaver
 //destructor
 APDcontrol::~APDcontrol() 
 {
+  int i;
+
   timer->stop();
   safelyQuit(); /* prompts the user to save, if necessary.. kinda sloppy to 
                    put this in a destructor.. but 'oh well' */
   daqSystem()->windowMenuRemoveWindow(window_id);
-  if (shm) shm->pacing_on = 0; // to 'turn off' pacing ...
+
+  if (shm) for (i=0; i<NumAOchannels; i++) shm->pacing_on[i] = 0; // to 'turn off' pacing ...
+
   moduleDetach();  
   delete window;
   delete spooler;
@@ -516,7 +559,7 @@ DAQSystem * APDcontrol::daqSystem()
 
 
 /* Very long-winded code to build the graph axis labels... */
-void APDcontrol::addAxisLabels(bool onlyNull)
+void APDcontrol::addAxisLabels(int which_apd_graph)
 {
   /* add the axis labels */
   QGridLayout *tmp_lo;
@@ -527,65 +570,24 @@ void APDcontrol::addAxisLabels(bool onlyNull)
   QWidget *w; /* tmp working wiget pointer points to members:
                  apd_graph_labels, delta_pi_graph_labels, etc.. */
 
-  if (!onlyNull || !apd_graph_labels) {
+  if (!apd_graph_labels[which_apd_graph]) {
 
     /* APD Graph Axis Labels */
 
-    w = apd_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
+    w = apd_graph_labels[which_apd_graph] = new QWidget(graphs); // dummy widget to have nested grids
 
     graphlayout->addWidget(w, 1, 0);
     
     tmp_lo = new QGridLayout(w, 3, 1);
 
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph[which_apd_graph]->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
     tmp_l->setFont(f);
 
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((apd_graph->rangeMax() - apd_graph->rangeMin()) / 2.0 + apd_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((apd_graph[which_apd_graph]->rangeMax() - apd_graph[which_apd_graph]->rangeMin()) / 2.0 + apd_graph[which_apd_graph]->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
     tmp_l->setFont(f);
 
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
+    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(apd_graph[which_apd_graph]->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
     tmp_l->setFont(f);
-  }
-
-
-  if (!onlyNull || !delta_pi_graph_labels) { 
-
-    /* Stim Graph Axis Labels */
-
-    w = delta_pi_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
-    graphlayout->addWidget(w, 3, 0);
-
-    tmp_lo = new QGridLayout(w, 3, 1);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
-    tmp_l->setFont(f);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((delta_pi_graph->rangeMax() - delta_pi_graph->rangeMin()) / 2.0 + delta_pi_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
-    tmp_l->setFont(f);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(delta_pi_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
-    tmp_l->setFont(f);
-
-  }
-
-  if (!onlyNull || !g_graph_labels) {
-
-    /* G Graph Axis Labels */
-
-    w = g_graph_labels = new QWidget(graphs); // dummy widget to have nested grids
-    graphlayout->addWidget(w, 5, 0);
-
-    tmp_lo = new QGridLayout(w, 3, 1);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMax()), w), 0, 0, AlignTop | AlignRight); 
-    tmp_l->setFont(f);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum((g_graph->rangeMax() - g_graph->rangeMin()) / 2.0 + g_graph->rangeMin()), w), 1, 0, AlignVCenter | AlignRight);
-    tmp_l->setFont(f);
-
-    tmp_lo->addWidget(tmp_l = new QLabel(QString().setNum(g_graph->rangeMin()), w), 2, 0, AlignBottom | AlignRight);
-    tmp_l->setFont(f);
-
   }
 
 }
@@ -594,10 +596,6 @@ void APDcontrol::periodic()
 {
   /* check the in fifo for data, and act upon it if found... */
   readInFifo();
-
-  /* synch the ao_channels listbox with what is really in the kernel */
-  synchAOChan();    
-
 }
 
 // read fifo from real-time-process, store in snapshot, and display via setText
@@ -613,95 +611,57 @@ void APDcontrol::readInFifo()
 
   n_bufs = n_read / sizeof(MCSnapShot);
 
+  spooler->spool(buf, n_bufs);
+
   need_to_save = (n_bufs ? true : need_to_save);
   
+  //initialize
+  int ao_chan_buf[NumAOchannels];
+  for (i=0; i<NumAOchannels; i++) ao_chan_buf[i]=-1;
+
   for (i = 0; i < n_bufs; i++) {
     /* todo: plot to graphs here... */
-    apd_graph->plot(static_cast<double>(buf[i].apd));
-    delta_pi_graph->plot(static_cast<double>(buf[i].delta_pi));
-    g_graph->plot(buf[i].g_val);
-    spooler->spool(buf, n_bufs);
+    if (buf[i].ao_chan >= 0) {
+      apd_graph[buf[i].ao_chan]->plot(static_cast<double>(buf[i].apd));
+      ao_chan_buf[buf[i].ao_chan]=i;
+    }
   }
+
   /* now update the stats once per read() call (meaning we take the
-     last MCSnapShot we got */
-  if (!n_bufs) return;
+     latest MCSnapShot that corresponds to AO0 and AO1 */
+  for (i=0; i<NumAOchannels; i++) {
+    if (ao_chan_buf[i]>=0) { //if it = -1, then none of the buffers contained data for
+                                                        //this AO channel
   
-  MCSnapShot & snapshot = buf[n_bufs-1];
+      MCSnapShot & snapshot = buf[ao_chan_buf[i]];
 
-  gui_indicator_pi->setText(QString::number(snapshot.pi));
-  gui_indicator_delta_pi->setText(QString::number(snapshot.delta_pi));
-  gui_indicator_apd->setText(QString::number(snapshot.apd));
-  gui_indicator_di->setText(QString::number(snapshot.di));
-  gui_indicator_v_apa->setText(QString::number(snapshot.v_apa));
-  gui_indicator_v_baseline->setText(QString::number(snapshot.v_baseline));
-  gui_indicator_ap_ti->setText(QString(uint64_to_cstr(snapshot.ap_ti)));
-  gui_indicator_ap_tf->setText(QString(uint64_to_cstr(snapshot.ap_tf)));
-  gui_indicator_g_val->setText(QString::number(snapshot.g_val));
-  gui_indicator_delta_g->setText(stringifyDeltaG(snapshot.delta_g));
-  gui_indicator_consec_alternating->setText(QString::number(snapshot.consec_alternating));
-  if (gui_indicator_g_val->text() !=  gui_indicator_delta_g_bar_value->text()) {
-    disconnect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
-    delta_g_bar->setValue(mc_delta_g_toint(snapshot.delta_g));
-    gui_indicator_delta_g_bar_value->setText(stringifyDeltaG(snapshot.delta_g));
-    connect(delta_g_bar, SIGNAL(valueChanged(int)), this, SLOT(changeDG(int)));
+      gui_indicator_pi[i]->setText(QString::number(snapshot.pi));
+      gui_indicator_delta_pi[i]->setText(QString::number(snapshot.delta_pi));
+      gui_indicator_apd[i]->setText(QString::number(snapshot.apd));
+      gui_indicator_di[i]->setText(QString::number(snapshot.di));
+      gui_indicator_g_val[i]->setText(QString::number(snapshot.g_val));
+      gui_indicator_delta_g[i]->setText(stringifyDeltaG(snapshot.delta_g));
+      if (gui_indicator_g_val[i]->text() !=  gui_indicator_delta_g_bar_value[i]->text()) {
+	disconnect (delta_g_bar[i], SIGNAL(valueChanged(int)),
+		 delta_g_bar_mapper, SLOT(map()));
+	delta_g_bar[i]->setValue(mc_delta_g_toint(snapshot.delta_g));
+	gui_indicator_delta_g_bar_value[i]->setText(stringifyDeltaG(snapshot.delta_g));
+	connect (delta_g_bar[i], SIGNAL(valueChanged(int)),
+		 delta_g_bar_mapper, SLOT(map()));
+      }
+    }
   }
-
 }
 
-/* Possible race conditions here but it's too much trouble to implement
-   atomicity for the free channels list right now... */
-void APDcontrol::populateAOComboBox()
+void APDcontrol::changeAIChan(int which_ao_chan)
 {
-  uint i;
-
-  ao_channels->clear();
-
-  for (i = 0; i < daq_shmCtl->numChannels(ComediSubDevice::AnalogOutput); i++)
-    if (!daq_shmCtl->isChanOn(ComediSubDevice::AnalogOutput, i) 
-        || i == static_cast<uint>(shm->ao_chan))
-      ao_channels->insertItem(QString::number(i));
-  
-}
-
-/* possible race conditions here.. since channel free list access is
-   non-atomic! */
-void APDcontrol::changeAOChan(const QString & selected)
-{
-  int selected_i = selected.toInt();
-  
-  /* disconnect here to avoid infinite recursion */
-  disconnect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
-  populateAOComboBox(); /* make sure the channel still is open --
-                          possible race condition here! */
-
-  /* if it's still there, tell the kernel about our desire to change
-     the channel */
-  if (ao_channels->findItem(selected, CaseSensitive|ExactMatch) >= 0) {
-    shm->ao_chan = selected_i;
-    synchAOChan(); /* just for kicks - this may revert back for a split
-                      second as synchAOChan() in periodic() */
-  }
-  connect(ao_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAOChan(const QString &)));
-}
-
-/* synch the ao_channels listbox with what is really in the kernel */
-void APDcontrol::synchAOChan() 
-{
-  QString ao_chan;
-
-  ao_chan.setNum(shm->ao_chan);
-
-  if (ao_channels->currentText() != ao_chan) 
-    ao_channels->setSelected(ao_channels->findItem(ao_chan, CaseSensitive|ExactMatch), true); 
-}
-
-void APDcontrol::changeAIChan(const QString &chan)
-{
+  QString chan;
   bool ok;
 
-  shm->apd_channel = chan.toInt(&ok);
+  chan = ai_channels[which_ao_chan]->currentText ();
+  shm->ai_chan_this_ao_chan_is_dependent_on[which_ao_chan] = chan.toInt(&ok);
 
-  if (!ok) shm->apd_channel = -1;
+  if (!ok) shm->ai_chan_this_ao_chan_is_dependent_on[which_ao_chan] = -1;
 }
 
 void APDcontrol::synchAIChan()
@@ -709,25 +669,31 @@ void APDcontrol::synchAIChan()
   uint i;
   int sel;
 
-  disconnect(ai_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
+  for (int which_ao_chan=0; which_ao_chan<NumAOchannels; which_ao_chan++) {
 
- ai_channels->clear();
-  ai_channels->insertItem("Off");
-  for (i = 0; i < daq_shmCtl->numChannels(ComediSubDevice::AnalogInput); i++)
-    if (daq_shmCtl->isChanOn(ComediSubDevice::AnalogInput, i))
-      ai_channels->insertItem(QString().setNum(i));
+    SearchableComboBox *aic = ai_channels[which_ao_chan];
+    disconnect (aic, SIGNAL(activated(const QString &)),
+	     ai_channels_mapper, SLOT(map()));
+    //disconnect(aic, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
+ 
+    aic->clear();
+    aic->insertItem("Off");
+    for (i = 0; i < daq_shmCtl->numChannels(ComediSubDevice::AnalogInput); i++)
+      if (daq_shmCtl->isChanOn(ComediSubDevice::AnalogInput, i))
+	aic->insertItem(QString().setNum(i));
   
-  sel = ai_channels->findItem(QString().setNum(shm->apd_channel), CaseSensitive | ExactMatch);
-  if (sel < 0) {
-    ai_channels->setSelected(0);
-    shm->apd_channel = -1;
+    sel = aic->findItem(QString().setNum(shm->ai_chan_this_ao_chan_is_dependent_on[which_ao_chan]), CaseSensitive | ExactMatch);
+    if (sel < 0) {
+      aic->setSelected(0);
+      shm->ai_chan_this_ao_chan_is_dependent_on[which_ao_chan] = -1;
+    }
+    else aic->setSelected(sel); 
+
+    connect (aic, SIGNAL(activated(const QString &)),
+	     ai_channels_mapper, SLOT(map()));
+    //connect(aic, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
   }
-  else ai_channels->setSelected(sel); 
-
-  connect(ai_channels, SIGNAL(activated(const QString &)), this, SLOT(changeAIChan(const QString &)));
-
 }
-
 
 void APDcontrol::changeAPDxx(const QString &xx_value)
 {  
@@ -739,90 +705,83 @@ void APDcontrol::changeAPDxx(const QString &xx_value)
     shm->apd_xx = 1.0 - (0.01*new_apd_xx);
 }
 
-void APDcontrol::togglePacing(bool on)
+void APDcontrol::togglePacing(int which_ao_chan)
 {
-  if (!on) {
-    shm->pacing_on = 0;
-  } else {
-    shm->pacing_on = 1;
-  }
+    shm->pacing_on[which_ao_chan] = pacing_toggle[which_ao_chan]->isChecked();
 }
 
-void APDcontrol::changeNominalPI(int pi_in_ms)
+void APDcontrol::changeNominalPI(int which_ao_chan)
 {
-  shm->nominal_pi = pi_in_ms;
+  shm->nominal_pi[which_ao_chan] = nominal_pi[which_ao_chan]->value();
 }
 
-void APDcontrol::toggleControl(bool on)
+void APDcontrol::toggleControl(int which_ao_chan)
 {
   
-  if (!on) {
-    shm->control_on = 0;
-    g_adj_manual_only->setDisabled(true);
-    gval->setDisabled(true);
-    shm->g_adjustment_mode = MC_G_ADJ_MANUAL;
+  if (!(control_toggle[which_ao_chan]->isChecked())) {
+    shm->control_on[which_ao_chan] = 0;
+    g_adj_manual_only[which_ao_chan]->setDisabled(true);
+    gval[which_ao_chan]->setDisabled(true);
+    shm->g_adjustment_mode[which_ao_chan] = MC_G_ADJ_MANUAL;
   } else {
-    shm->control_on = 1;
-    g_adj_manual_only->setDisabled(false);
-    gval->setDisabled(!g_adj_manual_only->isChecked());
-    shm->g_adjustment_mode = (g_adj_manual_only->isChecked() 
+    shm->control_on[which_ao_chan] = 1;
+    g_adj_manual_only[which_ao_chan]->setDisabled(false);
+    gval[which_ao_chan]->setDisabled(!g_adj_manual_only[which_ao_chan]->isChecked());
+    shm->g_adjustment_mode[which_ao_chan] = 
+      (g_adj_manual_only[which_ao_chan]->isChecked() 
                               ? MC_G_ADJ_MANUAL 
                               : MC_G_ADJ_AUTOMATIC);
   }
 }
 
-void APDcontrol::toggleUnderlying(bool on)
+void APDcontrol::toggleUnderlying(int which_ao_chan)
 {
-  if (!on) {
-    shm->continue_underlying = 0;
+  shm->continue_underlying[which_ao_chan] = underlying_toggle[which_ao_chan]->isChecked();
+}
+
+void APDcontrol::toggleOnlyNegativePerturbations(int which_ao_chan)
+{
+  shm->only_negative_perturbations[which_ao_chan] = only_negative_toggle[which_ao_chan]->isChecked();
+}
+
+void APDcontrol::toggleTargetShorter(int which_ao_chan)
+{
+  shm->target_shorter[which_ao_chan] = target_shorter_toggle[which_ao_chan]->isChecked();
+}
+
+void APDcontrol::gAdjManualOnly(int which_ao_chan)
+{
+  if (!(g_adj_manual_only[which_ao_chan]->isChecked())) {
+    shm->g_adjustment_mode[which_ao_chan]= MC_G_ADJ_AUTOMATIC;
   } else {
-    shm->continue_underlying = 1;
+    shm->g_adjustment_mode[which_ao_chan]= MC_G_ADJ_MANUAL;
   }
 }
 
-void APDcontrol::toggleOnlyNegativePerturbations(bool on)
-{
-  if (!on) {
-    shm->only_negative_perturbations = 0;
-  } else {
-    shm->only_negative_perturbations = 1;
-  }
-}
-
-void APDcontrol::toggleTargetShorter(bool on)
-{
-  if (!on) {
-    shm->target_shorter = 0;
-  } else {
-    shm->target_shorter = 1;
-  }
-}
-
-void APDcontrol::gAdjManualOnly(int yes)
-{
-  shm->g_adjustment_mode = (yes ? MC_G_ADJ_MANUAL : MC_G_ADJ_AUTOMATIC);
-}
-
-void APDcontrol::changeG(const QString &g)
+void APDcontrol::changeG(int which_ao_chan)
 {  
+  QString g;
   double newG;
   bool ok;
 
+  g = gval[which_ao_chan]->text();
   newG = g.toDouble(&ok);
   if (ok)
-    shm->g_val = newG;
+    shm->g_val[which_ao_chan] = newG;
 }
 
-void APDcontrol::changeDG(int new_dg_sliderval) 
+void APDcontrol::changeDG(int which_ao_chan)
 {
-  shm->delta_g = mc_delta_g_fromint(new_dg_sliderval);
-  gui_indicator_delta_g_bar_value->setText(stringifyDeltaG(mc_delta_g_fromint(new_dg_sliderval)));
+  int new_dg_sliderval;
+  new_dg_sliderval = delta_g_bar[which_ao_chan]->value();
+  shm->delta_g[which_ao_chan] = mc_delta_g_fromint(new_dg_sliderval);
+  gui_indicator_delta_g_bar_value[which_ao_chan]->setText(stringifyDeltaG(mc_delta_g_fromint(new_dg_sliderval)));
 }
 
 const char * APDcontrol::fileheader = 
 "#File Format Version: " RCS_VERSION_STRING "\n"
 "#--\n#Columns: \n"
-"#scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_channel, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
+"#APD_channel AO_channel scan_index, pacing_on, control_on, nominal_PI, PI, delta_PI, APD_xx, APD,  DI, AP_ti, AP_tf, V_Apa, V_Baseline, g, delta_g, g_adjustment_mode, consecutive_alternating, only_negative_perturbations, continue_underlying, target_shorter\n";
 
 //save important snapshot values to disk 
 //important to edit this to suit your data needs
@@ -838,14 +797,29 @@ struct PVSaver
             apTf     (uint64_to_cstr(ws.ap_tf));
     
     dummy.sprintf
-      ("%s %d %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
+      ("%d %d %s %d %d %d %d %d %d %d %d %s %s %g %g %g %g %d %d %d %d %d\n",     
+       ws.apd_channel, 
+       ws.ao_chan, 
        scanIndex.latin1(), 
-       (int)ws.pacing_on, (int)ws.control_on,
-       ws.nominal_pi, ws.pi, ws.delta_pi, ws.apd_channel,
-       ws.apd_xx, ws.apd, ws.di, 
-       apTi.latin1(), apTf.latin1(), ws.v_apa, ws.v_baseline, 
-       ws.g_val, ws.delta_g, (int)ws.g_adjustment_mode, ws.consec_alternating, 
-       (int)ws.only_negative_perturbations, (int)ws.continue_underlying, (int)ws.target_shorter);
+       (int)ws.pacing_on, 
+       (int)ws.control_on,
+       ws.nominal_pi, 
+       ws.pi, 
+       ws.delta_pi, 
+       ws.apd_xx, 
+       ws.apd, 
+       ws.di, 
+       apTi.latin1(), 
+       apTf.latin1(), 
+       ws.v_apa, 
+       ws.v_baseline, 
+       ws.g_val, 
+       ws.delta_g, 
+       (int)ws.g_adjustment_mode, 
+       ws.consec_alternating, 
+       (int)ws.only_negative_perturbations, 
+       (int)ws.continue_underlying, 
+       (int)ws.target_shorter);
 
     out << dummy;
   }
@@ -924,65 +898,36 @@ void APDcontrol::safelyQuit()
   }
 }
 
-
-void APDcontrol::buildRangeComboBoxesAndConnectSignals()
+void APDcontrol::buildRangeComboBoxesAndConnectSignals(int which_apd_graph)
 {
-  static const GraphRangeSettings *arrays[] 
-    = { apd_ranges, delta_pi_ranges, g_ranges, 0 };
-  static const int sizes[] = { n_apd_ranges, n_delta_pi_ranges, n_g_ranges };
-  QComboBox *boxes[] = { apd_range_ctl, delta_pi_range_ctl, g_range_ctl };
-
-  QComboBox **box;
-  const GraphRangeSettings **array;
-  const int *size;
+  QComboBox *box = apd_range_ctl[which_apd_graph];
+  const GraphRangeSettings * s = apd_ranges;
+  const int size = n_apd_ranges;
   int i;
 
-  for ( box = boxes, size = sizes, array = arrays; 
-        *array; 
-        array++, size++, box++ ) 
-    {
-      for (i = 0; i < *size; i++) {
-        const GraphRangeSettings & s = (*array)[i];
-        (*box)->insertItem(QString().setNum(s.min) + " - " 
-                           + QString().setNum(s.max), i);
-      }
-      (*box)->setCurrentItem(0);
-      connect(*box, SIGNAL(activated(int)), 
-              this, SLOT(graphHasChangedRange(int)));
-    } 
+  for (i = 0; i < size; i++) 
+    box->insertItem(QString("%1 - %2").arg(s[i].min).arg(s[i].max), i);
+  
+  box->setCurrentItem(0);
+
+  QSignalMapper *mapper = new QSignalMapper(this);
+  mapper->setMapping(box, which_apd_graph);
+  connect(box, SIGNAL(activated(const QString &)), mapper, SLOT(map()));
+  connect(mapper, SIGNAL(mapped(int)), 
+	  this, SLOT(graphHasChangedRange(int)));
 }
 
 
-void APDcontrol::graphHasChangedRange(int index)
+void APDcontrol::graphHasChangedRange(int which_apd_graph)
 {
-  static const GraphRangeSettings *arrays[] 
-    = { apd_ranges, delta_pi_ranges, g_ranges };
-  ECGGraph * graphs[] = { apd_graph, delta_pi_graph, g_graph };
-  const QComboBox *boxes[] = { apd_range_ctl, delta_pi_range_ctl, g_range_ctl, 0};
-  QWidget **labelWidgets[] = { &apd_graph_labels, &delta_pi_graph_labels,
-                               &g_graph_labels };
-  
-  QWidget ***w;
-  ECGGraph **g;
-  const QComboBox **box;
-  const QObject *s = sender();
+  int index = apd_range_ctl[which_apd_graph]->currentItem();
 
-  for (g = graphs, box = boxes, w = labelWidgets; *box; g++, box++, w++) {
-    if (s == *box) {
-      const GraphRangeSettings & setting = (arrays[g - graphs])[index];
-      (*g)->setRange(setting.min, setting.max);
-      /* lazy man's rebuilding of all the labels -- slow, but fast enough */
-      delete **w; **w = 0;
-
-      /* now that the particular label is deleted, 
-         re-create it using addAxisLabels(false)  then show() them.. */
-      addAxisLabels(true);
-
-      (**w)->show();
-
-      break;
-    }
-  }
+  const GraphRangeSettings & setting = apd_ranges[index];
+  apd_graph[which_apd_graph]->setRange(setting.min, setting.max);
+  delete apd_graph_labels[which_apd_graph];
+  apd_graph_labels[which_apd_graph] = 0;
+  addAxisLabels(which_apd_graph);
+  apd_graph_labels[which_apd_graph]->show();
 }
 
 

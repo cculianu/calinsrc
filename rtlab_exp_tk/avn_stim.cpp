@@ -522,6 +522,8 @@ void AVNStim::readInFifo()
 
   n_bufs = n_read / sizeof(AVNLiebnitz);
 
+  spooler->spool(buf, n_bufs);
+
   need_to_save = (n_bufs ? true : need_to_save);
   
   for (i = 0; i < n_bufs; i++) {
@@ -529,7 +531,6 @@ void AVNStim::readInFifo()
     rr_graph->plot(static_cast<double>(buf[i].rr_interval));
     stim_graph->plot(static_cast<double>(buf[i].stimuli));
     g_graph->plot(buf[i].g_val);
-    spooler->spool(buf, n_bufs);
   }
   /* now update the stats once per read() call (meaning we take the
      last AVNLiebnitz we got */
