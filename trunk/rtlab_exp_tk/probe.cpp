@@ -240,7 +240,7 @@ static pid_t get_attached_to_rtlab(void)
 
     while (!ret && !(line = t.readLine()).isNull()) {
       if( line.contains(subst, false) 
-          && ((i = line.find(QRegExp("[0-9]"))) > -1) )  {
+          && ((i = line.find(QRegExp("\\d+"))) > -1) )  {
         // got it!
         bool ok;
         ret = line.mid(i).toInt(&ok);
