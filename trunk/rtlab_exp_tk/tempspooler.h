@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <zlib.h>
 #include "common.h"
 #include "tempfile.h"
 #include "exception.h"
@@ -39,9 +40,9 @@ template <class T> class TempSpooler : public TempFile
 
   virtual void truncate() { ftruncate(*this, 0); updateNumTs(0); }
 
-  unsigned long long int numSpooled() const { return numTs; }
+  virtual unsigned long long int numSpooled() const { return numTs; }
 
-  void spool(const T * thing, int nmemb) 
+  virtual void spool(const T * thing, int nmemb) 
     { /* do spooling */ 
       int r;
 
@@ -100,15 +101,89 @@ template <class T> class TempSpooler : public TempFile
   void updateNumTs(unsigned long long int newNumTs) 
     {
       int r;
-
+      off_t orig = ::lseek(*this, 0, SEEK_CUR);
+      
       numTs = newNumTs;
 
       r = ::lseek(*this, 0, SEEK_SET);
       Assert<FileException>(r >= 0, "Seek error in "__FILE__, strerror(errno));
       r = ::write(*this, &numTs, sizeof(numTs));
       Assert<FileException>(r == sizeof(numTs), "Could not write", strerror(errno));
+      ::lseek(*this, orig, SEEK_SET); // go back to where we were...
     }
 
 
+};
+
+template <class T> class TempSpoolerGZ : public TempSpooler<T>
+{
+
+ private:
+  enum Mode { Read, Write };
+
+ public:
+  TempSpoolerGZ(const char * prefix = "gzts", bool requireLocal = true)
+    : TempSpooler<T>(prefix, requireLocal), num_spooled(0)
+    { truncate(); openGZ(); }
+  virtual ~TempSpoolerGZ() { closeGZ(); }
+
+  virtual unsigned long long int numSpooled() const { return num_spooled; }
+
+  virtual void spool(const T * thing, int nmemb) 
+    { /* do spooling */ 
+      if ( gzwrite(gzfile, const_cast<T *>(thing), 
+                   sizeof(T) * nmemb) != sizeof(T) * nmemb ) {
+        int err;
+        throw FileException ("Could not write", 
+                             QString("Error writing to a temporary gz file.  ")
+                             + gzerror(gzfile, &err));
+      }
+      num_spooled += nmemb;
+    }
+
+  /* calls operation() for each T stored in the temp file */
+  template<class OP> void forEach(OP & operation) 
+    { 
+      static const int num_at_a_time = 10;
+      unsigned long long int numLeft = numSpooled();
+      int r;
+
+      if (!numSpooled()) return; /* abort early if we have no data */
+
+      closeGZ();
+      openGZ(Read);
+      
+      Assert<FileException>(r >= 0, "Seek error in "__FILE__, gzerror(gzfile, 
+                                                                      &errno));
+
+      char buf[sizeof(T) * num_at_a_time / sizeof(char)];
+      int n_read;
+      while((n_read = ::gzread(gzfile, buf, sizeof(T) * num_at_a_time)) != 0){
+        Assert<FileException>(n_read > 0, 
+                              "Read error in "__FILE__, 
+                              gzerror(gzfile, &errno));
+        int i;
+        for (i = 0; i < static_cast<int>(n_read / sizeof(T)); i++) 
+          operation(reinterpret_cast<T *>(buf)[i]);        
+        numLeft-=i;
+      }
+      
+      if (numLeft) BUG();
+
+      closeGZ();
+      openGZ(Write);
+      ::gzseek(gzfile, 0, SEEK_END);
+    }
+  
+  
+ private:
+  gzFile gzfile;
+  unsigned long long num_spooled;
+  void openGZ(Mode m = Write) 
+    { 
+      ::lseek(*this, 0, SEEK_SET);
+      gzfile = gzdopen(dup(*this), m == Write ? "wb" : "rb"); 
+    }
+  void closeGZ() { gzclose(gzfile); }
 };
 #endif
