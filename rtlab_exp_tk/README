@@ -6,13 +6,11 @@ BEFORE YOU COMPILE
 Currently the makefiles build the "daq_system" application.  In order to get
 this to compile properly you must do the following:
 
-0. Make sure RT-Linux (http://www.rtlinux.com) v 3.1 is installed.  Earlier versions should probably work too, but your mileage may vary.
+1. Make sure RT-Linux (http://www.rtlinux.com) v 3.1 is installed.  Earlier versions should probably work too, but your mileage may vary.
 
-1. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
+2. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
 
-2. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  I have tried Qt 2.3.0 and it doesn't work. Make sure the environment variable QTDIR is set before you run 'make' and that it points to your Qt installed directory. (On Redhat it has been known to be /usr/lib/qt-3.0.1/ or /usr/lib/qt3).
-
-3. Make sure you also installed tmake.  The rpm for tmake is available from http://www.trolltech.com and also http://www.rpmfind.net.  This tmake utility is a great make-helper written in Perl.  It really made our lives easier and I recommend it highly!
+3. Make sure Qt 3.0.1 is installed.  Earlier versions may work or they may not.  I have tried Qt 2.3.0 and it doesn't work. Make sure the environment variable QTDIR is set before you run 'make' and that it points to your Qt installed directory. (On Redhat it has been known to be /usr/lib/qt-3.0.1/ or /usr/lib/qt3).
 
 
 Next, you must edit the following files:
