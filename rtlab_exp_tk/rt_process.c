@@ -84,6 +84,7 @@ EXPORT_SYMBOL_NOVERS(rtp_comedi_ai_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtp_comedi_ao_dev_handle);
 EXPORT_SYMBOL_NOVERS(rtlab_proc_root);
 EXPORT_SYMBOL_NOVERS(float2string);
+EXPORT_SYMBOL_NOVERS(voltage_at);
 
 int init_module(void);        /* set up RT stuff */
 void cleanup_module(void) ;    /* clean up RT stuff */
@@ -1293,6 +1294,26 @@ int float2string(char *out, int n, float f, int num_decs)
         strncpy(out, buf, n);
         return (ret < n ? ret : n);
 }
+
+/** For a given channel id and MultiSampleStruct, gives you the voltage
+    for that channel.  If the channel is not on, returns 0. */
+double voltage_at(unsigned int channel_id, const MultiSampleStruct *m)
+{
+  double ret = 0.0;
+
+  if (is_chan_on(channel_id, (volatile const char *)m->channel_mask)) {
+    unsigned int i;
+    
+    for (i = 0; i < m->n_samples; i++) 
+      if (m->samples[i].channel_id == channel_id) {
+        ret = m->samples[i].data;
+        break;
+      }
+    
+  }
+  return ret;
+}
+
 #undef __I_AM_BUSY
 
 #ifdef TIME_RT_LOOP
