@@ -54,6 +54,7 @@ class Plugin;
 
 class ECGGraph;
 class ECGGraphContainer;
+class DAQGraphControls;
 
 class  SampleStructSource;
 class  SampleStructReader;
@@ -151,7 +152,6 @@ public slots:
 private slots:
   void showDetails(QListViewItem *);
   void carefullyLoadSelected(); /* asks the user for a plugin to load       */
-  void showSelectedWindow();  /* focuses the selected plugin */
   void removeSelectedPlugin(); /* unloads and deletes the selected plugin */
 
   void pluginMenuContextReq(QListViewItem *, const QPoint &, int);
@@ -278,7 +278,7 @@ class DAQSystem : public QMainWindow
  protected slots:
   /* this slot does the necessary work to tell the rt-process that a 
      channel's range/gain setting needs to be changed */
-  void graphChangedRange(uint channel, int range); 
+  void graphChangedRange(uint channel, uint range); 
 
   void setStatusBarScanIndex(scan_index_t index);
 
@@ -289,8 +289,8 @@ class DAQSystem : public QMainWindow
   /* focuses a window that has menu id 'id' in the windowMenu popup menu */
   void windowMenuFocusWindow(int id); 
   void windowMenuFocusWindow(QWidget *w);
-  void spikePolarityChanged(SpikePolarity);
-  void spikeBlankingChanged(uint);
+  void spikePolarityChanged(uint, SpikePolarity);
+  void spikeBlankingChanged(uint, uint);
   void spikeThresholdSet(double value);
   void spikeThresholdOff();
 
@@ -321,8 +321,7 @@ class DAQSystem : public QMainWindow
  private:
   bool queryOpen(uint & chan, uint & range, 
                  uint & n_secs);
-  void buildRangeSettings(ECGGraphContainer *container);
-  
+
   /* Prints the current graph's contents for each of the graph containers
      specified in the vector */
   void print(vector<const ECGGraphContainer *> &);
@@ -346,6 +345,9 @@ class DAQSystem : public QMainWindow
 
   QToolBar mainToolBar;
   QToolButton addChannelB,  resynchB, timeStampB;
+
+  DAQGraphControls *graphControls;
+
   QStatusBar statusBar;
   QLabel statusBarScanIndex;
   ReaderLoop readerLoop;

@@ -978,7 +978,7 @@ static void detectSpikes (MultiSampleStruct *m)
           /* we just had a spike this scan, so do some bookkeeping */
 
           /* calculate period.. */
-          m->samples[i].spike_period =  spike_info.period[chan] = 
+          m->samples[i].spike_period = spike_info.period[chan] = 
             (uint)(this_chan_time - spike_info.last_spike_time[chan]) 
                   * ((double)0.000001 /*convert to ms*/);
           /* save spike time... */

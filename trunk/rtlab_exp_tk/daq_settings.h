@@ -28,6 +28,7 @@
 #include "settings.h"
 #include "comedi_device.h"
 #include "spike_polarity.h"
+#include "daq_channel_params.h"
 
 #  define DAQ_SYSTEM_USER_DIR QString(getenv("HOME")) + "/." + DAQ_DIRNAME
 
@@ -105,26 +106,8 @@ class DAQSettings: public Settings
      QRect in getWindowSettings() */
   set<uint> windowSettingChannels() const;
 
-  /* Struct used by daq system to communicate with the settings class */
-  struct ChannelParams {
-    uint n_secs;
-    uint range;
-    bool spike_on;
-    double spike_thold;
-    SpikePolarity spike_polarity;
-    uint spike_blanking;
-
-    static const ChannelParams null;
-
-    void setNull(bool n) { isnull = n; };
-    bool isNull() const { return isnull; };
-    ChannelParams() { setNull(true); };
-   private:
-    bool isnull; // means this channel params struct is ignoreable
-  };
-
-  void setChannelParameters(uint channel_number, const ChannelParams & cp);
-  const ChannelParams & getChannelParameters(uint channel_number) const;
+  void setChannelParameters(uint channel_number, const DAQChannelParams & cp);
+  const DAQChannelParams & getChannelParameters(uint channel_number) const;
   void clearChannelParameters(); /* clears _all_ channel parameters */
 
   void clearAllChannelWindowSettings() 
@@ -135,7 +118,7 @@ class DAQSettings: public Settings
 
   struct WindowSettingProfile {
     map<uint, QRect> windowSettings;    
-    map<uint, ChannelParams> channelParams;    
+    map<uint, DAQChannelParams> channelParams;    
     QString name;
     WindowSettingProfile(): is_null(true){};
     bool isNull() const { return is_null; }
@@ -162,7 +145,7 @@ class DAQSettings: public Settings
 
   map<uint, QRect> windowSettings;
 
-  map<uint, ChannelParams> channelParams;
+  map<uint, DAQChannelParams> channelParams;
 
   map<QString, WindowSettingProfile> _windowSettingProfiles;
 
@@ -176,11 +159,11 @@ class DAQSettings: public Settings
 
   /* parses the channel parameters string and sets up the channelParams map */
   void parseChannelParameters();
-  static map<uint, ChannelParams> parseChannelParameters(QString);
+  static map<uint, DAQChannelParams> parseChannelParameters(QString);
 
   /* generates the channel params string to be saved to config file */
   void generateChannelParametersString();
-  static QString generateChannelParametersString(const map<uint, ChannelParams> &);
+  static QString generateChannelParametersString(const map<uint, DAQChannelParams> &);
 
   void parseAllWindowProfiles();
 

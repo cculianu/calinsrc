@@ -25,6 +25,7 @@
 #define __PLUGIN_H
 
 class QObject;
+class QWidget;
 
 /* The plugin interface is minimalist. */
 class Plugin
@@ -34,7 +35,7 @@ public:
   virtual const char *name() const = 0; /* returns the plugin's name */
   virtual const char *description() const = 0; /* returns the description */ 
   virtual bool inUse() const { return false; } /* if inUse() then 
-                                                  don't unload */
+                                                 don't unload */
 };
 
 /* all entry functions throw an Exception if they cannot be started */
