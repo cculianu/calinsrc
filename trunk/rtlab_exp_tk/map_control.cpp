@@ -774,7 +774,7 @@ void MapControl::save()
 
 void MapControl::saveAs()
 {
-  bool dont_overwrite;
+  bool dont_overwrite = false;
 
   do {
     outFile =  
@@ -785,13 +785,14 @@ void MapControl::saveAs()
 
     if (outFile.isNull()) return; // user aborted
 
-    if (QFile(outFile).exists())   
+    if (QFile(outFile).exists()) {
       dont_overwrite = 
         QMessageBox::warning(window, "File exists", 
                              outFile + " exists, overwrite?", 
-                             QMessageBox::Yes, QMessageBox::No) == 1;
-    else 
+                             QMessageBox::Yes, QMessageBox::No) == QMessageBox::No;
+    } else {
       dont_overwrite = false;
+    }
   } while (dont_overwrite);
   save();
 }

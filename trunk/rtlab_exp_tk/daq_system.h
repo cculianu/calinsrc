@@ -311,6 +311,9 @@ class DAQSystem : public QMainWindow
      2) notifies the readerLoop */
   void graphOff(const ECGGraphContainer *);
 
+  /* hacking internal slot that links up to 
+     DAQGraphControls::secondsVisibleChanged() */
+  void rememberSecondsVisibleThatUserPicked(uint, uint);
  protected:
   virtual void closeEvent(QCloseEvent *e); /* from QWidget */
 
@@ -362,6 +365,8 @@ class DAQSystem : public QMainWindow
 
   enum HelpMenuIds { help1 = 0, help2, help3, n_help_dests };
   static const QString helpMenuDestinations[n_help_dests];
+
+  uint last_secs_vis_they_picked;
 };
 
 #endif 
