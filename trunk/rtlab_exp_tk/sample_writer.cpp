@@ -71,9 +71,10 @@ SampleGZWriter::setFile(const char *filename)
   if (file == NULL) {
     throw SampleOutputFileException
       (QString("Could not open ") + filename,
-       QString("Error opening ") + filename + " for writing. " 
+       QString("Error opening ") + filename + " for writing. Error is: \"" 
        + (errno ? sys_errlist[errno] 
-	  : "Not enough memory to allocate zlib data structures.")
+          : "Not enough memory to allocate zlib data structures.")
+       + "\""
       );				    
   }
 }

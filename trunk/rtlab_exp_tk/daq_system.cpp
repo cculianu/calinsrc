@@ -71,6 +71,8 @@ DAQSystem::DAQSystem (ConfigurationWindow  & cw, QWidget * parent = 0,
   
   statusBar.addWidget(&statusBarScanIndex);
 
+  configWindow.startupScreenSemantics = false;
+
   { /* build menus */
     fileMenu.insertItem("&Options", &configWindow, SLOT ( show() ) );
     fileMenu.insertSeparator();

@@ -63,29 +63,8 @@ class ConfigurationWindow : public QDialog
   Q_OBJECT  
  public:
   ConfigurationWindow(const Probe & deviceProbe, DAQSettings & settings,
-		      QWidget *parent = 0, const char *name = 0, WFlags f = 0);
+                      QWidget *parent = 0, const char *name = 0, WFlags f = 0);
 
-  class DeviceListView : public QListView
-    {
-
-    public:
-      DeviceListView ( const vector<ComediDevice> & v, 
-	       QWidget * parent = 0, const char * name = 0 ); 
-
-      const ComediDevice & selectedDevice() const;
-
-    private:
-      const vector<ComediDevice> & devs;
-      
-    };
-
-  class TextContentsPreviewer: public QTextView, public QFilePreview
-    {
-    public:
-      TextContentsPreviewer (QWidget *w = 0, const char *name = 0);
-      virtual void previewUrl (const QUrl & url);
-
-    };
 
   DAQSettings & daqSettings() const { return settings; }
 
@@ -95,7 +74,12 @@ class ConfigurationWindow : public QDialog
   /* a thin wrapper to the DeviceListView */
   const ComediDevice & selectedDevice() const 
     { return deviceTable.selectedDevice(); }
-    
+
+  /* this controls the behavior of what is considered valid input
+     for the configuration screen.  Certain extra checking is done
+     on the startup screen.  Defaults to false */
+  bool startupScreenSemantics;
+
  public slots:
   void askUserForInputFilename();
   void askUserForOutputFilename();
@@ -106,7 +90,33 @@ class ConfigurationWindow : public QDialog
  protected slots:
   void accept();
 
- private:
+ private: 
+
+  class DeviceListView : public QListView
+  {
+
+    public:
+      DeviceListView ( const vector<ComediDevice> & v, 
+	       QWidget * parent = 0, const char * name = 0 ); 
+
+      const ComediDevice & selectedDevice() const;
+
+    private:
+      const vector<ComediDevice> & devs;
+      
+  };
+
+  class TextContentsPreviewer: public QTextView, public QFilePreview
+  {
+    public:
+      TextContentsPreviewer (QWidget *w = 0, const char *name = 0);
+      virtual void previewUrl (const QUrl & url);
+
+  };
+
+  /* validates this form and returns false if form failed */
+  bool validate(); 
+
   const Probe & deviceProbe;
   DAQSettings & settings;
 
