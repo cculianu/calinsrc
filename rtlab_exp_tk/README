@@ -6,7 +6,7 @@ BEFORE YOU COMPILE
 Currently the makefiles build the "daq_system" application.  In order to get
 this to compile properly you must do the following:
 
-1. Make sure you have a Realtime Linux variant.  Either RT-Linux (http://www.rtlinux.com) v 3.1 or RTAI 2.4.19 needs to be installed.  Earlier versions should probably work too, but your mileage may vary.
+1. Make sure you have a Realtime Linux variant.  Either RT-Linux (http://www.rtlinux.com) v 3.1 or RTAI 24.1.9 needs to be installed.  Earlier versions should probably work too, but your mileage may vary.
 
 2. Make sure Comedi 0.7.60 or later (earlier ones may work too) with comedilib and kcomedilib are installed.
 
@@ -15,9 +15,9 @@ this to compile properly you must do the following:
 
 Next, you must run the following command from WITHIN the source tree to configure the build system:
 
-	sh configure (or just ./configure)
+	./configure
 
-Follow the on-screen prompts and input the required information.  If you installed comedi, kcomedilib, RTAI/RTLinux, and you have a valid kernel source tree, everything should build just fine.
+Follow the on-screen prompts and input the required information.  If you correctly installed comedi, kcomedilib, RTAI/RTLinux, and you have a valid kernel source tree, everything should build just fine.
 
 COMPILING
 ---------
