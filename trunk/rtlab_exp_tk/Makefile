@@ -17,5 +17,5 @@ rt_process.o:
 	${MAKE} -f  Makefile.rt_process
 
 clean:
-	-rm -f *.o moc_*.cpp ${NON_RT_PROGRAM}
+	-rm -f *.o moc_*.cpp ${NON_RT_PROGRAM} Makefile.${NON_RT_PROGRAM}
 
