@@ -44,23 +44,22 @@ class ShmController
      otherwise if shm is not NULL, takes shm as an already attached
      shm and doesn't detatch it upon class destruction
    */
-  ShmController(SharedMemStruct *shm = 0) 
+  ShmController(const SharedMemStruct *shm = 0) 
     throw(ShmException, /* if cannot attach to type */
 	  IllegalStateException /* if t is Unknown */
 	  );
  public:
   virtual ~ShmController();
 
-  static SharedMemStruct *attach(ShmType t = MBuff);
-  static void detach(SharedMemStruct *, ShmType t = MBuff);
+  static const SharedMemStruct *attach(ShmType t = MBuff);
+  static void detach(const SharedMemStruct *, ShmType t = MBuff);
 
   /* GETTERS */
 
   /* channel-specific stuff--basically wrappers to CR_PACK */
 
   /* below returns range index from comedi - use with comedi_get_range */
-  uint channelRange(ComediSubDevice::SubdevType t, 
-                    uint chan) const;   
+  uint channelRange(ComediSubDevice::SubdevType t, uint chan) const;   
   uint channelRange(int subdevtype, uint chan) const;
   uint channelAREF(ComediSubDevice::SubdevType t, uint chan) const;
   uint channelAREF(int subdevtype, uint chan) const;
@@ -111,7 +110,7 @@ class ShmController
 
  protected:
  
-  SharedMemStruct *shm; /* the actual shared memory region */
+  const SharedMemStruct *shm; /* the actual shared memory region */
   
  private:
   

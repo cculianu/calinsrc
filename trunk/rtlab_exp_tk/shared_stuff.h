@@ -28,14 +28,6 @@
 #ifndef _SHARED_MEMORY_DOT_H
 # define _SHARED_MEMORY_DOT_H
 
-/* uconst, or user const is a hackish way to enforce the fact that userland
-   should NOT modify certain key shared memory struct members */
-# if defined(MODULE) || defined (SHARED_MEM_STRUCT_SUBCLASS)
-#  define uconst /* */ /* uconst is nothing in kernel land.. so we can write */
-# else
-#  define uconst const /* uconst is const in userland (enforce read-only) */
-# endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -94,63 +86,63 @@ struct SharedMemStruct {
 /* prevent compiler errors due to consts below */
   SharedMemStruct(): struct_version(SHD_SHM_STRUCT_VERSION)  {}
 #endif
-  uconst int struct_version;             /* magic number used to make sure
+  int struct_version;             /* magic number used to make sure
                                             this structure version is synch'd
                                             between userland and kernel land 
                                             kernel sets this to 
                                             SHD_SHM_STRUCT_VERSION and
                                             userland tests against that
                                             define                           */
-
+  
   /* read/write struct memebers for kernel and userland                      */
-  volatile uconst unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
-                                                      analog channel parameters, use
-                                                      CR_PACK et al to modify this    */
-  volatile uconst unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
-                           
-  volatile uconst char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
-						    process which channels to ignore. 
-						    Use inline funcs set_chan() and 
-						    is_chan_on() to set this           */
-  volatile uconst char ao_chans_in_use[CHAN_MASK_SIZE];  
+  volatile  unsigned int ai_chan[SHD_MAX_CHANNELS]; /* comedi channel structure for 
+                                                       analog channel parameters, use
+                                                       CR_PACK et al to modify this    */
+  volatile  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)              */
+  
+  volatile  char ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the kernel 
+                                                     process which channels to ignore. 
+                                                     Use inline funcs set_chan() and 
+                                                     is_chan_on() to set this           */
+  volatile  char ao_chans_in_use[CHAN_MASK_SIZE];  
   
   /* The constant sampling rate --
      this directly affects the period of the rt loop.  
      Initialized at rtlab.o module insertion time to a configurable 
      default of 1000  */
-  uconst sampling_rate_t sampling_rate_hz; 
+  sampling_rate_t sampling_rate_hz; 
   
-  volatile uconst scan_index_t scan_index; /* index of current analog input scan --   
-                                       notice how this property is writable..
-                                       we can reset this at any time from the 
-                                       user process so as to allow the ability
-                                       to reset the scan index               */
-  volatile uconst unsigned int nanos_per_scan; /* Basically the number of 
-                                                  nanoseconds  per scan.  This
-                                                  is a trivial function
-                                                  of BILLION / sampling rate */
-				     
-  uconst SpikeParams spike_params;              /* see struct definition above      */
-  uconst int    attached_pid;  /* Normally the PID of daq_system, but crashed
-				  daq_system's can forget to clean up after themselves
-				  here! */
+  volatile  scan_index_t scan_index; /* index of current analog input scan --   
+                                        notice how this property is writable..
+                                        we can reset this at any time from the 
+                                        user process so as to allow the ability
+                                        to reset the scan index               */
+  volatile  unsigned int nanos_per_scan; /* Basically the number of 
+                                            nanoseconds  per scan.  This
+                                            is a trivial function
+                                            of BILLION / sampling rate */
+  
+  SpikeParams spike_params;              /* see struct definition above      */
+  int    attached_pid;  /* Normally the PID of daq_system, but crashed
+                           daq_system's can forget to clean up after themselves
+                           here! */
   /* read-only struct members for userland, read/write for kernel            */
-  uconst int ai_minor;                   /* /dev/comediX                     */
-  uconst int ao_minor;                   /* /dev/comediX (currently unused)  */
-  uconst int ai_subdev;                  /* the comedi subdevice index fr ai */
-  uconst int ao_subdev;                  /* comedi ao subdevice index        */
-  uconst int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
-  uconst int ao_fifo_minor;              /* (currently unused)               */
-  uconst int control_fifo;               /* The RT-FIFO rtlab.o listens on
+  int ai_minor;                   /* /dev/comediX                     */
+  int ao_minor;                   /* /dev/comediX (currently unused)  */
+  int ai_subdev;                  /* the comedi subdevice index fr ai */
+  int ao_subdev;                  /* comedi ao subdevice index        */
+  int ai_fifo_minor;              /* the /dev/rtfX where ai sampls go */
+  int ao_fifo_minor;              /* (currently unused)               */
+  int control_fifo;               /* The RT-FIFO rtlab.o listens on
 					    for control commands..
 					    (unimplemented) */
-  uconst unsigned int n_ai_chans;        /* the number of channels in subdev */
-  uconst unsigned int n_ao_chans;        /* ditto                            */
-  volatile uconst unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
-  uconst unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
+  unsigned int n_ai_chans;        /* the number of channels in subdev */
+  unsigned int n_ao_chans;        /* ditto                            */
+  volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos       */
+  unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
                                             of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                             units */
-  uconst unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
+   unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
                                             of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                             units */
 };
@@ -265,7 +257,6 @@ inline bool operator==(const SampleStruct &s1, const SampleStruct &s2)
   return (s1.channel_id == s2.channel_id && s1.scan_index == s2.scan_index && s1.data == s2.data);
 }
 #endif
-# undef uconst
 
 #ifdef __cplusplus
 }

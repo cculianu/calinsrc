@@ -72,7 +72,7 @@ const QString ShmController::failureReasons[] = {
 };
 
 
-ShmController::ShmController(SharedMemStruct *s) 
+ShmController::ShmController(const SharedMemStruct *s) 
   throw(ShmException, IllegalStateException)
   : shm(s)
 {
@@ -103,10 +103,11 @@ ShmController::ShmController(SharedMemStruct *s)
 
 
 /* static */
-SharedMemStruct * 
+const SharedMemStruct * 
 ShmController::attach(ShmType t)
 {
-  SharedMemStruct *shm = 0;
+  const SharedMemStruct *shm = 0;
+#define shm_notype (reinterpret_cast<void *>(const_cast<SharedMemStruct *>(shm)))
   FailureReason failureReason = Ok;
   QString fullErrorMessage;
   struct shmid_ds shmid_ds;
@@ -124,20 +125,19 @@ ShmController::attach(ShmType t)
 
     if (!haveRTLabDotO()) {
       failureReason = RegionNotFound;
-      shm = NULL;
+      shm_notype = NULL;
       break;
     }
 
-    shm = reinterpret_cast<SharedMemStruct *>(mbuff_attach(SHARED_MEM_NAME, 
-                                                           sizeof(SharedMemStruct)));
+    shm_notype = mbuff_attach(SHARED_MEM_NAME, sizeof(SharedMemStruct));
 
     if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
       failureReason = WrongStructVersion;
-      mbuff_detach(SHARED_MEM_NAME, shm); 
-      shm = NULL;
+      mbuff_detach(SHARED_MEM_NAME, shm_notype); 
+      shm_notype = NULL;
     } else if ( !mbuffDevFileIsValid() ) {
       failureReason = CharacterDevAccessError;
-      shm = NULL;
+      shm_notype = NULL;
     }   
     break;
   case RTAI_Shm:
@@ -150,20 +150,19 @@ ShmController::attach(ShmType t)
 
     if (!haveRTLabDotO()) {
       failureReason = RegionNotFound;
-      shm = NULL;
+      shm_notype = NULL;
       break;
     }
 
-    shm = reinterpret_cast<SharedMemStruct *>(rtai_shm_attach(SHARED_MEM_NAME, 
-                                                              sizeof(SharedMemStruct)));
+    shm_notype = rtai_shm_attach(SHARED_MEM_NAME, sizeof(SharedMemStruct));
 
     if (shm && shm->struct_version != SHD_SHM_STRUCT_VERSION) {
       failureReason = WrongStructVersion;
-      rtai_shm_detach(SHARED_MEM_NAME, shm); 
-      shm = NULL;
+      rtai_shm_detach(SHARED_MEM_NAME, shm_notype); 
+      shm_notype = NULL;
     } else if ( !rtaiShmDevFileIsValid() ) {
       failureReason = CharacterDevAccessError;
-      shm = NULL;
+      shm_notype = NULL;
     }
     break;    
   case IPC:
@@ -176,23 +175,23 @@ ShmController::attach(ShmType t)
       shmid += reinterpret_cast<const char *>(SHARED_MEM_NAME)[i];
     
 
-    shm = reinterpret_cast<SharedMemStruct *>( shmat(shmid, 0, 0) );
+    shm_notype = shmat(shmid, 0, 0);
         
     if (!shm || reinterpret_cast<int>(shm) == -1) {
       failureReason = RegionNotFound;
-      shm = NULL;
+      shm_notype = NULL;
       break;
     }
 
     if (shm->struct_version != SHD_SHM_STRUCT_VERSION) {
       failureReason = WrongStructVersion;
-      shmdt(shm); 
-      shm = NULL;
+      shmdt(shm_notype); 
+      shm_notype = NULL;
     } else if (!shmctl(shmid, IPC_STAT, &shmid_ds) 
                && shmid_ds.shm_segsz < sizeof(SharedMemStruct)) {
-      shmdt(shm);
+      shmdt(shm_notype);
       failureReason = WrongStructSize;
-      shm = NULL;
+      shm_notype = NULL;
     }
     break;
   default:
@@ -208,6 +207,7 @@ ShmController::attach(ShmType t)
                                  + failureReasons[failureReason] );
 
   return shm;                                
+#undef shm_notype
 }
 
 
@@ -218,17 +218,17 @@ ShmController::~ShmController()
 
 /* static */
 void 
-ShmController::detach (SharedMemStruct *shm, ShmType t)
+ShmController::detach (const SharedMemStruct *shm, ShmType t)
 {
   switch (t) {
   case MBuff:
-    mbuff_detach(SHARED_MEM_NAME, shm);
+    mbuff_detach(SHARED_MEM_NAME, (void *)shm);
     break;
   case IPC:
     shmdt(shm);
     break;
   case RTAI_Shm:
-    rtai_shm_detach(SHARED_MEM_NAME, shm); 
+    rtai_shm_detach(SHARED_MEM_NAME, (void *)shm); 
     break;
   default:
     IllegalStateException("Illegal State in ShmController::detach()",
