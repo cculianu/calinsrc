@@ -84,6 +84,42 @@ struct ChannelMask : public Serializeable {
 };
 
 struct MaskState : public Serializeable {
+
+  /* Inner Class for mapping id's to positions in channel mask */
+  struct Id2PosMap {
+    /* Ugly but ultra-anal and way to figure out what will do as our position
+       variable, and what the 'Off' variable's value will be */
+#    if UCHAR_MAX > SHD_MAX_CHANNELS
+       typedef unsigned char  Pos; /* pos need not be a short, int will do */
+       enum OffVals { Off = UCHAR_MAX };
+#    elif USHRT_MAX > SHD_MAX_CHANNELS
+       typedef unsigned short Pos; /* pos need not be an int, short will do */
+       enum OffVals { Off = USHRT_MAX };
+#    elif UINT_MAX > SHD_MAX_CHANNELS
+       typedef uint Pos;
+       enum OffVals { Off = UINT_MAX };
+#    elif ULONG_MAX > SHD_MAX_CHANNELS
+       typedef unsigned long Pos;
+       enum OffVals { Off = ULONG_MAX };
+#    elif ULLONG_MAX > SHD_MAX_CHANNELS
+       typedef unsigned long long Pos;
+       enum OffVals { Off = ULLONG_MAX };
+#    else
+#      error 'UCHAR_MAX', 'USHRT_MAX', 'UINT_MAX' and/or 'ULONG_MAX' not defined or they are smaller than 'SHD_MAX_CHANNELS'
+#    endif
+     typedef Pos * iterator;
+     Id2PosMap() { clear(); }
+     void clear();
+     void erase(iterator begin, iterator end); // sets -1 on begin to end
+     iterator find(Pos channel_id);
+     iterator begin() { return data; }
+     iterator end() { return data + SHD_MAX_CHANNELS; }
+     Pos & operator[](uint chan) { return data[chan]; }
+    private:
+     Pos data[SHD_MAX_CHANNELS];
+  };
+
+
     MaskState() { clear(); };
     void clear();
 
@@ -95,7 +131,7 @@ struct MaskState : public Serializeable {
     scan_index_t endIndex;
 
     vector<uint> channels_on; // needs to be recomputed each time channel mask changes
-    map<uint, uint> id_to_pos_map;
+    Id2PosMap id_to_pos_map; // maps channel id to ordered position -- negative means off
     void computeChannelsOn();
 private:
     static const QString key_mask, key_startIndex, key_endIndex;
