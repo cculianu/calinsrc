@@ -27,6 +27,8 @@
 #include <map>
 #include <vector>
 
+using std::vector;
+
 #include <qtoolbar.h>
 #include <qstring.h>
 
