@@ -20,6 +20,9 @@
 #include <vector>
 #include <errno.h>
 #include <limits.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <qstring.h>
 #include <qfile.h>
 #include "dsdstream.h"
@@ -224,6 +227,89 @@ SplitOp::SplitOp()
     buildAllArgs(); 
 }
 
+class BinNDSSimple {
+public:
+  BinNDSSimple(const QString & file, uint rate, DSDStream::FileDataType t);
+  ~BinNDSSimple();
+
+  void writeSample(const SampleStruct *);
+  void writeSample(const SampleStruct &s) { writeSample(&s); };
+private:
+  uint rate;
+  DSDOStream *dout;
+  FILE       *fout, *tmp;
+  map<uint,float> chans;
+
+  void writeScan(scan_index_t index);
+};
+
+BinNDSSimple::BinNDSSimple(const QString & file, 
+                           uint rate, 
+                           DSDStream::FileDataType t)
+  : rate(rate), dout(0), fout(0), tmp(0)
+{
+  if (file.endsWith(".bin")) {
+    tmp = tmpfile();
+    fout = fopen(file.latin1(), "w");
+    if (!tmp) {
+      throw FileException("Could not open temp file.", 
+                          QString("Check %1!").arg(P_tmpdir));
+    }
+    if (!fout) {
+      throw FileException(QString("Could not open output file %1.").arg(file), 
+                          QString("Error is: %1").arg(strerror(errno)));
+    }
+  } else {
+    dout = new DSDOStream(file, rate, t);
+  }
+}
+
+BinNDSSimple::~BinNDSSimple()
+{
+  if (dout) { dout->end(); delete dout; dout = 0; }
+  else if (tmp) { 
+    SampleStruct s;
+    scan_index_t index = 0;
+    int n_chans = chans.size();
+    uint i = 0;
+    fseek(tmp, 0, SEEK_SET);
+    fwrite(&n_chans, sizeof(int), 1, fout);
+    while (fread(&s, sizeof(SampleStruct), 1, tmp) == 1) {      
+      if (s.scan_index > index) { // new scan        
+        index = s.scan_index;
+        if (i) writeScan(s.scan_index);
+      }
+      chans[s.channel_id] = s.data;
+      i++;
+    }
+    writeScan(s.scan_index);
+    fclose(tmp); 
+    fclose(fout);
+    tmp = fout = 0;
+  }
+}
+
+void BinNDSSimple::writeScan(scan_index_t index)
+{
+  map<uint,float>::iterator it, end;
+  float data = static_cast<double>(index) / static_cast<double>(rate);
+  fwrite(&data, sizeof(float), 1, fout); // time
+  for (it = chans.begin(), end = chans.end(); it != end; it++) {
+    data = it->second;
+    fwrite(&data, sizeof(float), 1, fout); // channel data
+  } 
+}
+
+void BinNDSSimple::writeSample(const SampleStruct *s)
+{
+  if (dout) { 
+    dout->writeSample(s); 
+  } else {
+    fwrite(s, sizeof(const SampleStruct), 1, tmp);
+    chans[s->channel_id] = 0;
+  }
+}
+
 int SplitOp::doIt()
 {
   cerr << "Reading " << state()->infile.latin1() << endl;
@@ -240,7 +326,7 @@ int SplitOp::doIt()
       { cerr << "No scans in input file!" << endl;  return EINVAL; }
   
    
-    DSDOStream out(state()->outfile, in.rateAt(state()->start), in.dataType());
+    BinNDSSimple out(state()->outfile, in.rateAt(state()->start), in.dataType());
 
     scan_index_t 
       i = 0, 
