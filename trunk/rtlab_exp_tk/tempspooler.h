@@ -1,5 +1,3 @@
-/*! AVN Stim - The kernel side defs.. */
-
 /*
  * This file is part of the RT-Linux Multichannel Data Acquisition System
  *
@@ -29,25 +27,43 @@
 #include "tempfile.h"
 #include "exception.h"
 
-
+#ifndef _TEMP_SPOOLER_H
+#define _TEMP_SPOOLER_H
 template <class T> class TempSpooler : public TempFile
 {
  public:
   TempSpooler(const char * prefix = "ts", bool requireLocal = true)
-    : TempFile(prefix, requireLocal), numTs(0) { updateNumTs(); }
+    : TempFile(prefix, requireLocal), numTs(0) {}
 
   virtual ~TempSpooler() {}
+
+  virtual void truncate() { ftruncate(*this, 0); updateNumTs(0); }
+
+  unsigned long long int numSpooled() const { return numTs; }
 
   void spool(const T * thing, int nmemb) 
     { /* do spooling */ 
       int r;
 
+      updateNumTs(numTs + nmemb);
+
       r = ::lseek(*this, 0, SEEK_END);
       Assert<FileException>(r >= 0, "Seek error in "__FILE__, strerror(errno));
       r = ::write(*this, thing, nmemb * sizeof(T));
-      Assert<FileException>(r == nmemb * sizeof(T), "Could not write", strerror(errno));
-      numTs += nmemb; 
-      updateNumTs();
+      if ( r != static_cast<int>(nmemb * sizeof(T) ) ) {
+        int saved_errno = errno;
+        switch (saved_errno) {
+        case EFBIG:
+        case ENOSPC:
+          throw DiskFullException("The disk is full.", strerror(saved_errno));
+          break;
+        default:
+          throw FileException ("Could not write", 
+                               QString("Error writing to a temporary file.  ") 
+                               + strerror(errno));
+          break;
+        }
+      }
     }
 
   /* calls operation() for each T stored in the temp file */
@@ -66,7 +82,7 @@ template <class T> class TempSpooler : public TempFile
       int n_read;
       while( (n_read = ::read(*this, buf, sizeof(T) * num_at_a_time)) > 0 ) {
         int i;
-        for (i = 0; i < n_read / sizeof(T); i++) 
+        for (i = 0; i < static_cast<int>(n_read / sizeof(T)); i++) 
           operation(reinterpret_cast<T *>(buf)[i]);        
         numLeft-=i;
       }
@@ -79,9 +95,11 @@ template <class T> class TempSpooler : public TempFile
 
   /* writes numTs as first sizeof(numTs) bytes in file.. auto-called in
      constructor and in spool() */
-  void updateNumTs(void) 
+  void updateNumTs(unsigned long long int newNumTs) 
     {
       int r;
+
+      numTs = newNumTs;
 
       r = ::lseek(*this, 0, SEEK_SET);
       Assert<FileException>(r >= 0, "Seek error in "__FILE__, strerror(errno));
@@ -91,3 +109,4 @@ template <class T> class TempSpooler : public TempFile
 
 
 };
+#endif

@@ -27,7 +27,7 @@
 #  include <values.h>
 #ifndef BUG
 #  include <stdio.h>
-#define BUG() do { fprintf(stderr, "BUG at %s:%s!\n", __FILE__, __LINE__); } while (0)
+#define BUG() do { fprintf(stderr, "BUG at %s:%d!\n", __FILE__, __LINE__); } while (0)
 #endif
 
 

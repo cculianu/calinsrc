@@ -48,7 +48,7 @@
 #include "daq_settings.h"
 #include "probe.h"
 #include "comedi_device.h"
-
+#include "output_file_w.h"
 
 /* 
    ToDo: 
@@ -82,7 +82,6 @@ class ConfigurationWindow : public QDialog
 
  public slots:
   void askUserForInputFilename();
-  void askUserForOutputFilename();
   void askUserForTemplateFilename();
   void toSettings(); // merges state of dialog box into the settings
   void fromSettings(); // sets state of dialog box from the settings
@@ -90,8 +89,6 @@ class ConfigurationWindow : public QDialog
  protected slots:
   void accept();
   /* internal helper, adds/replaces the appropriate suffix for output filename */
-  void resuffixIze();
-
  private: 
 
   class DeviceListView : public QListView
@@ -127,27 +124,23 @@ class ConfigurationWindow : public QDialog
   QGroupBox deviceSelectionGroup, templateSelectionGroup, 
             outputFileSelectionGroup;
 
-  QWidget deviceGroupContainer, templateGroupContainer, 
-          outputFileGroupContainer;   /* dummy container widgets */
+  QWidget deviceGroupContainer, templateGroupContainer;   /* dummy container 
+                                                             widgets */
+  OutputFileW outputFileGroupContainer;
 
-  QGridLayout deviceSelectionGrid/*4 x 3*/, templateSelectionGrid/*3 x 2*/,
-              outputFileSelectionGrid /* 3 x 2 */;
+  QGridLayout deviceSelectionGrid/*4 x 3*/, templateSelectionGrid/*3 x 2*/;
+              
   
-  QButtonGroup deviceSelectionRadioGroup, outputFileRadioGroup;
+  QButtonGroup deviceSelectionRadioGroup;
   QRadioButton deviceRadio, fileRadio;
-  QLabel outputFileRadioLabel;
   DeviceListView deviceTable; 
-  QHBox asciiOrBinaryBox;
-  QRadioButton asciiRadio, binaryRadio; 
-  QLineEdit inputFile, templateFile, outputFile;
-  QPushButton browseInputFiles, browseLogTemplates, browseOutputFiles;
+  QLineEdit inputFile, templateFile;
+  QPushButton browseInputFiles, browseLogTemplates;
   QLabel logPreviewerLabel;
   TextContentsPreviewer logPreviewer;
   QCheckBox showDialogOnStartupChk;
   QPushButton OK;
 
-  static const char * const NDS_ASCII_SUFFIX,
-                    * const NDS_BIN_SUFFIX;
 #ifdef TEST_CW
   friend int main (int argc, char *argv[], char *envp[]);
 #endif

@@ -110,6 +110,7 @@ class TwoWayNode
 template <class T> class Consumer : public TwoWayNode
 {  
  public:
+  Consumer() : nothungry(false) {};
   virtual void consume(T) = 0;
 
   bool nothungry; /* producer will not send data to this consumer if this 

@@ -262,6 +262,7 @@ void DSDStream::flush() //throw (FileException)
     throw FileFormatException("INTERNAL ERROR", "Unknown file data type specified");
     break;
   }
+  chans_this_scan = 0;
 }
 
 template<class T> void DSDStream::flushTempl() //throw (FileException)
