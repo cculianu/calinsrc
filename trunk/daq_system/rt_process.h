@@ -96,6 +96,8 @@ typedef struct {
   real-time kernel task.
 */
 typedef struct {
+  int ai_dev_minor;        /* minor number for the comedi board in question */
+  int ai_subdev;           /* subdevice index for COMEDI_SUBDEV_AI          */
   SignalParams signal_params [NUM_AD_CHANNELS_TO_USE]; 
                            /* signal parameters, one struct per channel      */
 
