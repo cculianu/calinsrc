@@ -60,19 +60,12 @@ extern "C" {
 
 
 struct SpikeParams {
-<<<<<<< shared_stuff.h
   volatile int8 enabled_mask [CHAN_MASK_SIZE];      /* bits correspond to 
                                                        channels..            */
   volatile int8 polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive */
   volatile unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds      */
   volatile double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be 
                                                         dangerous!           */
-=======
-  volatile int8 enabled_mask [CHAN_MASK_SIZE];       /* bits correspond to channels.. */
-  volatile int8 polarity_mask [CHAN_MASK_SIZE];      /* if bit set: positive          */
-  volatile unsigned int blanking [SHD_MAX_CHANNELS]; /* in milliseconds               */
-  volatile double threshold [SHD_MAX_CHANNELS];      /* NaNs here can be dangerous!   */
->>>>>>> 1.19
 };
 
 #ifndef __cplusplus
@@ -86,15 +79,9 @@ typedef struct SpikeParams SpikeParams;
   for configuration-related communication from the non-real-time
   process to the real-time task.
 */
-<<<<<<< shared_stuff.h
 # define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff               */
 # define SHD_SHM_STRUCT_VERSION 66        /* test this against the below 
                                              struct_version member           */
-=======
-# define SHARED_MEM_NAME "DAQ System SHM" /* text ID for mbuff      */
-# define SHD_SHM_STRUCT_VERSION 66        /* test this against the below 
-                                             struct_version member           */
->>>>>>> 1.19
 struct SharedMemStruct {
 #ifdef __cplusplus
 /* prevent compiler errors due to consts below */
@@ -115,7 +102,6 @@ struct SharedMemStruct {
 						       et al to modify this  */
   volatile  unsigned int ao_chan[SHD_MAX_CHANNELS]; /* (currently unused)    */
   
-<<<<<<< shared_stuff.h
   volatile  int8 ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the 
                                                      kernel  process which 
                                                      channels to ignore. 
@@ -123,15 +109,6 @@ struct SharedMemStruct {
                                                      set_chan() and 
                                                      is_chan_on() to set this*/
   volatile  int8 ao_chans_in_use[CHAN_MASK_SIZE];  
-=======
-  volatile  int8 ai_chans_in_use[CHAN_MASK_SIZE]; /* Bitwise mask to tell the 
-						     kernel  process which 
-						     channels to ignore. 
-                                                     Use inline funcs 
-						     set_chan() and 
-                                                     is_chan_on() to set this*/
-  volatile  int8 ao_chans_in_use[CHAN_MASK_SIZE];  
->>>>>>> 1.19
   
   /* The constant sampling rate --
      this directly affects the period of the rt loop.  
@@ -162,21 +139,12 @@ struct SharedMemStruct {
   int ao_fifo_minor;              /* (currently unused)                      */
   int control_fifo;               /* The RT-FIFO rtlab.o listens on
                                      for control commands..
-<<<<<<< shared_stuff.h
                                      (unimplemented)                         */
   int reply_fifo;                 /* Reply FIFO from rtlab.o to user         */
   unsigned int n_ai_chans;        /* the number of channels in subdev        */
   unsigned int n_ao_chans;        /* ditto                                   */
   volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos             */
-=======
-                                     (unimplemented) */
-  int reply_fifo;                 /* Reply FIFO from rtlab.o to user  */
-  unsigned int n_ai_chans;        /* the number of channels in subdev */
-  unsigned int n_ao_chans;        /* ditto                            */
-  volatile  unsigned int jitter_ns;/* Jitter of rt-task in nanos      */
->>>>>>> 1.19
   unsigned int ai_fifo_sz_blocks; /* The size of the RT-Queue in terms
-<<<<<<< shared_stuff.h
                                      of SS_RT_QUEUE_BLOCK_SZ_BYTES 
                                      units                                   */
   unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
@@ -190,20 +158,6 @@ struct SharedMemStruct {
                                       number of milliseconds since rtlab.o
                                       was loaded. */
   uint64 time_us;                  /* Just like above, except in micros      */
-=======
-                                            of SS_RT_QUEUE_BLOCK_SZ_BYTES 
-                                            units */
-  unsigned int ao_fifo_sz_blocks; /* The size of the RT-Queue in terms
-				     of SS_RT_QUEUE_BLOCK_SZ_BYTES 
-				     units */
-
-  /* Keep track of real wall clock time as scan_index is not monotonically
-     increasing (due to the fact that sampling rate can change)       */
-  uint64 time_ms;                  /* The current relative time in ms. 
-				      This is the monotonically increasing  
-				      number of milliseconds since rtlab.o
-				      was loaded. */
->>>>>>> 1.19
 };
 #ifndef __cplusplus
 typedef struct SharedMemStruct SharedMemStruct;
