@@ -6,7 +6,12 @@
 #      Makefile.daq_system and Makefile.rt_process based on the common
 #      config options and file paths. 
 RTL_MK = /usr/src/rtlinux/rtl.mk
-
+# edit the below line to change boards that daq system compiles for
+# either set this to 'nimio' for the NI_ATMIO or NI_PCMIO boards or
+# 'das1602' for the das 1602 board
+#DAQ_HW      =   das1602
+DAQ_HW       =   nimio
+#
 TEMPLATE    =	daq_system.t
 CONFIG      =	qt warn_on debug #release
 INCLUDEPATH =   
@@ -14,4 +19,4 @@ HEADERS     =	daq_system.h hardware_specific.h configuration.h text_window.h hel
 SOURCES     =	main.cpp daq_system.cpp fifos.cpp configuration.cpp text_window.cpp
 TARGET      =	daq_system
 DEFINES     =   VERSION_NUM=\"`./print_VERSION.sh`\"
-CFLAGS      =   -g
+#CFLAGS      =   -g

@@ -37,62 +37,20 @@
 */
           
 
-#ifndef _NI_MIO16E10_H 
-#define _NI_MIO16E10_H 
+#ifndef _HARDWARE_SPECIFIC_H 
+#define _HARDWARE_SPECIFIC_H 
 
-#define SCAN_UNITS 4096	       //NI_MIO1610E scanning resolution (12bit) 
-#define NUM_AD_CHANNELS 16      //number of analog input channels
-#define NUM_GAIN_PARAMETERS 15 // the number of gain settings this device has
+#define __DAS_1602 "das1602"
+#define __NIMIO "nimio"
 
-#define AI_DEV 0      // *** set per how you comedi_config'd your board
-#define AI_SUBDEV 0   // *** set per results of comedilib/demo/info 
-#define AO_DEV 0      // *** set per how you comedi_config'd your board
-#define AO_SUBDEV 1   // *** set per results of comedilib/demo/info 
-
-
-typedef struct {
-  float gainSettings[2][NUM_GAIN_PARAMETERS+1];    /* [0][x] -> negative, 
-						      [1][x] -> positive 
-						      for that index */
-  const char *gainNames[NUM_GAIN_PARAMETERS+1];    /* The descriptive
-						      text names of each
-						      gain setting */
-} HardwareSpecificStruct;
-
-/* Set the three following defines for your board, then use
-   the HARDWARE_SPECIFIC_INIT define to initialize a 
-   HardwareSpecific struct. */
-
-/*--------------------------------------------------------------------------
-  HardwareSpecificStruct initializers.
-----------------------------------------------------------------------------*/
-
-/*  The following two are gain related: */
-
-/* the low, mid, and high voltages corresponding to the NI_MIO1610E's 
-   gain parameters, 0,1,2, ... 14 */
-#define _DAQ_DEVICE_GAIN_SETTINGS \
-{ {-10,-5,-2.5,-1,-0.5,-0.25,-0.1,-0.05,0,0,0,0,0,0,0}, \
-  {+10,+5,+2.5,+1,+0.5,+0.25,+0.1,+0.05,+10,+5,+2,+1,+0.5,+0.20,+0.1} }
-
-/* This array's indices should correspond to the above gain array.
-   The strings from here end up in the text boxes in the daq_system
-   application */
-#define _DAQ_DEVICE_GAIN_NAMES { \
-    "-10V,+10V", "-5V,+5V", "-2.5V,+2.5V", \
-    "-1V,+1V", "-500mV,+500mV", "-250mV,+250mV", \
-    "-100mV,+100mV", "-50mV,+50mV", "0V,+10V", \
-    "0V,+5V", "0V,+2V", "0V,+1V", "0V,+500mV", \
-    "0V,+200mV", "0V,+100mV", 0 }
-
-/*--------------------------------------------------------------------------
-  This compiler sybmol is used to initialize 
-  HardwareSpecificStruct instances. It is important
-  to note that if you change any of the data for this, you need
-  to recompile all the .o's in this application. 
-----------------------------------------------------------------------------*/
-#define DAQ_HARDWARE_SPECIFIC_STRUCT_INIT { _DAQ_DEVICE_GAIN_SETTINGS, \
-                                            _DAQ_DEVICE_GAIN_NAMES }
-
+#ifdef HW
+#  if  HW == __DAQ_1602
+#    include "hardware_specific_das1602.h"
+#  else
+#    include "hardware_specific_nimio.h"
+#  endif
+#else
+#  include "hardware_specific_nimio.h"
+#endif
 
 #endif
