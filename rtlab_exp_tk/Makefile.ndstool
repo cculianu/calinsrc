@@ -1,0 +1,12 @@
+
+include ./.buildvars
+
+all:	ndstool
+
+ndstool: ndstool.o settings.o common.o exception.o dsdstream.o dsdstream_inner.o
+	g++  -o ndstool -L ${QTDIR}/lib -lqt ndstool.o settings.o common.o exception.o dsdstream.o dsdstream_inner.o
+
+ndstool.o: ndstool.cpp 
+	@echo "*** BUILDING THE NDS COMMAND-LINE TOOL"
+	g++ -I ${QTDIR}/include -c -o ndstool.o ndstool.cpp
+

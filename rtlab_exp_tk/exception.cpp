@@ -48,8 +48,9 @@ Exception::showError() const
 }
 
 void 
-Exception::__showError() const
+Exception::showConsoleError() const
 {
+
   int llen = (78 - (static_cast<int>(briefMsg().length())+2) ) / 2, i;
   bool add1 = llen * 2 != (78 - (static_cast<int>(briefMsg().length())+2) );
 
@@ -71,9 +72,21 @@ Exception::__showError() const
     << "------------------------------" 
     << std::endl;
 
+}
+
+void
+Exception::showGUIError() const
+{
   /* now, if possible, show it graphically... */
   if (qApp != NULL && errorReportingMode() == GUI )
     QMessageBox::critical ( 0, briefMsg(), fullMsg() );
+}
+
+void 
+Exception::__showError() const
+{
+  showConsoleError();
+  showGUIError();
 }
 
 UnimplementedException::UnimplementedException 

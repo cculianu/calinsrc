@@ -56,7 +56,8 @@ void DSDStream::init(int mode)// throw (FileException)
         if ( mode == IO_ReadOnly )
           modeChar = 'r';
         else modeChar = 'w';
-        errorMsg = (Convert)fileErrorMsg( fNameChar, modeChar );
+        std::string errM = fileErrorMsg( fNameChar, modeChar );
+        errorMsg = errM.c_str();
       }
     Assert<FileException>(isOpen(), "Internal Error: QIODevice error for DSDStream.", QString("IO Device could not be opened! ").append(errorMsg) );
 
@@ -110,7 +111,7 @@ void DSDStream::start() //throw (FileException, FileFormatException, IllegalStat
 #ifdef DEBUGGG
     cerr << "Read magic: " << magic << " Fdt: " << fdt << endl;
 #endif
-    Assert<FileFormatException>( magic == MAGIC, "Bad file format", "This file is not a DSD file.");
+    Assert<FileFormatException>( magic == MAGIC, "Bad file format", "This file is not a NDS/DSD file.");
     Assert<FileFormatException>( (fileDataType = uint2fdt(fdt)) != UNKNOWN_DATA_TYPE, "Unknown file data type",
                                 "Unknown file data type encountered.  Currently only double and float data types are supported." );
     unserializeMetaData();

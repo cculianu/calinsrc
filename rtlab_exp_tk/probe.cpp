@@ -216,7 +216,7 @@ Probe::validate() const
                                 "Required analog input subdevice not found.  "
                                 "You may have an incompatible board, or your "
                                 "board may be configured incorrectly.\n\n"
-                                "If you are using the rt_process.o driver, "
+                                "If you are using the rtlab.o driver, "
                                 "there maybe have been a problem attaching  "
                                 "to the real-time task due to permissions or "
                                 "other assored setup issues.");
