@@ -27,7 +27,7 @@
 const ComediRange::Unit     ComediRange::Volts      = UNIT_volt, 
                             ComediRange::MilliVolts = UNIT_mA;
 
-ComediRange::Unit::Unit(int i = UNIT_volt) { *this = i; }
+ComediRange::Unit::Unit(int i) { *this = i; }
 bool ComediRange::Unit::operator==(const Unit &in) { return in.u == u; } 
 ComediRange::Unit & ComediRange::Unit::operator=(int i) 
     { u = ( i == UNIT_volt ? UNIT_volt : UNIT_mA ); return *this; } 
@@ -39,7 +39,7 @@ ComediRange::Unit::operator QString() const
 
 /* below returns a ComediSubDevice with isNull()==true if not found */
 const ComediSubDevice &
-ComediDevice::find(ComediSubDevice::SubdevType type, int id_start = 0) const
+ComediDevice::find(ComediSubDevice::SubdevType type, int id_start) const
 {
   static const ComediSubDevice nullSubDevice((float *)0);
   for (uint i = 0; i < subdevices.size(); i++) {

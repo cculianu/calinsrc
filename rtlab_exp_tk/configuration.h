@@ -25,7 +25,7 @@
 
 #include <iostream>   
 #include <vector>
-#include <fstream.h>    
+#include <fstream>    
 #include <stdlib.h> //for random()    
 
 
